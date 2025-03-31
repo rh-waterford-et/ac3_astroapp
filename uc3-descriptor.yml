@@ -1,0 +1,245 @@
+ApplicationName: "starlight-uc3"
+Version: "1.0.0"
+
+Volumes_configuration:
+  - VolumeName: "uc3-pv-volume"
+    VolumeType: "PersistentVolume"
+    StorageClass: "standard"
+    Capacity: "10Gi"
+    AccessModes:
+      - "ReadWriteOnce"
+    HostPath:
+      Path: "/mnt/ucmdata"
+    ClaimName: "uc3-pv-claim"
+    ClaimSpec:
+      StorageClassName: "standard"
+      AccessModes:
+        - "ReadWriteOnce"
+      Resources:
+        Requests:
+          Storage: "3Gi"
+
+Security_configuration:
+  - ServiceAccountName: "starlight-sa"
+    ApiVersion: "v1"
+    Kind: "ServiceAccount"
+    Metadata:
+      Name: "starlight-sa"
+  - RoleBindingName: "privileged-role"
+    ApiVersion: "rbac.authorization.k8s.io/v1"
+    Kind: "RoleBinding"
+    Metadata:
+      Name: "privileged-role"
+    RoleRef:
+      ApiGroup: "rbac.authorization.k8s.io"
+      Kind: "ClusterRole"
+      Name: "system:openshift:scc:privileged"
+    Subjects:
+      - Kind: "ServiceAccount"
+        Name: "starlight-sa"
+
+Microservices_configuration:
+  - MicroserviceName: "rabbitmq"
+    Version: "3-management"
+    Image: "rabbitmq:3-management"
+    ID: "rabbitmq"
+    ClusterAffinity: "orchestrator"
+    Dependencies: []
+    ResourceRequirements:
+      Cpu: "0.5 vCPU"
+      Memory: "1Gi"
+    MicroservicesSLAs:
+      ServiceAvailability: "99.9%"
+      MaxResponseTime: "N/A"
+      DataThroughput: "Medium"
+    ReplicaCount: "1"
+    Ports:
+      - ContainerPort: "5672"
+      - ContainerPort: "15672"
+    EnvironmentVariables:
+      - Name: "RABBITMQ_DEFAULT_USER"
+        Value: "guest"
+      - Name: "RABBITMQ_DEFAULT_PASS"
+        Value: "guest"
+
+  - MicroserviceName: "orchestrator"
+    Version: "1.0"
+    Image: "rayc/ucm-producer"
+    ID: "orchestrator"
+    ClusterAffinity: "orchestrator"
+    Dependencies:
+      - "rabbitmq"
+    ResourceRequirements:
+      Cpu: "2 vCPU"
+      Memory: "4Gi"
+    MicroservicesSLAs:
+      ServiceAvailability: "99.9%"
+      MaxResponseTime: "N/A"
+      DataThroughput: "High"
+    ReplicaCount: "1"
+    ServiceAccountName: "starlight-sa"
+    SecurityContext:
+      privileged: true
+    EnvironmentVariables:
+      - Name: "RABBITMQ_USER"
+        Value: "guest"
+      - Name: "RABBITMQ_PASSWORD"
+        Value: "guest"
+      - Name: "RABBITMQ_HOST"
+        Value: "rabbitmq"
+      - Name: "RABBITMQ_PORT"
+        Value: "5672"
+      - Name: "INPUT_DIR"
+        Value: "/starlight/data/input"
+      - Name: "OUTPUT_DIR"
+        Value: "/starlight/data/output"
+      - Name: "BATCH_SIZE"
+        Value: 5
+    Ports:
+      - ContainerPort: "5672"
+    Volumes:
+      - Name: "uc3-pv-storage"
+        VolumeSource:
+          PersistentVolumeClaim:
+            ClaimName: "uc3-pv-claim"
+    VolumeMounts:
+      - Name: "uc3-pv-storage"
+        MountPath: "/starlight/"
+    InitContainers:
+      - Name: "init"
+        Image: "busybox:1.28"
+        securityContext:
+          privileged: true
+        volumeMounts:
+          - mountPath: "/starlight/"
+            name: "uc3-pv-storage"
+        Command:
+          - sh
+          - -c
+          - |
+            if [ ! -d /starlight/data ]; then mkdir -p /starlight/data; fi;
+            if [ ! -d /starlight/runtime ]; then mkdir -p /starlight/runtime; fi;
+            if [ ! -d /starlight/runtime/infiles ]; then mkdir -p /starlight/runtime/infiles; fi;
+            if [ ! -d /starlight/runtime/input ]; then mkdir -p /starlight/runtime/input; fi;
+            if [ ! -d /starlight/data/input ]; then mkdir -p /starlight/data/input; fi;
+            if [ ! -d /starlight/data/output ]; then mkdir -p /starlight/data/output; fi;
+            if [ ! -d /starlight/data/input/processed ]; then mkdir -p /starlight/data/input/processed; fi;
+            if [ ! -f /starlight/runtime/processlist.txt ]; then touch /starlight/runtime/processlist.txt; fi;
+
+  - MicroserviceName: "data-connector"
+    Version: "1.0"
+    Image: "quay.io/bcapper30/ionos-s3-consumer"
+    ID: "data-connector"
+    ClusterAffinity: "orchestrator"
+    Dependencies:
+      - "orchestrator"
+    ResourceRequirements:
+      Cpu: "1 vCPU"
+      Memory: "2Gi"
+    MicroservicesSLAs:
+      ServiceAvailability: "99.9%"
+      MaxResponseTime: "N/A"
+      DataThroughput: "Medium"
+    ReplicaCount: "1"
+    EnvironmentVariables:
+      - Name: "JAVA_TOOL_OPTIONS"
+        Value: "-Dedc.fs.config=/app/resources/config.properties"
+    Ports:
+      - ContainerPort: 9191
+      - ContainerPort: 9192
+      - ContainerPort: 9292
+      - ContainerPort: 9293
+      - ContainerPort: 9393
+    VolumeMounts:
+      - Name: "consumer-config-volume"
+        MountPath: "/app/resources/config.properties"
+        SubPath: "config.properties"
+    Volumes:
+      - Name: "consumer-config-volume"
+        ConfigMap:
+          Name: "consumer-config"
+
+  - MicroserviceName: "starlight"
+    Version: "1.0"
+    Image: "rayc/ucm-processor"
+    ID: "starlight"
+    ClusterAffinity: "processor"
+    Dependencies:
+      - "eventreceiver"
+    ResourceRequirements:
+      Cpu: "4 vCPU"
+      Memory: "8Gi"
+    MicroservicesSLAs:
+      ServiceAvailability: "99.9%"
+      MaxResponseTime: "N/A"
+      DataThroughput: "High"
+    ReplicaCount: "1"
+    ServiceAccountName: "starlight-sa"
+    SecurityContext:
+      privileged: true
+    WorkingDirectory: "/docker/starlight/STARLIGHTv04"
+    Command:
+      - ./bash_script2.sh
+    Volumes:
+      - Name: "uc3-pv-storage"
+        VolumeSource:
+          PersistentVolumeClaim:
+            ClaimName: "uc3-pv-claim"
+    VolumeMounts:
+      - Name: "uc3-pv-storage"
+        MountPath: "/starlight/"
+    Ports:
+      - ContainerPort: 8080
+
+  - MicroserviceName: "eventreceiver"
+    Version: "1.0"
+    Image: "rayc/ucm-receiver"
+    ID: "eventreceiver"
+    ClusterAffinity: "processor"
+    Dependencies:
+      - "rabbitmq"
+    ResourceRequirements:
+      Cpu: "1 vCPU"
+      Memory: "2Gi"
+    MicroservicesSLAs:
+      ServiceAvailability: "99.9%"
+      MaxResponseTime: "N/A"
+      DataThroughput: "High"
+    ReplicaCount: "1"
+    EnvironmentVariables:
+      - Name: "RABBITMQ_USER"
+        Value: "guest"
+      - Name: "RABBITMQ_PASSWORD"
+        Value: "guest"
+    Volumes:
+      - Name: "uc3-pv-storage"
+        VolumeSource:
+          PersistentVolumeClaim:
+            ClaimName: "uc3-pv-claim"
+    VolumeMounts:
+      - Name: "uc3-pv-storage"
+        MountPath: "/starlight/"
+
+Networking_graph:
+  - Source: "orchestrator"
+    Destination: "rabbitmq"
+    Protocol: "TCP"
+    Port: "5672"
+  - Source: "data-connector"
+    Destination: "orchestrator"
+    Protocol: "HTTP"
+    Port: "28180"
+  - Source: "eventreceiver"
+    Destination: "rabbitmq"
+    Protocol: "TCP"
+    Port: "5672"
+  - Source: "eventreceiver"
+    Destination: "starlight"
+    Protocol: "HTTP"
+    Port: "8080"
+
+Global_SLA:
+  ServiceAvailability: "99.9%"
+  MaxLatency: "500 ms"
+  MaxResponseTime: "N/A"
+  DataThroughput: "High"
