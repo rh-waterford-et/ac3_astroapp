@@ -6,7 +6,7 @@
     "connectorId": "provider",
     "counterPartyAddress": "http://provider:8282/protocol",
     "protocol": "dataspace-protocol-http",
-    "contractId": "76aa024a-ab24-4d22-bce9-a1d12e8a6e2f",
+    "contractId": "2a9e9867-629c-406a-a144-c12ed466414f",
     "assetId": "asset-1",
     "transferType": "IonosS3-PUSH",
     "dataDestination": {
