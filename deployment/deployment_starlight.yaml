@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: starlight
+  labels:
+    app: starlight
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: starlight
+  template:
+    metadata:
+      labels:
+        app: starlight
+    spec:
+      serviceAccountName: starlight-sa
+      volumes:
+      - name: ucm-pv-storage
+        persistentVolumeClaim:
+          claimName: ucm-pv-claim
+      initContainers:
+      - name: init
+        image: busybox:1.28
+        command: ['sh', '-c', 'mkdir -p  /processing/ppfx /processing/ppfx/data /processing/ppfx/data/output /processing/steckmap/data /processing/steckmap/data/output /processing/starlight/data /processing/starlight/runtime /processing/starlight/runtime/infiles /processing/starlight/runtime/input /processing/starlight/data/input /processing/starlight/data/output && touch /processing/starlight/runtime/processlist.txt']
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /processing/
+          name: ucm-pv-storage
+      containers:
+      - image: quay.io/rh-ee-kromashk/ucm-starlight
+        name: starlight
+        workingDir: /docker/starlight/STARLIGHTv04
+        command: ["./bash_script2.sh"]
+        volumeMounts:
+        - mountPath: /processing/
+          name: ucm-pv-storage
+      - image: quay.io/rh-ee-kromashk/ucm-receiver
+        name: eventreceiver
+        volumeMounts:
+        - mountPath: /processing/
+          name: ucm-pv-storage
+        env:
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASSWORD
+          value: "guest"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: IN_FILE_PATH
+          value: "/processing/starlight/runtime/infiles"
+        - name: PROCESS_LIST
+          value: "/processing/starlight/runtime/processlist.txt" 
+        - name: OUTPUT_DIR_STARLIGHT
+          value: "/processing/starlight/data/output"
+        - name: OUTPUT_DIR_PPFX
+          value: "/processing/ppfx/data/output"
+        - name: OUTPUT_DIR_STECKMAP
+          value: "/processing/steckmap/data/output"
+      - image: quay.io/rh-ee-kromashk/ucm-watcher
+        name: ucm-watcher
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /starlight/
+          name: ucm-pv-storage
+        env:
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASSWORD
+          value: "guest"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: INPUT_DIR
+          value: "/starlight/data/output"
+        - name: BATCH_SIZE
+          value: "5"
+        ports:
+        - containerPort: 5672
