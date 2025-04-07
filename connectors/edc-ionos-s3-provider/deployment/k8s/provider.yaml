@@ -1,33 +1,33 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: consumer
+  name: provider
   labels:
-    app: consumer
+    app: provider
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: consumer
+      app: provider
   template:
     metadata:
       labels:
-        app: consumer
+        app: provider
     spec:
       containers:
-      - name: consumer
-        image: quay.io/bcapper30/ionos-s3-consumer
+      - name: provider
+        image: quay.io/bcapper30/ionos-s3-provider
         ports:
-        - containerPort: 9191
-        - containerPort: 9192  
-        - containerPort: 9292  
-        - containerPort: 9293
-        - containerPort: 9393
+        - containerPort: 8181
+        - containerPort: 8182  
+        - containerPort: 8282  
+        - containerPort: 8283
+        - containerPort: 8383
         env:
         - name: JAVA_TOOL_OPTIONS
           value: "-Dedc.fs.config=/app/resources/config.properties"
         volumeMounts:
-        - name: consumer-config-volume
+        - name: provider-config-volume
           mountPath: "/app/resources/config.properties"
           subPath: "config.properties"
         resources:
@@ -38,35 +38,35 @@ spec:
             memory: "2Gi"
             cpu: "1"     
       volumes:
-      - name: consumer-config-volume
+      - name: provider-config-volume
         configMap:
-          name: consumer-config
+          name: provider-config
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: consumer-config
+  name: provider-config
 data:
   config.properties: |
-    edc.participant.id=consumer
-    web.http.port=9191
+    edc.participant.id=provider
+    web.http.port=8181
     web.http.path=/api
-    web.http.management.port=9192
+    web.http.management.port=8182
     web.http.management.path=/management
-    web.http.protocol.port=9292
+    web.http.protocol.port=8282
     web.http.protocol.path=/protocol
-    web.http.control.port=9293
+    web.http.control.port=8283
     web.http.control.path=/control
-    web.http.public.port=9393
+    web.http.public.port=8383
     web.http.public.path=/public
-    edc.dsp.callback.address=http://consumer:9292/protocol
-    edc.dataplane.token.validation.endpoint=http://localhost:9293/control/token
-    edc.dataplane.api.public.baseurl=http://localhost:9393/public
+    edc.dsp.callback.address=http://provider:8282/protocol
+    edc.dataplane.token.validation.endpoint=http://localhost:8283/control/token
+    edc.dataplane.api.public.baseurl=http://localhost:8383/public
     edc.dsp.http.enabled=true
     edc.api.auth.key=password
     edc.transfer.proxy.token.signer.privatekey.alias=edc.connector.private.key
     edc.transfer.proxy.token.verifier.publickey.alias=edc.connector.public.key
-    edc.vault.hashicorp.url=http://vault:8200
+    edc.vault.hashicorp.url=http://localhost:8200
     edc.vault.hashicorp.token=test-token
     edc.vault.hashicorp.timeout.seconds=30
     edc.ionos.access.key=EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ
@@ -79,28 +79,28 @@ data:
 apiVersion: v1
 kind: Service
 metadata:
-  name: consumer
+  name: provider
   labels:
-    app: consumer
+    app: provider
 spec:
   selector:
-    app: consumer
+    app: provider
   ports:
   - name: api
-    port: 9191
-    targetPort: 9191
+    port: 8181
+    targetPort: 8181
   - name: management
-    port: 9192
-    targetPort: 9192
+    port: 8182
+    targetPort: 8182
   - name: protocol
-    port: 9292
-    targetPort: 9292
+    port: 8282
+    targetPort: 8282
   - name: control
-    port: 9293
-    targetPort: 9293
+    port: 8283
+    targetPort: 8283
   - name: public
-    port: 9393
-    targetPort: 9393
+    port: 8383
+    targetPort: 8383
   type: ClusterIP
 
 ---
@@ -108,13 +108,13 @@ spec:
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: consumer-management
+  name: provider-management
   labels:
-    app: consumer
+    app: provider
 spec:
   to:
     kind: Service
-    name: consumer
+    name: provider
   port:
     targetPort: management
   tls:

@@ -1,17 +1,22 @@
 # -buster is required to have apt available
 FROM openjdk:21-slim-buster
 
-# by default curl is not available, so install it
+# Install curl
 RUN apt update && apt install curl -y
 
 WORKDIR /app
 
 
-# Copy config
 COPY resources /resources
+
 # Copy jar
 COPY build/libs/dataspace-connector.jar /app
 
-ENV EDC_FS_CONFIG = $EDC_FS_CONFIG
+# Copy the entrypoint script
+COPY entrypoint.sh /entrypoint.sh
 
-ENTRYPOINT java -jar dataspace-connector.jar
+# Make the script executable
+RUN chmod +x /entrypoint.sh
+
+# Set the entrypoint to the script
+ENTRYPOINT ["/entrypoint.sh"]
