@@ -1,0 +1,40 @@
+services:
+  connector-provider:
+    container_name: provider
+    image: ghcr.io/digital-ecosystems/connector:v3.1.2
+    ports:
+      - "8181:8181"
+      - "8182:8182"
+      - "8282:8282"
+    volumes:
+      - ./resources:/resources
+    environment:
+      EDC_FS_CONFIG: /resources/config.properties
+
+  connector-consumer:
+    container_name: consumer
+    image: ghcr.io/digital-ecosystems/connector:v3.1.2
+    ports:
+      - "9191:9191"
+      - "9192:9192"
+      - "9292:9292"
+    volumes:
+      - ./resources:/resources
+    environment:
+      EDC_FS_CONFIG: /resources/config-consumer.properties
+
+  hashicorp-vault:
+    container_name: hashicorp-vault
+    image: hashicorp/vault:1.17.2
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: myroot
+      VAULT_ADDR: http://hashicorp-vault:8200
+    cap_add:
+      - IPC_LOCK
+    healthcheck:
+      test: [ "CMD", "sh", "-c", "sleep 1 && apk add --no-cache curl && curl --fail http://localhost:8200/v1/sys/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
