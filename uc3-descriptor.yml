@@ -253,6 +253,28 @@ Microservices_configuration:
         Value: "guest"
       - Name: "RABBITMQ_PASSWORD"
         Value: "guest"
+      - Name: "RABBITMQ_HOST"
+        Value: "rabbitmq"
+      - Name: "RABBITMQ_PORT"
+        Value: "5672"
+      - Name: IN_FILE_PATH
+        Value: "/processing/starlight/runtime/infiles"
+      - Name: PROCESS_LIST
+        Value: "/processing/starlight/runtime/processlist.txt" 
+      - Name: INPUT_DIR_STARLIGHT
+        Value: "/processing/starlight/data/input"
+      - Name: INPUT_DIR_PPFX
+        Value: "/processing/ppfx/data/input"
+      - Name: INPUT_DIR_STECKMAP
+        Value: "/processing/steckmap/data/input"
+      - Name: OUTPUT_DIR_STARLIGHT
+        Value: "/processing/starlight/data/output"
+      - Name: OUTPUT_DIR_PPFX
+        Value: "/processing/ppfx/data/output"
+      - Name: OUTPUT_DIR_STECKMAP
+        Value: "/processing/steckmap/data/output"
+    Ports:
+      - ContainerPort: 5672
     Volumes:
       - Name: "uc3-pv-storage"
         VolumeSource:
