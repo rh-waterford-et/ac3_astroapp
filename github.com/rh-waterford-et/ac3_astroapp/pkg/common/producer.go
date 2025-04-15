@@ -11,8 +11,6 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/rh-waterford-et/ac3_astroapp/pkg/app"
-	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
 )
 
 type DataFile struct {
@@ -53,7 +51,6 @@ func NewProducer(batchSize int, inputDir, outputDir string, eventQueue chan Even
 }
 
 var utils common.UtilsInterface = &common.Utils{}
-var starlight app.StarlightInterface = &common.Starlight{}
 
 func (p *Producer) RunApp(appName string) {
 	inputDirEnv := "INPUT_DIR_" + appName

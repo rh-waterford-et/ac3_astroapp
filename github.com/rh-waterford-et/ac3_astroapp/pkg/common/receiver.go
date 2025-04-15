@@ -10,7 +10,6 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
 )
 
 type ReceiverInterface interface {

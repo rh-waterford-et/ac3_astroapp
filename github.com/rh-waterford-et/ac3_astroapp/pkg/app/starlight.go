@@ -7,9 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
-	"golang.org/x/exp/rand"
 )
 
 type StarlightInterface interface {
@@ -31,8 +28,6 @@ type DataFile struct {
 func NewStarlight(batch []DataFile) *Starlight {
 	return &Starlight{batch: batch}
 }
-
-var utils common.UtilsInterface = &common.Utils{}
 
 func (s *Starlight) UpdateInFile() (string, string) {
 	//println("updating .in file")
