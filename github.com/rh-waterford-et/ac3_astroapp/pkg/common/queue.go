@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -15,24 +16,35 @@ type QueueInterface interface {
 	Publish(ctx context.Context, queueName string, body []byte, headers amqp.Table) error
 	Consume(queueName string, consumerTag string) (<-chan amqp.Delivery, error)
 	CancelConsumer(consumerTag string) error
-	InspectQueue(name string) (amqp.QueueInterface, error)
+	InspectQueue(name string) (amqp.Queue, error)
 	SetQoS(prefetchCount int) error
 }
 
-type Queue struct {
+type Queues struct {
 	conn *amqp.Connection
 	ch   *amqp.Channel
+	url  string
 }
 
-func (q *Queue) Connect() error {
+func NewRabbitMQConnection() (QueueInterface, error) {
 	username := os.Getenv("RABBITMQ_USER")
 	password := os.Getenv("RABBITMQ_PASSWORD")
 	host := os.Getenv("RABBITMQ_HOST")
 	port := os.Getenv("RABBITMQ_PORT")
 	url := fmt.Sprintf("amqp://%s:%s@%s:%s/", username, password, host, port)
 
+	q := &Queues{url: url}
+	log.Printf("Connecting to RabbitMQ at %s", url)
+	err := q.Connect()
+	if err != nil {
+		return nil, err
+	}
+	return q, nil
+}
+
+func (q *Queues) Connect() error {
 	var err error
-	q.conn, err = amqp.Dial(url)
+	q.conn, err = amqp.Dial(q.url)
 	if err != nil {
 		return fmt.Errorf("connect error: %w", err)
 	}
@@ -44,14 +56,14 @@ func (q *Queue) Connect() error {
 	return nil
 }
 
-func (q *Queue) Close() error {
+func (q *Queues) Close() error {
 	if err := q.ch.Close(); err != nil {
 		return err
 	}
 	return q.conn.Close()
 }
 
-func (q *Queue) DeclareQueue(name string) error {
+func (q *Queues) DeclareQueue(name string) error {
 	_, err := q.ch.QueueDeclare(
 		name,
 		true,  // durable
@@ -63,7 +75,7 @@ func (q *Queue) DeclareQueue(name string) error {
 	return err
 }
 
-func (q *Queue) Publish(ctx context.Context, queueName string, body []byte, headers amqp.Table) error {
+func (q *Queues) Publish(ctx context.Context, queueName string, body []byte, headers amqp.Table) error {
 	return q.ch.PublishWithContext(ctx,
 		"",        // exchange
 		queueName, // routing key
@@ -76,7 +88,7 @@ func (q *Queue) Publish(ctx context.Context, queueName string, body []byte, head
 		})
 }
 
-func (q *Queue) Consume(queueName string, consumerTag string) (<-chan amqp.Delivery, error) {
+func (q *Queues) Consume(queueName string, consumerTag string) (<-chan amqp.Delivery, error) {
 	return q.ch.Consume(
 		queueName,
 		consumerTag,
@@ -88,14 +100,14 @@ func (q *Queue) Consume(queueName string, consumerTag string) (<-chan amqp.Deliv
 	)
 }
 
-func (q *Queue) CancelConsumer(consumerTag string) error {
+func (q *Queues) CancelConsumer(consumerTag string) error {
 	return q.ch.Cancel(consumerTag, false)
 }
 
-func (q *Queue) InspectQueue(name string) (amqp.QueueInterface, error) {
+func (q *Queues) InspectQueue(name string) (amqp.Queue, error) {
 	return q.ch.QueueInspect(name)
 }
 
-func (q *Queue) SetQoS(prefetchCount int) error {
+func (q *Queues) SetQoS(prefetchCount int) error {
 	return q.ch.Qos(prefetchCount, 0, false)
 }

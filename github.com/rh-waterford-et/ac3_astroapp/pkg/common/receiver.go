@@ -39,22 +39,20 @@ func NewReceiver(queue common.QueueInterface, queues []string) *Receiver {
 	}
 }
 
-var utils common.UtilsInterface = &common.Utils{}
-
 func (r *Receiver) Start() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
 	err := r.Queue.Connect()
-	u.FailOnError(err, "Failed to connect to RabbitMQ")
+	utils.FailOnError(err, "Failed to connect to RabbitMQ")
 	defer r.Queue.Close()
 
 	for _, q := range r.AppQueues {
 		err := r.Queue.DeclareQueue(q)
-		common.FailOnError(err, fmt.Sprintf("Failed to declare queue: %s", q))
+		utils.FailOnError(err, fmt.Sprintf("Failed to declare queue: %s", q))
 	}
 
 	err = r.Queue.SetQoS(1)
-	common.FailOnError(err, "Failed to set QoS")
+	utils.FailOnError(err, "Failed to set QoS")
 
 	for {
 		for _, q := range r.AppQueues {
@@ -174,7 +172,7 @@ func (r *Receiver) ProcessMessage(queue string, d amqp.Delivery) {
 		return
 	}
 
-	if exists, _ := exists(outputPath); !exists {
+	if exists, _ := utils.Exists(outputPath); !exists {
 		err := os.Mkdir(outputPath, 0700)
 		if err != nil {
 			log.Printf("│ ERROR creating directory: %v", err)
@@ -187,7 +185,7 @@ func (r *Receiver) ProcessMessage(queue string, d amqp.Delivery) {
 	successCount := 0
 	for _, file := range msgBody.Files {
 		if strings.HasSuffix(file.Name, ".in") {
-			updateToProcessList(file.Name, []byte(file.Content))
+			starlight.UpdateToProcessList(file.Name, []byte(file.Content))
 			log.Printf("│ ✓ Processed .in file: %s", file.Name)
 			successCount++
 			continue
