@@ -18,10 +18,8 @@ ASSET_PAYLOAD='{
     },
     "dataAddress": {
         "type": "IonosS3",
-        "bucketName": "uc3-provider",
-        "fileName": "asset-1.txt",
-        "blobName": "asset-1.txt",
-        "keyName": ""
+        "bucketName": "test-provider",
+        "blobName": "asset-1.txt"
     }
 }'
 echo "$ASSET_PAYLOAD" | curl -d @- -H "X-API-Key: $API_KEY" \
@@ -149,9 +147,11 @@ done
 
 # Step 7: Initiate Transfer
 echo "Initiating transfer..."
+KEY_NAME=$(uuidgen)
 TRANSFER_PAYLOAD=$(jq -n \
     --arg contractId "$CONTRACT_AGREEMENT_ID" \
     --arg provider "$PROVIDER_PROTOCOL" \
+    --arg keyName "$KEY_NAME" \
     '{
         "@context": {
             "edc": "https://w3id.org/edc/v0.0.1/ns/"
@@ -165,9 +165,8 @@ TRANSFER_PAYLOAD=$(jq -n \
         "transferType": "IonosS3-PUSH",
         "dataDestination": {
             "type": "IonosS3",
-            "storage": "s3.eu-central-2.ionoscloud.com",
-            "bucketName": "uc3-consumer",
-            "keyName": ""
+            "bucketName": "test-consumer",
+            "keyName": $keyName
         }
     }')
 

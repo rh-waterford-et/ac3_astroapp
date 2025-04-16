@@ -1,7 +1,10 @@
 services:
   connector-provider:
     container_name: provider
-    image: ghcr.io/digital-ecosystems/connector:v3.1.2
+    depends_on:
+      hashicorp-vault:
+        condition: service_started
+    image: ghcr.io/digital-ecosystems/connector:v4.0.0
     ports:
       - "8181:8181"
       - "8182:8182"
@@ -13,7 +16,10 @@ services:
 
   connector-consumer:
     container_name: consumer
-    image: ghcr.io/digital-ecosystems/connector:v3.1.2
+    depends_on:
+      hashicorp-vault:
+        condition: service_started
+    image: ghcr.io/digital-ecosystems/connector:v4.0.0
     ports:
       - "9191:9191"
       - "9192:9192"
@@ -30,7 +36,7 @@ services:
       - "8200:8200"
     environment:
       VAULT_DEV_ROOT_TOKEN_ID: myroot
-      VAULT_ADDR: http://hashicorp-vault:8200
+      VAULT_ADDR: http://0.0.0.0:8200
     cap_add:
       - IPC_LOCK
     healthcheck:
