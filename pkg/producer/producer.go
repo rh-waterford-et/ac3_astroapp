@@ -18,6 +18,9 @@ import (
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 )
 
+// TODO: Consider Single responsibility principle and Open/Close principles
+// - reduce functions
+// - create a new interface
 type ProducerInterface interface {
 	AddFile(file api.DataFile, appName string)
 	SendBatch(appName string)

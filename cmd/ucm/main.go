@@ -50,7 +50,7 @@ func main() {
 }
 
 func LaunchReceiver() error {
-	log.Printf("------------------ Starting receive() ---------------------")
+	log.Printf("------------------ Starting receiver() ---------------------")
 	// Initialize directories first
 	utils := &common.Utils{}
 	if err := utils.EnsureDirectoriesExist(); err != nil {
@@ -91,10 +91,13 @@ func LaunchReceiver() error {
 func LaunchProducer() error {
 	utils := &common.Utils{}
 
+	log.Printf("------------------ Starting producer() ---------------------")
 	if err := utils.EnsureDirectoriesExist(); err != nil {
 		log.Fatalf("Directory initialization failed: %v", err)
 	}
 	// Run all three applications concurrently
+	// TODO: consider splitting this up and passing it via
+	// cli variables
 	for {
 		RunApp("PPFX", utils)
 		RunApp("Starlight", utils)

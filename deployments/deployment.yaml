@@ -23,7 +23,9 @@ spec:
       - image: quay.io/rh-ee-kromashk/ucm-producer
         name: ucm-producer
         securityContext:
-           privileged: true
+          # consider not using privileged containers 
+          # lets look at why you would need this
+          privileged: true
         command: ["ucm"]
         args: ["producer"]
         env:

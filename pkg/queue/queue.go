@@ -28,6 +28,8 @@ type Queues struct {
 }
 
 func NewRabbitMQConnection() (*Queues, error) {
+	// TODO: Consider some fallback - maybe use parameters
+	// and then check envars
 	username := os.Getenv("RABBITMQ_USER")
 	password := os.Getenv("RABBITMQ_PASSWORD")
 	host := os.Getenv("RABBITMQ_HOST")
