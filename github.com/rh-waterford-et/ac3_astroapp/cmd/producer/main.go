@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/producer"
 )
 
 func main() {
@@ -16,9 +16,9 @@ func main() {
 	}
 	// Run all three applications concurrently
 	for {
-		common.RunApp("PPFX")
-		common.RunApp("Starlight")
-		common.RunApp("Steckmap")
+		producer.RunApp("PPFX")
+		producer.RunApp("Starlight")
+		producer.RunApp("Steckmap")
 		log.Println("Checking for new files...")
 		time.Sleep(10 * time.Second)
 	}

@@ -1,4 +1,4 @@
-package common
+package receiver
 
 import (
 	"encoding/json"
@@ -10,6 +10,9 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/starlight"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/utils"
 )
 
 type ReceiverInterface interface {
@@ -19,7 +22,7 @@ type ReceiverInterface interface {
 }
 
 type Receiver struct {
-	Queue     common.QueueInterface
+	Queue     queue.QueueInterface
 	AppQueues []string
 }
 type FileData struct {
@@ -31,7 +34,9 @@ type MessageBody struct {
 	Files []FileData `json:"Files"`
 }
 
-func NewReceiver(queue common.QueueInterface, queues []string) *Receiver {
+var u *utils.Utils = &utils.Utils{}
+
+func NewReceiver(queue queue.QueueInterface, queues []string) *Receiver {
 	return &Receiver{
 		Queue:     queue,
 		AppQueues: queues,
@@ -42,16 +47,16 @@ func (r *Receiver) Start() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
 	err := r.Queue.Connect()
-	utils.FailOnError(err, "Failed to connect to RabbitMQ")
+	u.FailOnError(err, "Failed to connect to RabbitMQ")
 	defer r.Queue.Close()
 
 	for _, q := range r.AppQueues {
 		err := r.Queue.DeclareQueue(q)
-		utils.FailOnError(err, fmt.Sprintf("Failed to declare queue: %s", q))
+		u.FailOnError(err, fmt.Sprintf("Failed to declare queue: %s", q))
 	}
 
 	err = r.Queue.SetQoS(1)
-	utils.FailOnError(err, "Failed to set QoS")
+	u.FailOnError(err, "Failed to set QoS")
 
 	for {
 		for _, q := range r.AppQueues {
@@ -171,7 +176,7 @@ func (r *Receiver) ProcessMessage(queue string, d amqp.Delivery) {
 		return
 	}
 
-	if exists, _ := utils.Exists(outputPath); !exists {
+	if exists, _ := u.Exists(outputPath); !exists {
 		err := os.Mkdir(outputPath, 0700)
 		if err != nil {
 			log.Printf("│ ERROR creating directory: %v", err)

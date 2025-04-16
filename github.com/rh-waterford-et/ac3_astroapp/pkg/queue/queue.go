@@ -1,4 +1,4 @@
-package common
+package queue
 
 import (
 	"context"
@@ -105,7 +105,14 @@ func (q *Queues) CancelConsumer(consumerTag string) error {
 }
 
 func (q *Queues) InspectQueue(name string) (amqp.Queue, error) {
-	return q.ch.QueueInspect(name)
+	return q.ch.QueueDeclare(
+		name,
+		true,  // durable
+		false, // delete when unused
+		false, // exclusive
+		false, // no-wait
+		nil,
+	)
 }
 
 func (q *Queues) SetQoS(prefetchCount int) error {

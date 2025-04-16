@@ -1,8 +1,9 @@
-package common
+package producer
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/utils"
 )
 
 type DataFile struct {
@@ -27,7 +30,7 @@ type ProducerInterface interface {
 	SendBatch(appName string)
 	ReadFiles(appName string)
 	DeleteProcessedFiles()
-	SendEvent(event Event, appName string, q common.QueueInterface)
+	SendEvent(event Event, appName string, q queue.QueueInterface)
 	RunApp(appName string)
 	CreateEvent()
 }
@@ -50,7 +53,7 @@ func NewProducer(batchSize int, inputDir, outputDir string, eventQueue chan Even
 	}
 }
 
-var utils common.UtilsInterface = &common.Utils{}
+var starlight *starlight.Starlight = &starlight.Starlight{}
 
 func (p *Producer) RunApp(appName string) {
 	inputDirEnv := "INPUT_DIR_" + appName
@@ -79,7 +82,7 @@ func (p *Producer) RunApp(appName string) {
 	if len(files) > 0 {
 		log.Printf("Processing %s files...\n", appName)
 		// Initialize the queue connection
-		q, err := common.NewRabbitMQConnection()
+		q, err := queue.NewRabbitMQConnection()
 		if err != nil {
 			log.Printf("Failed to connect to RabbitMQ: %v\n", err)
 			return
@@ -91,7 +94,7 @@ func (p *Producer) RunApp(appName string) {
 		log.Printf("No files found in %s directories\n", appName)
 	}
 }
-func (p *Producer) CreateEvent(inputDir string, outputDir string, appName string, batchSize int, q common.QueueInterface) {
+func (p *Producer) CreateEvent(inputDir string, outputDir string, appName string, batchSize int, q queue.QueueInterface) {
 
 	eventQueue := make(chan Event, 10)
 
@@ -169,16 +172,18 @@ func (p *Producer) ReadFiles(appName string) {
 	}
 }
 
-func (p *Producer) SendEvent(event Event, appName string, q common.QueueInterface) {
+func (p *Producer) SendEvent(event Event, appName string, q queue.QueueInterface) {
+	u := &utils.Utils{}
 	err := q.Connect()
 	if err != nil {
-		utils.FailOnError("Failed to connect to RabbitMQ: %v", err)
+
+		u.FailOnError(err, "Failed to connect to RabbitMQ")
 	}
 	defer q.Close()
 
 	err = q.DeclareQueue(appName)
 	if err != nil {
-		utils.FailOnError("Failed to declare queue %s: %v", appName, err)
+		u.FailOnError(err, fmt.Sprintf("Failed to declare queue %s", appName))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -186,7 +191,7 @@ func (p *Producer) SendEvent(event Event, appName string, q common.QueueInterfac
 
 	eventJSON, err := json.Marshal(event)
 	if err != nil {
-		utils.FailOnError("Failed to marshal event: %v", err)
+		u.FailOnError(err, "Failed to marshal event")
 	}
 
 	headers := make(amqp.Table)
@@ -200,7 +205,7 @@ func (p *Producer) SendEvent(event Event, appName string, q common.QueueInterfac
 
 	err = q.Publish(ctx, appName, eventJSON, headers)
 	if err != nil {
-		utils.FailOnError("Failed to publish message: %v", err)
+		u.FailOnError(err, "Failed to publish message")
 	}
 
 	log.Printf(" [x] Sent batch with %d files\n", len(event.Files))

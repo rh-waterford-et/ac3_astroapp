@@ -1,12 +1,15 @@
-package app
+package starlight
 
 import (
 	"bufio"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/utils"
 )
 
 type StarlightInterface interface {
@@ -25,6 +28,8 @@ type DataFile struct {
 	Content string
 }
 
+var u *utils.Utils = &utils.Utils{}
+
 func NewStarlight(batch []DataFile) *Starlight {
 	return &Starlight{batch: batch}
 }
@@ -36,17 +41,17 @@ func (s *Starlight) UpdateInFile() (string, string) {
 	newInFileName := fmt.Sprintf("grid_example_%d.in", rand.Intn(100))
 
 	// Check if the template .in file exists
-	if exists, _ := utils.Exists(templateInFilePath); !exists {
+	if exists, _ := u.Exists(templateInFilePath); !exists {
 		println("Error: file does not exist")
 		return "", ""
 	}
 
 	f, err := os.Open(templateInFilePath)
-	defer f.Close()
 	if err != nil {
 		println("Error opening file")
 		panic(err)
 	}
+	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 	i := 0
@@ -143,7 +148,7 @@ func (s *Starlight) UpdateToProcessList(inFileName string, fileContent []byte) {
 	PROCESS_LIST := os.Getenv("PROCESS_LIST")
 	InFilePath := os.Getenv("IN_FILE_PATH")
 
-	if err := utils.TouchFile(PROCESS_LIST); err != nil {
+	if err := u.TouchFile(PROCESS_LIST); err != nil {
 		log.Printf("│ ✗ Error creating process list: %v", err)
 		return
 	}
