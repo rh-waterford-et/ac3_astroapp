@@ -1,4 +1,4 @@
-package common
+package receiver
 
 import (
 	"encoding/json"
@@ -10,7 +10,11 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/app"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 )
 
 type ReceiverInterface interface {
@@ -20,41 +24,33 @@ type ReceiverInterface interface {
 }
 
 type Receiver struct {
-	Queue     common.QueueInterface
+	Queue     queue.QueueInterface
 	AppQueues []string
-}
-type FileData struct {
-	Name    string `json:"Name"`
-	Content string `json:"Content"`
+	Utils     common.UtilsInterface
 }
 
-type MessageBody struct {
-	Files []FileData `json:"Files"`
-}
-
-func NewReceiver(queue common.QueueInterface, queues []string) *Receiver {
+func NewReceiver(queue queue.QueueInterface, queues []string, utils common.UtilsInterface) *Receiver {
 	return &Receiver{
 		Queue:     queue,
 		AppQueues: queues,
+		Utils:     utils,
 	}
 }
-
-var utils common.UtilsInterface = &common.Utils{}
 
 func (r *Receiver) Start() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
 	err := r.Queue.Connect()
-	u.FailOnError(err, "Failed to connect to RabbitMQ")
+	r.Utils.FailOnError("Failed to connect to RabbitMQ", err)
 	defer r.Queue.Close()
 
 	for _, q := range r.AppQueues {
 		err := r.Queue.DeclareQueue(q)
-		common.FailOnError(err, fmt.Sprintf("Failed to declare queue: %s", q))
+		r.Utils.FailOnError(fmt.Sprintf("Failed to declare queue: %s", q), err)
 	}
 
 	err = r.Queue.SetQoS(1)
-	common.FailOnError(err, "Failed to set QoS")
+	r.Utils.FailOnError("Failed to set QoS", err)
 
 	for {
 		for _, q := range r.AppQueues {
@@ -85,7 +81,10 @@ func (r *Receiver) ProcessQueue(queueName string) {
 		log.Printf("CONSUME ERROR: Failed to register consumer for queue %s: %v", queueName, err)
 		return
 	}
-	defer r.Queue.CancelConsumer(consumerTag)
+	err = r.Queue.CancelConsumer(consumerTag)
+	if err != nil {
+		return
+	}
 
 	timeout := time.After(5 * time.Second)
 	for {
@@ -100,6 +99,7 @@ func (r *Receiver) ProcessQueue(queueName string) {
 		}
 	}
 }
+
 func (r *Receiver) ProcessMessage(queue string, d amqp.Delivery) {
 	processStart := time.Now()
 	batchID := fmt.Sprintf("%s-%d", queue, d.DeliveryTag)
@@ -110,7 +110,10 @@ func (r *Receiver) ProcessMessage(queue string, d amqp.Delivery) {
 	log.Printf("│ Timestamp:   %s", d.Timestamp)
 
 	if len(d.Headers) > 0 {
-		headers, _ := json.Marshal(d.Headers)
+		headers, err := json.Marshal(d.Headers)
+		if err != nil {
+			log.Printf("│ ERROR: 'marshaling json' %w", err)
+		}
 		log.Printf("│ Headers:    %s", headers)
 	}
 
@@ -160,7 +163,7 @@ func (r *Receiver) ProcessMessage(queue string, d amqp.Delivery) {
 		return
 	}
 
-	var msgBody MessageBody
+	var msgBody api.MessageBody
 	err := json.Unmarshal(d.Body, &msgBody)
 	if err != nil {
 		log.Printf("│ ERROR parsing message body: %v", err)
@@ -174,7 +177,7 @@ func (r *Receiver) ProcessMessage(queue string, d amqp.Delivery) {
 		return
 	}
 
-	if exists, _ := exists(outputPath); !exists {
+	if exists, _ := r.Utils.Exists(outputPath); !exists {
 		err := os.Mkdir(outputPath, 0700)
 		if err != nil {
 			log.Printf("│ ERROR creating directory: %v", err)
@@ -185,15 +188,17 @@ func (r *Receiver) ProcessMessage(queue string, d amqp.Delivery) {
 	}
 
 	successCount := 0
+	starlight := app.NewStarlight([]api.DataFile{}, r.Utils)
 	for _, file := range msgBody.Files {
 		if strings.HasSuffix(file.Name, ".in") {
-			updateToProcessList(file.Name, []byte(file.Content))
+			starlight.UpdateToProcessList(file.Name, []byte(file.Content))
 			log.Printf("│ ✓ Processed .in file: %s", file.Name)
 			successCount++
 			continue
 		}
 
 		filePath := filepath.Join(outputPath, file.Name)
+		// #nosec G306
 		err := os.WriteFile(filePath, []byte(file.Content), 0644)
 		if err != nil {
 			log.Printf("│ ✗ Error writing file %s: %v", file.Name, err)
@@ -204,17 +209,27 @@ func (r *Receiver) ProcessMessage(queue string, d amqp.Delivery) {
 	}
 
 	if successCount == int(batchSize) {
-		d.Ack(false)
+		err := d.Ack(false)
+		if err != nil {
+			log.Printf("│ ERROR 'ack' : %w", err)
+		}
 		log.Printf("│ ✔ Successfully processed all %d files", batchSize)
 	} else {
 		log.Printf("│ ⚠ Processed %d/%d files successfully", successCount, batchSize)
-		d.Nack(false, true)
+		err := d.Nack(false, true)
+		if err != nil {
+			log.Printf("│ ERROR 'nack' : %w", err)
+		}
 	}
 
 	log.Printf("│ Duration: %s", time.Since(processStart))
 	log.Printf("■■■ BATCH COMPLETE [%s] ■■■", batchID)
 }
+
 func (r *Receiver) requeueWithLog(d amqp.Delivery, batchID string) {
-	d.Nack(false, true)
+	err := d.Nack(false, true)
+	if err != nil {
+		log.Printf("│ ERROR 'nack' : %w", err)
+	}
 	log.Printf("■■■ BATCH ERROR [%s] - Message requeued ■■■", batchID)
 }
