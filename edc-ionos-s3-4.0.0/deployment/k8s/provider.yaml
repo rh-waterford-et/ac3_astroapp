@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: provider
+  labels:
+    app: provider
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: provider
+  template:
+    metadata:
+      labels:
+        app: provider
+    spec:
+      containers:
+      - name: provider
+        image: quay.io/bcapper30/s3-provider-env
+        ports:
+        - containerPort: 8181
+          name: api
+        - containerPort: 8182
+          name: management
+        - containerPort: 8282
+          name: protocol
+        - containerPort: 8283
+          name: control
+        - containerPort: 8383
+          name: public
+        env:
+        - name: JAVA_TOOL_OPTIONS
+          value: "-Dedc.fs.config=/app/resources/config.properties"
+        - name: EDC_PARTICIPANT_ID
+          value: "provider"
+        - name: WEB_HTTP_PORT
+          value: "8181"
+        - name: WEB_HTTP_PATH
+          value: "/api"
+        - name: WEB_HTTP_MANAGEMENT_PORT
+          value: "8182"
+        - name: WEB_HTTP_MANAGEMENT_PATH
+          value: "/management"
+        - name: WEB_HTTP_PROTOCOL_PORT
+          value: "8282"
+        - name: WEB_HTTP_PROTOCOL_PATH
+          value: "/protocol"
+        - name: WEB_HTTP_CONTROL_PORT
+          value: "8283"
+        - name: WEB_HTTP_CONTROL_PATH
+          value: "/control"
+        - name: WEB_HTTP_PUBLIC_PORT
+          value: "8383"
+        - name: WEB_HTTP_PUBLIC_PATH
+          value: "/public"
+        - name: EDC_DSP_CALLBACK_ADDRESS
+          value: "http://provider:9292/protocol"
+        - name: EDC_DATAPLANE_TOKEN_VALIDATION_ENDPOINT
+          value: "http://localhost:9293/control/token"
+        - name: EDC_DATAPLANE_API_PUBLIC_BASEURL
+          value: "http://localhost:9393/public"
+        - name: EDC_DSP_HTTP_ENABLED
+          value: "true"
+        - name: EDC_API_AUTH_KEY
+          value: "password"
+        - name: EDC_TRANSFER_PROXY_TOKEN_SIGNER_PRIVATEKEY_ALIAS
+          value: "edc.connector.private.key"
+        - name: EDC_TRANSFER_PROXY_TOKEN_VERIFIER_PUBLICKEY_ALIAS
+          value: "edc.connector.public.key"
+        - name: EDC_VAULT_HASHICORP_URL
+          value: "http://vault:8200"
+        - name: EDC_VAULT_HASHICORP_TOKEN
+          value: "test-token"
+        - name: EDC_VAULT_HASHICORP_TIMEOUT_SECONDS
+          value: "30"
+        - name: EDC_IONOS_ACCESS_KEY
+          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
+        - name: EDC_IONOS_SECRET_KEY
+          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
+        - name: EDC_IONOS_ENDPOINT_REGION
+          value: "de"
+        - name: EDC_IONOS_TOKEN
+          value: "eyJ0eXAiOiJKV1QiLCJraWQiOiJiNzlkODE3OS02MmFhLTRkMGYtODU0Zi1lMzQyMmNmYzE1MTciLCJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJpb25vc2Nsb3VkIiwiaWF0IjoxNzQ0ODE0NzE0LCJjbGllbnQiOiJVU0VSIiwiaWRlbnRpdHkiOnsicm9sZSI6ImFkbWluIiwiY29udHJhY3ROdW1iZXIiOjMyNDM5MjQ1LCJpc1BhcmVudCI6ZmFsc2UsInByaXZpbGVnZXMiOlsiREFUQV9DRU5URVJfQ1JFQVRFIiwiU05BUFNIT1RfQ1JFQVRFIiwiSVBfQkxPQ0tfUkVTRVJWRSIsIk1BTkFHRV9EQVRBUExBVEZPUk0iLCJBQ0NFU1NfQUNUSVZJVFlfTE9HIiwiUENDX0NSRUFURSIsIkFDQ0VTU19TM19PQkpFQ1RfU1RPUkFHRSIsIkJBQ0tVUF9VTklUX0NSRUFURSIsIkNSRUFURV9JTlRFUk5FVF9BQ0NFU1MiLCJLOFNfQ0xVU1RFUl9DUkVBVEUiLCJGTE9XX0xPR19DUkVBVEUiLCJBQ0NFU1NfQU5EX01BTkFHRV9NT05JVE9SSU5HIiwiQUNDRVNTX0FORF9NQU5BR0VfQ0VSVElGSUNBVEVTIiwiQUNDRVNTX0FORF9NQU5BR0VfTE9HR0lORyIsIk1BTkFHRV9EQkFBUyIsIkFDQ0VTU19BTkRfTUFOQUdFX0ROUyIsIk1BTkFHRV9SRUdJU1RSWSIsIkFDQ0VTU19BTkRfTUFOQUdFX0NETiIsIkFDQ0VTU19BTkRfTUFOQUdFX1ZQTiIsIkFDQ0VTU19BTkRfTUFOQUdFX0FQSV9HQVRFV0FZIiwiQUNDRVNTX0FORF9NQU5BR0VfTkdTIiwiQUNDRVNTX0FORF9NQU5BR0VfS0FBUyIsIkFDQ0VTU19BTkRfTUFOQUdFX05FVFdPUktfRklMRV9TVE9SQUdFIiwiQUNDRVNTX0FORF9NQU5BR0VfQUlfTU9ERUxfSFVCIiwiQ1JFQVRFX05FVFdPUktfU0VDVVJJVFlfR1JPVVBTIiwiQUNDRVNTX0FORF9NQU5BR0VfSUFNX1JFU09VUkNFUyJdLCJ1dWlkIjoiZWUxMjdlOGItOTMwNi00OTFhLTk1MDAtOGE0MWE4MjQ3YzhlIiwicmVzZWxsZXJJZCI6MSwicmVnRG9tYWluIjoiaW9ub3MuZGUifSwiZXhwIjoxNzc2MzUwNzE0fQ.K8axaTD53Mr1ymn5X9dJhI8DlAu2cO_IgknpBtFjs9tOPkSGPwKc8ImTfyiJbiA3UemXAoLQ4W67KUf7SR7E8dOJWRbnCdv4OAMk1MGDcQ58gRPlwQ-ztS6sHN0PWQsB7Os4IILkgDsUKMvDNj_FWWBFy3910ztnkqvrgmexQJcgOsm0VumxmBWntRnNPpaudl8GK2wJip-fn8iNOwss9qz_IqlN7PilmdYLzVMIk9KNIRUWnjLj2wdbYmJaS4tDkUFcm5y17pICx4hyaBNo19pN2B7FWEvDsWGK_avCsxkUiI5mpiYnEW5dIwPRMr_LsiQleFxUZnY46xa5ekttbA"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: provider
+  labels:
+    app: provider
+spec:
+  selector:
+    app: provider
+  ports:
+  - name: api
+    port: 8181
+    targetPort: 8181
+  - name: management
+    port: 8182
+    targetPort: 8182
+  - name: protocol
+    port: 8282
+    targetPort: 8282
+  - name: control
+    port: 8283
+    targetPort: 8283
+  - name: public
+    port: 8383
+    targetPort: 8383
+  type: ClusterIP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: consumer-management
+  labels:
+    app: provider
+spec:
+  to:
+    kind: Service
+    name: provider
+  port:
+    targetPort: management
+  tls:
+    termination: edge
