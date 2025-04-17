@@ -1,0 +1,17 @@
+{
+    "@context": {
+        "edc": "https://w3id.org/edc/v0.0.1/ns/"
+    },
+    "@type": "TransferRequestDto",
+    "connectorId": "provider",
+    "counterPartyAddress": "http://provider:8282/protocol",
+    "protocol": "dataspace-protocol-http",
+    "contractId": "545f5fc1-d3a4-4953-9e09-20b6eb34d4b9",
+    "assetId": "asset-1",
+    "transferType": "IonosS3-PUSH",
+    "dataDestination": {
+        "type": "IonosS3",
+        "bucketName": "test-consumer",
+        "keyName": "asset"
+    }
+}
