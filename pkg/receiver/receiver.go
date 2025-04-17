@@ -12,9 +12,9 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
-	"github.com/rh-waterford-et/ac3_astroapp/pkg/app"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/starlightApp"
 )
 
 type ReceiverInterface interface {
@@ -188,7 +188,7 @@ func (r *Receiver) ProcessMessage(queue string, d amqp.Delivery) {
 	}
 
 	successCount := 0
-	starlight := app.NewStarlight([]api.DataFile{}, r.Utils)
+	starlight := starlightApp.NewStarlight([]api.DataFile{}, r.Utils)
 	for _, file := range msgBody.Files {
 		if strings.HasSuffix(file.Name, ".in") {
 			starlight.UpdateToProcessList(file.Name, []byte(file.Content))

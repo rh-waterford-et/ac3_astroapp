@@ -13,9 +13,9 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
-	"github.com/rh-waterford-et/ac3_astroapp/pkg/app"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/starlightApp"
 )
 
 // TODO: Consider Single responsibility principle and Open/Close principles
@@ -50,7 +50,7 @@ func NewProducer(batchSize int, inputDir, outputDir string, eventQueue chan api.
 	}
 }
 
-var starlight app.StarlightInterface = &app.Starlight{}
+var starlight starlightApp.StarlightInterface = &starlightApp.Starlight{}
 
 func (p *Producer) CreateEvent(appName string, q queue.QueueInterface) {
 	go func() {
