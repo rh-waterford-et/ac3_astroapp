@@ -152,7 +152,7 @@ Microservices_configuration:
 
   - MicroserviceName: "data-connector"
     Version: "1.0"
-    Image: "quay.io/bcapper30/ionos-s3-consumer-env"
+    Image: "quay.io/bcapper30/s3-provider-env"
     ID: "data-connector"
     ClusterAffinity: "orchestrator"
     Dependencies:
