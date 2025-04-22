@@ -2,8 +2,8 @@
 
 # Configuration
 API_KEY="password"
-MANAGEMENT_URL="http://localhost:8182/management/v3"
-CONSUMER_URL="http://localhost:9192/management/v3"
+MANAGEMENT_URL="https://provider-management-connectors.apps.ac3-cluster-1.rh-horizon.eu/management/v3"
+CONSUMER_URL="https://consumer-management-connectors.apps.ac3-cluster-1.rh-horizon.eu/management/v3"
 PROVIDER_PROTOCOL="http://provider:8282/protocol"
 
 # Step 1: Create Asset
@@ -22,7 +22,7 @@ ASSET_PAYLOAD='{
         "blobName": "asset-1.txt"
     }
 }'
-echo "$ASSET_PAYLOAD" | curl -d @- -H "X-API-Key: $API_KEY" \
+echo "$ASSET_PAYLOAD" | curl --insecure -d @- -H "X-API-Key: $API_KEY" \
      -H "content-type: application/json" "$MANAGEMENT_URL/assets" -s
 
 # Step 2: Create Policy
@@ -46,7 +46,7 @@ POLICY_PAYLOAD='{
         "odrl:obligation": []
     }
 }'
-echo "$POLICY_PAYLOAD" | curl -d @- -H "X-API-Key: $API_KEY" \
+echo "$POLICY_PAYLOAD" | curl --insecure -d @- -H "X-API-Key: $API_KEY" \
      -H "content-type: application/json" "$MANAGEMENT_URL/policydefinitions" -s
 
 # Step 3: Create Contract Definition
@@ -59,7 +59,7 @@ CONTRACT_PAYLOAD='{
     "accessPolicyId": "policy-1",
     "contractPolicyId": "policy-1"
 }'
-echo "$CONTRACT_PAYLOAD" | curl -d @- -H "X-API-Key: $API_KEY" \
+echo "$CONTRACT_PAYLOAD" | curl --insecure -d @- -H "X-API-Key: $API_KEY" \
      -H "content-type: application/json" "$MANAGEMENT_URL/contractdefinitions" -s
 
 # Step 4: Fetch Catalogue and Extract Offer ID
@@ -71,7 +71,7 @@ CATALOG_PAYLOAD='{
     "counterPartyAddress": "'"$PROVIDER_PROTOCOL"'",
     "protocol": "dataspace-protocol-http"
 }'
-CATALOG_RESPONSE=$(echo "$CATALOG_PAYLOAD" | curl -X POST "$CONSUMER_URL/catalog/request" \
+CATALOG_RESPONSE=$(echo "$CATALOG_PAYLOAD" | curl --insecure -X POST "$CONSUMER_URL/catalog/request" \
      --header "X-API-Key: $API_KEY" \
      --header "Content-Type: application/json" \
      -d @- -s)
@@ -111,7 +111,7 @@ NEGOTIATION_PAYLOAD=$(jq -n \
         }
     }')
 
-NEGOTIATION_RESPONSE=$(echo "$NEGOTIATION_PAYLOAD" | curl -X POST "$CONSUMER_URL/contractnegotiations" \
+NEGOTIATION_RESPONSE=$(echo "$NEGOTIATION_PAYLOAD" | curl --insecure -X POST "$CONSUMER_URL/contractnegotiations" \
      --header "X-API-Key: $API_KEY" \
      --header "Content-Type: application/json" \
      -d @- -s)
@@ -127,7 +127,7 @@ echo "Extracted negotiation ID: $NEGOTIATION_ID"
 # Step 6: Poll Negotiation Status Until Finalized
 echo "Polling negotiation status..."
 while true; do
-    STATUS_RESPONSE=$(curl -X GET "$CONSUMER_URL/contractnegotiations/$NEGOTIATION_ID" \
+    STATUS_RESPONSE=$(curl --insecure -X GET "$CONSUMER_URL/contractnegotiations/$NEGOTIATION_ID" \
         --header "X-API-Key: $API_KEY" \
         --header "Content-Type: application/json" \
         -s)
@@ -170,7 +170,7 @@ TRANSFER_PAYLOAD=$(jq -n \
         }
     }')
 
-TRANSFER_RESPONSE=$(echo "$TRANSFER_PAYLOAD" | curl -X POST "$CONSUMER_URL/transferprocesses" \
+TRANSFER_RESPONSE=$(echo "$TRANSFER_PAYLOAD" | curl --insecure -X POST "$CONSUMER_URL/transferprocesses" \
      --header "Content-Type: application/json" \
      --header "X-API-Key: $API_KEY" \
      -d @- -s)
@@ -184,3 +184,13 @@ fi
 echo "Transfer process initiated successfully with ID: $TRANSFER_ID"
 echo "Transfer response:"
 echo "$TRANSFER_RESPONSE" | jq .
+
+# Step 8: Deprovision Transfer
+sleep 20s
+echo "Deprovisioning transfer..."
+DEPROVISION_RESPONSE=$(curl --insecure -X POST "$CONSUMER_URL/transferprocesses/$TRANSFER_ID/deprovision" \
+     --header "X-API-Key: $API_KEY" \
+     --header "Content-Type: application/json" \
+     -s)
+
+echo "Transfer deprovisioned successfully."

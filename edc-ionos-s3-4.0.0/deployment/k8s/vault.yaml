@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vault
+  name: hashicorp-vault
   labels:
-    app: vault
+    app: hashicorp-vault
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: vault
+      app: hashicorp-vault
   template:
     metadata:
       labels:
-        app: vault
+        app: hashicorp-vault
     spec:
       containers:
-      - name: vault
+      - name: hashicorp-vault
         image: hashicorp/vault:1.17.2
         ports:
         - containerPort: 8200
@@ -37,14 +37,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: vault
+  name: hashicorp-vault
   labels:
-    app: vault
+    app: hashicorp-vault
 spec:
   selector:
-    app: vault
+    app: hashicorp-vault
   ports:
-  - name: vault
+  - name: hashicorp-vault
     port: 8200
     targetPort: 8200
   type: ClusterIP
