@@ -48,4 +48,16 @@ spec:
     port: 8200
     targetPort: 8200
   type: ClusterIP
-
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: hashicorp-vault
+  labels:
+    app: hashicorp-vault
+spec:
+  to:
+    kind: Service
+    name: hashicorp-vault
+  port:
+    targetPort: hashicorp-vault

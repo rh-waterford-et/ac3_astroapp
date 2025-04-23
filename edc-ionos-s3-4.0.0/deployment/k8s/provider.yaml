@@ -54,7 +54,7 @@ spec:
         - name: WEB_HTTP_PUBLIC_PATH
           value: "/public"
         - name: EDC_DSP_CALLBACK_ADDRESS
-          value: "http://provider:9292/protocol"
+          value: "http://provider-protocol-connectors.apps.ac3-cluster-2.rh-horizon.eu/protocol" # http://provider:9292/protocol
         - name: EDC_DATAPLANE_TOKEN_VALIDATION_ENDPOINT
           value: "http://localhost:9293/control/token"
         - name: EDC_DATAPLANE_API_PUBLIC_BASEURL
@@ -68,7 +68,7 @@ spec:
         - name: EDC_TRANSFER_PROXY_TOKEN_VERIFIER_PUBLICKEY_ALIAS
           value: "edc.connector.public.key"
         - name: EDC_VAULT_HASHICORP_URL
-          value: "http://vault:8200"
+          value: "http://hashicorp-vault-connectors.apps.ac3-cluster-1.rh-horizon.eu" #http://hashicorp-vault:8200
         - name: EDC_VAULT_HASHICORP_TOKEN
           value: "test-token"
         - name: EDC_VAULT_HASHICORP_TIMEOUT_SECONDS
@@ -112,7 +112,7 @@ spec:
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: consumer-management
+  name: provider-management
   labels:
     app: provider
 spec:
@@ -123,3 +123,16 @@ spec:
     targetPort: management
   tls:
     termination: edge
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: provider-protocol
+  labels:
+    app: provider
+spec:
+  to:
+    kind: Service
+    name: provider
+  port:
+    targetPort: protocol
