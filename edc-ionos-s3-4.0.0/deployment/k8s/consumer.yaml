@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: consumer
-        image: quay.io/bcapper30/s3-provider-env
+        image: quay.io/bcapper30/s3-conn-env
         ports:
         - containerPort: 9191
           name: api
@@ -143,3 +143,5 @@ spec:
     name: consumer
   port:
     targetPort: protocol
+
+
