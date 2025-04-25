@@ -18,12 +18,21 @@
 # CONSUMER_MGMT_URL="https://consumer-management-connectors.apps.ac3-cluster-1.rh-horizon.eu/management/v3"
 # PROVIDER_PROTOCOL="http://provider-protocol-connectors.apps.ac3-cluster-2.rh-horizon.eu/protocol"
 
+
+# Check if asset name is provided as an argument
+if [ -z "$1" ]; then
+    echo "Error: No asset name provided. Usage: $0 <asset_name>" >&2
+    exit 1
+fi
+
 # Configuration
+ASSET_NAME="$1"
+POLICY_NAME="${ASSET_NAME}"
+CONTRACT_NAME="${ASSET_NAME}"
 API_KEY="password"
 PROVIDER_MGMT_URL="https://provider-management-connectors.apps.ac3-cluster-2.rh-horizon.eu/management/v3"
 CONSUMER_MGMT_URL="https://consumer-management-connectors.apps.ac3-cluster-1.rh-horizon.eu/management/v3"
 PROVIDER_PROTOCOL="http://provider-protocol-connectors.apps.ac3-cluster-2.rh-horizon.eu/protocol"
-
 
 # Common curl options
 CURL_OPTS=(--insecure -s -H "X-API-Key: $API_KEY" -H "Content-Type: application/json")
@@ -68,15 +77,17 @@ poll_status() {
 
 # Step 1: Create Asset
 echo "Creating asset..."
-ASSET_PAYLOAD='{
-    "@context": {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
-    "@id": "asset-1",
-    "properties": {"name": "Asset 1"},
-    "dataAddress": {"type": "IonosS3", "bucketName": "test-provider", "blobName": "asset-1.txt"}
-}'
+ASSET_PAYLOAD=$(jq -n \
+    --arg asset_name "$ASSET_NAME" \
+    '{
+        "@context": {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
+        "@id": $asset_name,
+        "properties": {"name": $asset_name},
+        "dataAddress": {"type": "IonosS3", "bucketName": "test-provider", "blobName": $asset_name}
+}')
 ASSET_RESPONSE=$(make_api_call POST "$PROVIDER_MGMT_URL/assets" "$ASSET_PAYLOAD")
 echo "$ASSET_RESPONSE"
-ASSET_ID=$(extract_id "$ASSET_RESPONSE" "asset-1")
+ASSET_ID=$(extract_id "$ASSET_RESPONSE" "$ASSET_NAME")
 # Check if response is valid JSON and contains @id
 if echo "$ASSET_RESPONSE" | jq -e '.["@id"]' >/dev/null 2>&1; then
     echo "Asset created successfully with ID: $ASSET_ID" >&2
@@ -86,21 +97,24 @@ fi
 
 # Step 2: Create Policy
 echo "Creating policy..."
-POLICY_PAYLOAD='{
+POLICY_PAYLOAD=$(jq -n \
+    --arg asset_name "$ASSET_NAME" \
+    --arg policy_name "$POLICY_NAME" \
+'{
     "@context": {"edc": "https://w3id.org/edc/v0.0.1/ns/", "odrl": "http://www.w3.org/ns/odrl/2/"},
-    "@id": "policy-1",
+    "@id": $policy_name,
     "policy": {
         "@type": "odrl:Set",
         "odrl:assigner": {"@id": "provider"},
-        "odrl:target": {"@id": "asset-1"},
+        "odrl:target": {"@id": $asset_name},
         "odrl:permission": [],
         "odrl:prohibition": [],
         "odrl:obligation": []
     }
-}'
+}')
 POLICY_RESPONSE=$(make_api_call POST "$PROVIDER_MGMT_URL/policydefinitions" "$POLICY_PAYLOAD")
 echo "$POLICY_RESPONSE"
-POLICY_ID=$(extract_id "$POLICY_RESPONSE" "policy-1")
+POLICY_ID=$(extract_id "$POLICY_RESPONSE" "$POLICY_NAME")
 # Check if response is valid JSON and contains @id
 if echo "$POLICY_RESPONSE" | jq -e '.["@id"]' >/dev/null 2>&1; then
     echo "Policy created successfully with ID: $POLICY_ID" >&2
@@ -110,15 +124,18 @@ fi
 
 # Step 3: Create Contract Definition
 echo "Creating contract definition..."
-CONTRACT_PAYLOAD='{
+CONTRACT_PAYLOAD=$(jq -n \
+    --arg contract_name "$CONTRACT_NAME" \
+    --arg policy_name "$POLICY_NAME" \
+'{
     "@context": {"edc": "https://w3id.org/edc/v0.0.1/ns/"},
-    "@id": "contract-1",
-    "accessPolicyId": "policy-1",
-    "contractPolicyId": "policy-1"
-}'
+    "@id": $contract_name,
+    "accessPolicyId": $policy_name,
+    "contractPolicyId": $policy_name
+}')
 CONTRACT_RESPONSE=$(make_api_call POST "$PROVIDER_MGMT_URL/contractdefinitions" "$CONTRACT_PAYLOAD")
 echo "$CONTRACT_RESPONSE"
-CONTRACT_ID=$(extract_id "$CONTRACT_RESPONSE" "contract-1")
+CONTRACT_ID=$(extract_id "$CONTRACT_RESPONSE" "$CONTRACT_NAME")
 # Check if response is valid JSON and contains @id
 if echo "$CONTRACT_RESPONSE" | jq -e '.["@id"]' >/dev/null 2>&1; then
     echo "Contract created successfully with ID: $CONTRACT_ID" >&2
@@ -134,9 +151,14 @@ CATALOG_PAYLOAD='{
     "protocol": "dataspace-protocol-http"
 }'
 CATALOG_RESPONSE=$(make_api_call POST "$CONSUMER_MGMT_URL/catalog/request" "$CATALOG_PAYLOAD")
-OFFER_ID=$(echo "$CATALOG_RESPONSE" | jq -r '.["dcat:dataset"]["odrl:hasPolicy"]["@id"]' 2>/dev/null)
+OFFER_ID=$(echo "$CATALOG_RESPONSE" | jq -r --arg asset_name "$ASSET_NAME" '
+    (.["dcat:dataset"] | if type == "array" then .[] else . end) |
+    select(.["@id"] == $asset_name) |
+    (.["odrl:hasPolicy"] | if type == "array" then .[] else . end) |
+    select(.["odrl:target"]["@id"] == $asset_name) |
+    .["@id"]' 2>/dev/null)
 if [ -z "$OFFER_ID" ]; then
-    echo "Failed to extract offer ID. Full response:" >&2
+    echo "Failed to extract offer ID for asset: $ASSET_NAME. Full response:" >&2
     echo "$CATALOG_RESPONSE" | jq . 2>/dev/null || echo "Invalid JSON: $CATALOG_RESPONSE" >&2
     exit 1
 fi
@@ -145,6 +167,7 @@ echo "Extracted offer ID: $OFFER_ID"
 # Step 5: Initiate Contract Negotiation
 echo "Initiating contract negotiation..."
 NEGOTIATION_PAYLOAD=$(jq -n \
+    --arg asset_name "$ASSET_NAME" \
     --arg offerId "$OFFER_ID" \
     --arg provider "$PROVIDER_PROTOCOL" \
     '{
@@ -157,7 +180,7 @@ NEGOTIATION_PAYLOAD=$(jq -n \
             "@id": $offerId,
             "@type": "odrl:Offer",
             "odrl:assigner": {"@id": "provider"},
-            "odrl:target": {"@id": "asset-1"},
+            "odrl:target": {"@id": $asset_name},
             "odrl:permission": [],
             "odrl:prohibition": [],
             "odrl:obligation": []
@@ -183,6 +206,7 @@ echo "Contract finalized. Agreement ID: $CONTRACT_AGREEMENT_ID"
 echo "Initiating transfer..."
 KEY_NAME=$(uuidgen)
 TRANSFER_PAYLOAD=$(jq -n \
+    --arg asset_name "$ASSET_NAME" \
     --arg contractId "$CONTRACT_AGREEMENT_ID" \
     --arg provider "$PROVIDER_PROTOCOL" \
     --arg keyName "$KEY_NAME" \
@@ -193,11 +217,12 @@ TRANSFER_PAYLOAD=$(jq -n \
         "counterPartyAddress": $provider,
         "protocol": "dataspace-protocol-http",
         "contractId": $contractId,
-        "assetId": "asset-1",
+        "assetId": $asset_name,
         "transferType": "IonosS3-PUSH",
         "dataDestination": {
             "type": "IonosS3",
             "bucketName": "test-consumer",
+            "path": "batch-01/",
             "keyName": $keyName
         }
     }')

@@ -44,13 +44,13 @@ def trigger_script(asset_name):
             text=True,
             check=True
         )
-        logger.info(f"Triggered {TRIGGER_SCRIPT} for {asset_name}. Output: {result.stdout}")
+        logger.info(f"Triggered {TRIGGER_SCRIPT} for {asset_name}. Output:\n {result.stdout}")
     except subprocess.CalledProcessError as e:
-        logger.error(f"Error running {TRIGGER_SCRIPT} for {asset_name}: {e.stderr}")
+        logger.error(f"Error running {TRIGGER_SCRIPT} for {asset_name}: {e}")
     except FileNotFoundError:
         logger.error(f"Script {TRIGGER_SCRIPT} not found")
 
-def poll_s3_bucket(bucket, poll_interval=60):
+def poll_s3_bucket(bucket, poll_interval=20):
     """Poll S3 bucket for new assets and trigger script for new assets."""
     known_assets = set(get_s3_objects(bucket))
     logger.info(f"Initial assets: {known_assets}")
@@ -69,6 +69,7 @@ def poll_s3_bucket(bucket, poll_interval=60):
             else:
                 logger.debug("No new assets found")
 
+            logger.info(f"Waiting for new assets")
             time.sleep(poll_interval)
         except KeyboardInterrupt:
             logger.info("Polling stopped by user")
@@ -79,4 +80,4 @@ def poll_s3_bucket(bucket, poll_interval=60):
 
 if __name__ == "__main__":
     # Poll every 10 seconds
-    poll_s3_bucket(BUCKET_NAME, poll_interval=10)
+    poll_s3_bucket(BUCKET_NAME, poll_interval=20)
