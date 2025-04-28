@@ -244,4 +244,4 @@ echo "Transfer completed successfully."
 # Step 9: Deprovision Transfer
 echo "Deprovisioning transfer..."
 DEPROVISION_RESPONSE=$(curl "${CURL_OPTS[@]}" -X POST "$CONSUMER_MGMT_URL/transferprocesses/$TRANSFER_ID/deprovision")
-echo "Done."
+echo -e "$DEPROVISION_RESPONSE\nDone."
