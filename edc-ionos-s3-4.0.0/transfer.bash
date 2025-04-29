@@ -6,18 +6,11 @@
 # CONSUMER_MGMT_URL="http://localhost:9192/management/v3"
 # PROVIDER_PROTOCOL="http://provider:8282/protocol"
 
-# Openshift namespace
-# API_KEY="password"
-# PROVIDER_MGMT_URL="https://provider-management-conn-sc.apps.ac3-cluster-1.rh-horizon.eu/management/v3"
-# CONSUMER_MGMT_URL="https://consumer-management-conn-sc.apps.ac3-cluster-1.rh-horizon.eu/management/v3"
-# PROVIDER_PROTOCOL="http://provider-protocol-conn-sc.apps.ac3-cluster-1.rh-horizon.eu/protocol"
-
 # Multi-cluster 
 # API_KEY="password"
 # PROVIDER_MGMT_URL="https://provider-management-connectors.apps.ac3-cluster-2.rh-horizon.eu/management/v3"
 # CONSUMER_MGMT_URL="https://consumer-management-connectors.apps.ac3-cluster-1.rh-horizon.eu/management/v3"
 # PROVIDER_PROTOCOL="http://provider-protocol-connectors.apps.ac3-cluster-2.rh-horizon.eu/protocol"
-
 
 # Check if asset name is provided as an argument
 if [ -z "$1" ]; then
