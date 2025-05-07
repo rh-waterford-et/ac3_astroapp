@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: starlight
+  labels:
+    app: starlight
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: starlight
+  template:
+    metadata:
+      labels:
+        app: starlight
+    spec:
+      serviceAccountName: starlight-sa
+      volumes:
+      - name: ucm-pv-storage
+        persistentVolumeClaim:
+          claimName: ucm-pv-claim
+      containers:
+      - image: quay.io/rh-ee-kromashk/ucm-starlight
+        name: starlight
+        workingDir: /docker/starlight/STARLIGHTv04
+        command: ["./bash_script2.sh"]
+        volumeMounts:
+        - mountPath: /processing_data/
+          name: ucm-pv-storage
+      - image: quay.io/rh-ee-kromashk/ucm-receiver
+        name: receiver-processor
+        volumeMounts:
+        - mountPath: /processing_data/
+          name: ucm-pv-storage
+        command: ["ucm"]
+        args: ["consumer", "processor"]
+        env:
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASSWORD
+          value: "guest"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: AWS_ACCESS_KEY_ID
+          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
+        - name: S3_ENDPOINT
+          value: "https://s3.eu-central-1.ionoscloud.com"
+        - name: S3_REGION
+          value: "de"
+        - name: S3_BUCKET_NAME
+          value: "test-consumer"
+        - name: IN_FILE_OUTPUT_PATH
+          value: "/processing_data/starlight/runtime/infiles"
+        - name: PROCESS_LIST
+          value: "/processing_data/starlight/runtime/processlist.txt" 
+        - name: INPUT_DIR_STARLIGHT
+          value: "/processing_data/starlight/data/input"
+        - name: EXPLORED_DIR_STARLIGHT
+          value: "/processing_data/starlight/data/output"
+        - name: EXPLORED_DIR_PPFX
+          value: "/processing_data/ppfx/data/input"
+        - name: OUTPUT_DIR_PPFX
+          value: "/processing_data/ppfx/data/output"
+        - name: EXPLORED_DIR_STECKMAP
+          value: "/processing_data/steckmap/data/input"
+        - name: OUTPUT_DIR_STECKMAP
+          value: "/processing_data/steckmap/data/output"
+        ports:
+        - containerPort: 5672  
+      - image: quay.io/rh-ee-kromashk/ucm-producer
+        name: watcher-processor
+        command: ["ucm"]
+        args: ["watcher", "processor"]
+        env:
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASSWORD
+          value: "guest"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: BATCH_SIZE
+          value: "5"
+        - name: S3_BUCKET_NAME
+          value: "test-consumer"
+        - name: EXPLORED_STARLIGHT
+          value: "/processing_data/starlight/data/output"
+        - name: OUTPUT_STARLIGHT
+          value: "/processing_data/starlight/data/output"
+        - name: EXPLORED_PPFX
+          value: "/processing_data/ppfx/data/input"
+        - name: OUTPUT_PPFX
+          value: "/processing_data/ppfx/data/output"
+        - name: EXPLORED_STECKMAP
+          value: "/processing_data/steckmap/data/input"
+        - name: OUTPUT_STECKMAP
+          value: "/processing_data/steckmap/data/output"
+        - name: TEMPLATE_IN_FILE_PATH
+          value: "/processing_data/starlight/config_files_starlight/grid_example.in"
+        - name: "IN_FILE_OUTPUT_PATH"
+          value: "/processing_data/starlight/runtime/infiles/"
+        volumeMounts:
+        - mountPath: /processing_data/
+          name: ucm-pv-storage  
