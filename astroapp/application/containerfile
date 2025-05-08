@@ -1,0 +1,33 @@
+# ---------- Stage 1: Build ----------
+
+      FROM docker.io/library/golang:1.23 AS builder
+      WORKDIR /app
+      COPY . .
+      RUN make build
+# ---------- Stage 2: Producer Container ----------
+
+     # ---------- Stage 2: Producer Container ----------
+
+      FROM registry.redhat.io/ubi9-minimal@sha256:30bbd445046a3a63f5f5557a3c67dee74e3c8e7855eb0347630b020f3689823f AS ucm-producer
+      COPY --from=builder /app/build/ucm /usr/bin/ucm
+      RUN mkdir -p /docker/starlight/config_files_starlight/ 
+      COPY data/. /docker/starlight/config_files_starlight/ 
+      
+      EXPOSE 5672
+      ENTRYPOINT ["./uid_entrypoint.sh"]
+      CMD ["producer"]
+
+      # RUN mkdir /opt/data && chmod -R 777 /opt/data
+# ---------- Stage 3: Receiver Container ----------
+
+      FROM registry.redhat.io/ubi9-minimal@sha256:30bbd445046a3a63f5f5557a3c67dee74e3c8e7855eb0347630b020f3689823f AS ucm-receiver
+      COPY --from=builder ./app/build/ucm /usr/bin/ucm
+      EXPOSE 5672
+      
+      
+      LABEL io.k8s.display-name="UCM Application" \
+            io.k8s.description="Application interface to UC." \
+            maintainer="kromashk@redhat.com"
+      
+      ENTRYPOINT ["./uid_entrypoint.sh"]
+      CMD ["receiver"]
