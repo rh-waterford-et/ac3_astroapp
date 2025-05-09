@@ -67,7 +67,7 @@ func (s *Starlight) UpdateInFile(batch []api.DataFile) (string, string) {
 					log.Printf("Error getting kinematic values for file %s: %v", batch[j].Name, err)
 					continue
 				}
-				res[4] = kinematicValues // Update the 4th and 5th parameters with Velocity and Sigma
+				res[4] = "CAL " + kinematicValues // Update the 4th and 5th parameters with Velocity and Sigma
 				res[5] = "output_" + batch[j].Name
 				overwrite_string := strings.Join(res, "  ")
 				newFile = newFile + overwrite_string + "\n"
