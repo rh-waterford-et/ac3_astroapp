@@ -38,6 +38,27 @@ Security_configuration:
       - Kind: "ServiceAccount"
         Name: "starlight-sa"
 
+Monitoring_configuration:
+  - GroupName: "rabbitmq-exporter"
+    MicroserviceName: "rabbitmq-exporter"
+    MetricsConfiguration:
+      MetricsEndpoint: "/metrics"
+      MetricsPort: "9419"
+      ScrapeInterval: "30s"
+    AlertRules:
+      - AlertName: "RabbitMQExporterDown"
+        Expr: "up == 0"
+        For: "5m"
+        Severity: "critical"
+        Summary: "RabbitMQ Exporter instance is down"
+        Description: "The RabbitMQ exporter is not reachable."
+      - AlertName: "RabbitMQUp"
+        Expr: "rabbitmq_up == 0"
+        For: "5m"
+        Severity: "critical"
+        Summary: "RabbitMQ instance is down (reported by exporter)"
+        Description: "The RabbitMQ exporter is reporting that it cannot connect to the RabbitMQ instance."
+      
 Microservices_configuration:
   - MicroserviceName: "rabbitmq"
     Version: "3-management"
@@ -63,7 +84,6 @@ Microservices_configuration:
         Value: "guest"
 
   - MicroserviceName: "orchestrator"
-    Version: "1.0"
     Image: "rayc/ucm-producer"
     ID: "orchestrator"
     ClusterAffinity: "orchestrator"
@@ -127,7 +147,6 @@ Microservices_configuration:
             if [ ! -f /starlight/runtime/processlist.txt ]; then touch /starlight/runtime/processlist.txt; fi;
   
   - MicroserviceName: "vault"
-    Version: "1.0"
     Image: "hashicorp/vault:1.17.2"
     ID: "vault"
     ClusterAffinity: "orchestrator"
@@ -151,8 +170,7 @@ Microservices_configuration:
         Value: "http://0.0.0.0:8200"
 
   - MicroserviceName: "data-connector"
-    Version: "1.0"
-    Image: "quay.io/bcapper30/s3-provider-env"
+    Image: "quay.io/bcapper30/s3-conn-env"
     ID: "data-connector"
     ClusterAffinity: "orchestrator"
     Dependencies:
@@ -227,7 +245,6 @@ Microservices_configuration:
       - ContainerPort: 9393
 
   - MicroserviceName: "starlight"
-    Version: "1.0"
     Image: "rayc/ucm-processor"
     ID: "starlight"
     ClusterAffinity: "processor"
@@ -259,7 +276,6 @@ Microservices_configuration:
       - ContainerPort: 8080
 
   - MicroserviceName: "eventreceiver"
-    Version: "1.0"
     Image: "rayc/ucm-receiver"
     ID: "eventreceiver"
     ClusterAffinity: "processor"
@@ -309,6 +325,45 @@ Microservices_configuration:
       - Name: "uc3-pv-storage"
         MountPath: "/starlight/"
 
+  - MicroserviceName: "transfer"
+    Image: "quay.io/bcapper30/trigger-transfer"
+    ID: "starlight"
+    ClusterAffinity: "orchestrator"
+    Dependencies:
+      - "data-connector"
+    MicroservicesSLAs:
+      ServiceAvailability: "99.9%"
+      MaxResponseTime: "N/A"
+      DataThroughput: "High"
+    ReplicaCount: "1"
+    ServiceAccountName: "starlight-sa"
+    SecurityContext:
+      privileged: true
+
+  - MicroserviceName: "rabbitmq-exporter"
+    Image: "kbudde/rabbitmq-exporter:latest"
+    ID: "rabbitmq-exporter"
+    ClusterAffinity: "orchestrator"
+    Dependencies:
+      - "rabbitmq"
+    ResourceRequirements:
+      Cpu: "0.25 vCPU"
+      Memory: "256Mi"
+    MicroservicesSLAs:
+      ServiceAvailability: "99.9%"
+      MaxResponseTime: "N/A"
+      DataThroughput: "Low"
+    ReplicaCount: "1"
+    Ports:
+      - ContainerPort: "9419"
+    EnvironmentVariables:
+      - Name: "RABBIT_URL"
+        Value: "http://rabbitmq:15672"
+      - Name: "RABBIT_USER"
+        Value: "guest"
+      - Name: "RABBIT_PASSWORD"
+        Value: "guest"
+
 Networking_graph:
   - Source: "orchestrator"
     Destination: "rabbitmq"
@@ -326,6 +381,10 @@ Networking_graph:
     Destination: "starlight"
     Protocol: "HTTP"
     Port: "8080"
+  - Source: "rabbitmq-exporter"
+    Destination: "rabbitmq"
+    Protocol: "HTTP"
+    Port: "15672"
 
 Global_SLA:
   ServiceAvailability: "99.9%"
