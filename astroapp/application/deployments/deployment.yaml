@@ -22,6 +22,7 @@ spec:
       containers:
       - image: quay.io/rh-ee-kromashk/ucm-producer
         name: watcher-producer
+        workingDir: /processing_data/
         command: ["ucm"]
         args: ["watcher", "producer"]
         env:
@@ -72,6 +73,8 @@ spec:
         volumeMounts:
         - mountPath: /processing_data/
           name: ucm-pv-storage
+        securityContext:
+          privileged: true
       - image: quay.io/rh-ee-kromashk/ac3-connector-http-http-consumer:latest
         name: consumer
         env:
@@ -92,9 +95,12 @@ spec:
         - containerPort: 28183
       - image: quay.io/rh-ee-kromashk/ucm-receiver
         name: receiver-producer
+        workingDir: /processing_data/
         volumeMounts:
         - mountPath: /processing_data/
           name: ucm-pv-storage
+        securityContext:
+          privileged: true
         command: ["ucm"]
         args: ["consumer", "producer"]
         env:

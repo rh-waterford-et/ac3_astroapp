@@ -14,6 +14,10 @@ spec:
       labels:
         app: starlight
     spec:
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
       serviceAccountName: starlight-sa
       volumes:
       - name: ucm-pv-storage
@@ -27,11 +31,16 @@ spec:
         volumeMounts:
         - mountPath: /processing_data/
           name: ucm-pv-storage
+        securityContext:
+          privileged: true
       - image: quay.io/rh-ee-kromashk/ucm-receiver
         name: receiver-processor
+        workingDir: /processing_data/
         volumeMounts:
         - mountPath: /processing_data/
           name: ucm-pv-storage
+        securityContext:
+          privileged: true
         command: ["ucm"]
         args: ["consumer", "processor"]
         env:
@@ -73,6 +82,7 @@ spec:
         - containerPort: 5672  
       - image: quay.io/rh-ee-kromashk/ucm-producer
         name: watcher-processor
+        workingDir: /processing_data/
         command: ["ucm"]
         args: ["watcher", "processor"]
         env:
@@ -106,4 +116,6 @@ spec:
           value: "/processing_data/starlight/runtime/infiles/"
         volumeMounts:
         - mountPath: /processing_data/
-          name: ucm-pv-storage  
+          name: ucm-pv-storage
+        securityContext:
+          privileged: true

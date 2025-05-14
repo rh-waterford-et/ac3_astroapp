@@ -165,8 +165,8 @@ func (p *Producer) SendBatch(appName string) {
 		// Update the .in file before sending the batch
 		if appName == "STARLIGHT" {
 			inFileName, content := starlight.UpdateInFile(p.Batch)
-			println(" %v ", inFileName)
-			println(" %v ", content)
+			println(inFileName)
+			println(content)
 			if inFileName != "" && content != "" {
 				p.Batch = append(p.Batch, api.DataFile{Name: inFileName, Content: content})
 			}

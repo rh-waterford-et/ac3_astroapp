@@ -52,22 +52,20 @@ func (s *Starlight) UpdateInFile(batch []api.DataFile) (string, string) {
 	scanner := bufio.NewScanner(f)
 	i := 0
 	var newFile string
-	println("start scaner")
 	for scanner.Scan() {
 		i++
-		println("%v", i)
 		if i == 16 {
 			// Replace the input file name in the .in file
 			res := strings.Split(scanner.Text(), "  ")
 			for j := 0; j < len(batch); j++ {
 				res[0] = batch[j].Name
 				// Get kinematic values for the current file
-				kinematicValues, err := s.GetKinematicValues(batch[j].Name)
-				if err != nil {
-					log.Printf("Error getting kinematic values for file %s: %v", batch[j].Name, err)
-					continue
-				}
-				res[4] = "CAL " + kinematicValues // Update the 4th and 5th parameters with Velocity and Sigma
+				/* 				kinematicValues, err := s.GetKinematicValues(batch[j].Name)
+				   				if err != nil {
+				   					log.Printf("Error getting kinematic values for file %s: %v", batch[j].Name, err)
+				   					continue
+				   				}
+				   				res[4] = "CAL " + kinematicValues  */ // Update the 4th and 5th parameters with Velocity and Sigma
 				res[5] = "output_" + batch[j].Name
 				overwrite_string := strings.Join(res, "  ")
 				newFile = newFile + overwrite_string + "\n"
