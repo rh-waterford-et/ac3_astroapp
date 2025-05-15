@@ -58,15 +58,29 @@ extract_id() {
 poll_status() {
     local type=$1 id=$2 url=$3 success_state=$4
     while true; do
-        local response state
-        response=$(make_api_call GET "$url/$id")
-        state=$(echo "$response" | jq -r '.state')
+        local response state raw_response
+        raw_response=$(make_api_call GET "$url/$id")
+        raw_response=$(make_api_call GET "$url/$id")
+        state=$(echo "$raw_response" | jq -r '.state' 2>/dev/null)
+
+        if [ -z "$state" ]; then
+            # If '.state' failed (likely an array), try to find a 'state' within the elements
+            state=$(echo "$raw_response" | jq -r '.[] | .state?' 2>/dev/null | head -n 1)
+        fi
+
+        if [ -z "$state" ]; then
+            echo "[$2 -> $3] Error: $type state is null or could not be determined. Exiting." >&2
+            echo "[$2 -> $3] Raw response was:" >&2
+            echo "$raw_response" | jq . 2>/dev/null || echo "$raw_response" >&2 # Print the raw response
+            exit 1
+        fi
+
         if [ "$state" = "$success_state" ]; then
-            echo "$response"
+            echo "$raw_response"
             return 0
         elif [ "$state" = "TERMINATED" ]; then
             echo "$type terminated. Response:" >&2
-            echo "$response" | jq . >&2
+            echo "$raw_response" | jq . >&2
             exit 1
         fi
         echo "Current $type state: $state. Waiting..." >&2
@@ -78,9 +92,20 @@ poll_status() {
 poll_deprovision_status() {
     local id=$1 url=$2 success_state=$3
     while true; do
-        local response state
-        response=$(curl "${CURL_OPTS[@]}" -X GET "$url/$id/state")
-        state=$(echo "$response" | jq -r '.state')
+        local response state raw_response
+        raw_response=$(curl "${CURL_OPTS[@]}" -X GET "$url/$id/state")
+        state=$(echo "$raw_response" | jq -r '.state' 2>/dev/null)
+
+        if [ -z "$state" ]; then
+            # If '.state' failed, try to find a 'state' within the elements
+            state=$(echo "$raw_response" | jq -r '.[] | .state?' 2>/dev/null | head -n 1)
+        fi
+        
+        if [ -z "$state" ]; then
+            echo "[$2 -> $3] Error: deprovision state is null or could not be determined. Exiting." >&2
+            exit 1
+        fi
+
         if [ "$state" = "$success_state" ]; then
             echo "$response"
             return 0
