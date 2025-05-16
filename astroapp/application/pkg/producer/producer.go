@@ -1,6 +1,7 @@
 package producer
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -57,6 +58,7 @@ var send sender.EventSender = &sender.RabbitMQSender{}
 type LocalFileSource struct {
 	InputDir  string
 	OutputDir string
+	ProcessedDir string
 }
 
 func (l *LocalFileSource) ListFiles() ([]string, error) {
@@ -78,9 +80,26 @@ func (l *LocalFileSource) ReadFile(filename string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(l.InputDir, filename))
 }
 
-func (l *LocalFileSource) DeleteFile(filename string) error {
+/* func (l *LocalFileSource) DeleteFile(filename string) error {
 	return os.Remove(filepath.Join(l.InputDir, filename))
+} */
+
+
+/// test block
+func (l *LocalFileSource) DeleteFile(filename string) error {
+		sourcePath := filepath.Join(l.InputDir, filename)
+		destPath := filepath.Join(l.ProcessedDir, filename)
+		err := MoveFile(sourcePath, destPath)
+		if err != nil {
+			fmt.Printf("Error moving file %s: %v\n", filename, err)
+		}
+		return nil
 }
+
+func MoveFile(source, destination string) error {
+	return os.Rename(source, destination)
+}
+///
 
 // S3FileSource handles S3 bucket operations
 type S3FileSource struct {

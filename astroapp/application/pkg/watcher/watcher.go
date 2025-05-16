@@ -26,9 +26,11 @@ func NewWatcher() *Watcher {
 func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface) {
 	inputDirEnv := "EXPLORED_" + appName
 	outputDirEnv := "OUTPUT_" + appName
+	processedDirEnv := "PROCESSED_"+ appName
 
 	inputDir := os.Getenv(inputDirEnv)
 	outputDir := os.Getenv(outputDirEnv)
+	processedDir := os.Getenv(processedDirEnv)
 
 	if inputDir == "" || outputDir == "" {
 		log.Printf("%s directories not set\n", appName)
@@ -67,6 +69,7 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface) 
 		fileSource = &producer.LocalFileSource{
 			InputDir:  inputDir,
 			OutputDir: outputDir,
+			ProcessedDir: processedDir,
 		}
 		files, err := fileSource.ListFiles()
 		if err != nil {

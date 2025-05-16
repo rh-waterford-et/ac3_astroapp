@@ -70,14 +70,20 @@ spec:
           value: "/processing_data/starlight/data/input"
         - name: EXPLORED_DIR_STARLIGHT
           value: "/processing_data/starlight/data/output"
+        - name: PROCESSED_DIR_STARLIGHT
+          value: "/processing_data/starlight/data/processed"
         - name: EXPLORED_DIR_PPFX
           value: "/processing_data/ppfx/data/input"
         - name: OUTPUT_DIR_PPFX
           value: "/processing_data/ppfx/data/output"
+        - name: Processed_DIR_PPFX
+          value: "/processing_data/ppfx/data/processed"
         - name: EXPLORED_DIR_STECKMAP
           value: "/processing_data/steckmap/data/input"
         - name: OUTPUT_DIR_STECKMAP
           value: "/processing_data/steckmap/data/output"
+        - name: PROCESSED_DIR_STECKMAP
+          value: "/processing_data/steckmap/data/processed"
         ports:
         - containerPort: 5672  
       - image: quay.io/rh-ee-kromashk/ucm-producer

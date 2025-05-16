@@ -74,8 +74,16 @@ func LaunchProducer(side string) error {
 	utils := &common.Utils{}
 
 	log.Printf("------------------ Starting Watcher() ---------------------")
-	if err := utils.EnsureDirectoriesExist(); err != nil {
+	/* if err := utils.EnsureDirectoriesExist(); err != nil {
 		log.Fatalf("Directory initialization failed: %v", err)
+	} */
+
+	if side == "producer" {
+		bucket := s3bucket.NewS3Bucket()
+		err := utils.EnsureBucketDirectoriesExist(bucket)
+		if err != nil {
+			log.Fatalf("Failed to ensure bucket directories: %v", err)
+		}
 	}
 
 	apps := []string{"PPFX", "STARLIGHT", "STECKMAP"}

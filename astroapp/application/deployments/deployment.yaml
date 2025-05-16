@@ -53,11 +53,11 @@ spec:
         - name: EXPLORED_STECKMAP
           value: "steckmap/input"
         - name: PROCESSED_STARLIGHT
-          value: "starlight/procesed"
+          value: "starlight/processed"
         - name: PROCESSED_PPFX
-          value: "ppfx/procesed"
+          value: "ppfx/processed"
         - name: PROCESSED_STECKMAP
-          value: "steckmap/procesed"
+          value: "steckmap/processed"
         - name: OUTPUT_STARLIGHT
           value: "starlight/output"
         - name: OUTPUT_PPFX
