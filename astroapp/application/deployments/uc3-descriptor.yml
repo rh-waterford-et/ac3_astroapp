@@ -39,8 +39,7 @@ Security_configuration:
         Name: "starlight-sa"
 
 Monitoring_configuration:
-  - GroupName: "rabbitmq-exporter"
-    MicroserviceName: "rabbitmq-exporter"
+  - MicroserviceName: "rabbitmq-exporter"
     MetricsConfiguration:
       MetricsEndpoint: "/metrics"
       MetricsPort: "9419"
