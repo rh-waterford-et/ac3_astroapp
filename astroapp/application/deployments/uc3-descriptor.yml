@@ -37,26 +37,6 @@ Security_configuration:
     Subjects:
       - Kind: "ServiceAccount"
         Name: "starlight-sa"
-
-Monitoring_configuration:
-  - MicroserviceName: "rabbitmq-exporter"
-    MetricsConfiguration:
-      MetricsEndpoint: "/metrics"
-      MetricsPort: "9419"
-      ScrapeInterval: "30s"
-    AlertRules:
-      - AlertName: "RabbitMQExporterDown"
-        Expr: "up == 0"
-        For: "5m"
-        Severity: "critical"
-        Summary: "RabbitMQ Exporter instance is down"
-        Description: "The RabbitMQ exporter is not reachable."
-      - AlertName: "RabbitMQUp"
-        Expr: "rabbitmq_up == 0"
-        For: "5m"
-        Severity: "critical"
-        Summary: "RabbitMQ instance is down (reported by exporter)"
-        Description: "The RabbitMQ exporter is reporting that it cannot connect to the RabbitMQ instance."
       
 Microservices_configuration:
   - MicroserviceName: "rabbitmq"
@@ -83,7 +63,7 @@ Microservices_configuration:
         Value: "guest"
 
   - MicroserviceName: "orchestrator"
-    Image: "rayc/ucm-producer"
+    Image: "quay.io/rh-ee-kromashk/ucm-producer"
     ID: "orchestrator"
     ClusterAffinity: "orchestrator"
     Dependencies:
@@ -99,21 +79,55 @@ Microservices_configuration:
     ServiceAccountName: "starlight-sa"
     SecurityContext:
       privileged: true
+    Command:
+      - ucm
+    Args:
+      - watcher
+      - producer
+    WorkingDirectory: "/processing_data/"
     EnvironmentVariables:
-      - Name: "RABBITMQ_USER"
-        Value: "guest"
-      - Name: "RABBITMQ_PASSWORD"
-        Value: "guest"
-      - Name: "RABBITMQ_HOST"
-        Value: "rabbitmq"
-      - Name: "RABBITMQ_PORT"
-        Value: "5672"
-      - Name: "INPUT_DIR"
-        Value: "/starlight/data/input"
-      - Name: "OUTPUT_DIR"
-        Value: "/starlight/data/output"
-      - Name: "BATCH_SIZE"
-        Value: 5
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASSWORD
+          value: "guest"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: BATCH_SIZE
+          value: "5"
+        - name: AWS_ACCESS_KEY_ID
+          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
+        - name: S3_ENDPOINT
+          value: "https://s3.eu-central-1.ionoscloud.com"
+        - name: S3_REGION
+          value: "de"
+        - name: S3_BUCKET_NAME
+          value: "test-consumer"
+        - name: EXPLORED_STARLIGHT
+          value: "starlight/input"
+        - name: EXPLORED_PPFX
+          value: "ppfx/input"
+        - name: EXPLORED_STECKMAP
+          value: "steckmap/input"
+        - name: PROCESSED_STARLIGHT
+          value: "starlight/processed"
+        - name: PROCESSED_PPFX
+          value: "ppfx/processed"
+        - name: PROCESSED_STECKMAP
+          value: "steckmap/processed"
+        - name: OUTPUT_STARLIGHT
+          value: "starlight/output"
+        - name: OUTPUT_PPFX
+          value: "ppfx/output"
+        - name: OUTPUT_STECKMAP
+          value: "steckmap/output"
+        - name: TEMPLATE_IN_FILE_PATH
+          value: "/docker/starlight/config_files_starlight/grid_example.in"
+        - name: "IN_FILE_OUTPUT_PATH"
+          value: "/processing_data/starlight/runtime/infiles/"
     Ports:
       - ContainerPort: "5672"
     Volumes:
@@ -123,27 +137,68 @@ Microservices_configuration:
             ClaimName: "uc3-pv-claim"
     VolumeMounts:
       - Name: "uc3-pv-storage"
-        MountPath: "/starlight/"
-    InitContainers:
-      - Name: "init"
-        Image: "busybox:1.28"
-        securityContext:
-          privileged: true
-        volumeMounts:
-          - mountPath: "/starlight/"
-            name: "uc3-pv-storage"
-        Command:
-          - sh
-          - -c
-          - |
-            if [ ! -d /starlight/data ]; then mkdir -p /starlight/data; fi;
-            if [ ! -d /starlight/runtime ]; then mkdir -p /starlight/runtime; fi;
-            if [ ! -d /starlight/runtime/infiles ]; then mkdir -p /starlight/runtime/infiles; fi;
-            if [ ! -d /starlight/runtime/input ]; then mkdir -p /starlight/runtime/input; fi;
-            if [ ! -d /starlight/data/input ]; then mkdir -p /starlight/data/input; fi;
-            if [ ! -d /starlight/data/output ]; then mkdir -p /starlight/data/output; fi;
-            if [ ! -d /starlight/data/input/processed ]; then mkdir -p /starlight/data/input/processed; fi;
-            if [ ! -f /starlight/runtime/processlist.txt ]; then touch /starlight/runtime/processlist.txt; fi;
+        MountPath: "/processing_data/"
+
+  - MicroserviceName: "watcher-processor"
+    Image: "quay.io/rh-ee-kromashk/ucm-producer"
+    ID: "orchestrator"
+    ClusterAffinity: "orchestrator"
+    Dependencies:
+      - "rabbitmq"
+    ResourceRequirements:
+      Cpu: "2 vCPU"
+      Memory: "4Gi"
+    MicroservicesSLAs:
+      ServiceAvailability: "99.9%"
+      MaxResponseTime: "N/A"
+      DataThroughput: "High"
+    ReplicaCount: "1"
+    ServiceAccountName: "starlight-sa"
+    SecurityContext:
+      privileged: true
+    Command:
+      - ucm
+    Args:
+      - watcher
+      - processor
+    WorkingDirectory: "/processing_data/"
+    EnvironmentVariables:
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASSWORD
+          value: "guest"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: BATCH_SIZE
+          value: "5"
+        - name: S3_BUCKET_NAME
+          value: "test-consumer"
+        - name: EXPLORED_STARLIGHT
+          value: "/processing_data/starlight/data/output"
+        - name: OUTPUT_STARLIGHT
+          value: "/processing_data/starlight/data/output"
+        - name: EXPLORED_PPFX
+          value: "/processing_data/ppfx/data/input"
+        - name: OUTPUT_PPFX
+          value: "/processing_data/ppfx/data/output"
+        - name: EXPLORED_STECKMAP
+          value: "/processing_data/steckmap/data/input"
+        - name: OUTPUT_STECKMAP
+          value: "/processing_data/steckmap/data/output"
+        - name: TEMPLATE_IN_FILE_PATH
+          value: "/processing_data/starlight/config_files_starlight/grid_example.in"
+        - name: "IN_FILE_OUTPUT_PATH"
+          value: "/processing_data/starlight/runtime/infiles/"
+    Volumes:
+      - Name: "uc3-pv-storage"
+        VolumeSource:
+          PersistentVolumeClaim:
+            ClaimName: "uc3-pv-claim"
+    VolumeMounts:
+      - Name: "uc3-pv-storage"
+        MountPath: "/processing_data/"
   
   - MicroserviceName: "vault"
     Image: "hashicorp/vault:1.17.2"
@@ -244,7 +299,7 @@ Microservices_configuration:
       - ContainerPort: 9393
 
   - MicroserviceName: "starlight"
-    Image: "rayc/ucm-processor"
+    Image: "quay.io/rh-ee-kromashk/ucm-starlight"
     ID: "starlight"
     ClusterAffinity: "processor"
     Dependencies:
@@ -270,13 +325,13 @@ Microservices_configuration:
             ClaimName: "uc3-pv-claim"
     VolumeMounts:
       - Name: "uc3-pv-storage"
-        MountPath: "/starlight/"
+        MountPath: "/processing_data/"
     Ports:
       - ContainerPort: 8080
 
-  - MicroserviceName: "eventreceiver"
-    Image: "rayc/ucm-receiver"
-    ID: "eventreceiver"
+  - MicroserviceName: "receiver-processor"
+    Image: "quay.io/rh-ee-kromashk/ucm-receiver"
+    ID: "receiver-processor"
     ClusterAffinity: "processor"
     Dependencies:
       - "rabbitmq"
@@ -288,31 +343,55 @@ Microservices_configuration:
       MaxResponseTime: "N/A"
       DataThroughput: "High"
     ReplicaCount: "1"
+    SecurityContext:
+      privileged: true
+    WorkingDirectory: "/processing_data/"
+    Command:
+      - ucm
+    Args:
+      - consumer
+      - processor
     EnvironmentVariables:
-      - Name: "RABBITMQ_USER"
-        Value: "guest"
-      - Name: "RABBITMQ_PASSWORD"
-        Value: "guest"
-      - Name: "RABBITMQ_HOST"
-        Value: "rabbitmq"
-      - Name: "RABBITMQ_PORT"
-        Value: "5672"
-      - Name: IN_FILE_PATH
-        Value: "/processing/starlight/runtime/infiles"
-      - Name: PROCESS_LIST
-        Value: "/processing/starlight/runtime/processlist.txt" 
-      - Name: INPUT_DIR_STARLIGHT
-        Value: "/processing/starlight/data/input"
-      - Name: INPUT_DIR_PPFX
-        Value: "/processing/ppfx/data/input"
-      - Name: INPUT_DIR_STECKMAP
-        Value: "/processing/steckmap/data/input"
-      - Name: OUTPUT_DIR_STARLIGHT
-        Value: "/processing/starlight/data/output"
-      - Name: OUTPUT_DIR_PPFX
-        Value: "/processing/ppfx/data/output"
-      - Name: OUTPUT_DIR_STECKMAP
-        Value: "/processing/steckmap/data/output"
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASSWORD
+          value: "guest"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: AWS_ACCESS_KEY_ID
+          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
+        - name: S3_ENDPOINT
+          value: "https://s3.eu-central-1.ionoscloud.com"
+        - name: S3_REGION
+          value: "de"
+        - name: S3_BUCKET_NAME
+          value: "test-consumer"
+        - name: IN_FILE_OUTPUT_PATH
+          value: "/processing_data/starlight/runtime/infiles"
+        - name: PROCESS_LIST
+          value: "/processing_data/starlight/runtime/processlist.txt" 
+        - name: INPUT_DIR_STARLIGHT
+          value: "/processing_data/starlight/data/input"
+        - name: EXPLORED_DIR_STARLIGHT
+          value: "/processing_data/starlight/data/output"
+        - name: PROCESSED_DIR_STARLIGHT
+          value: "/processing_data/starlight/data/processed"
+        - name: EXPLORED_DIR_PPFX
+          value: "/processing_data/ppfx/data/input"
+        - name: OUTPUT_DIR_PPFX
+          value: "/processing_data/ppfx/data/output"
+        - name: Processed_DIR_PPFX
+          value: "/processing_data/ppfx/data/processed"
+        - name: EXPLORED_DIR_STECKMAP
+          value: "/processing_data/steckmap/data/input"
+        - name: OUTPUT_DIR_STECKMAP
+          value: "/processing_data/steckmap/data/output"
+        - name: PROCESSED_DIR_STECKMAP
+          value: "/processing_data/steckmap/data/processed"
     Ports:
       - ContainerPort: 5672
     Volumes:
@@ -322,7 +401,7 @@ Microservices_configuration:
             ClaimName: "uc3-pv-claim"
     VolumeMounts:
       - Name: "uc3-pv-storage"
-        MountPath: "/starlight/"
+        MountPath: "/processing_data/"
 
   - MicroserviceName: "transfer"
     Image: "quay.io/bcapper30/trigger-transfer"
