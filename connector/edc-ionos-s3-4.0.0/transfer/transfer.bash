@@ -23,10 +23,10 @@ ASSET_NAME="$1"
 POLICY_NAME="$1-policy"
 CONTRACT_NAME="$1-contract"
 API_KEY="password"
-PROVIDER_MGMT_URL="https://provider-management-connectors.apps.ac3-cluster-2.rh-horizon.eu/management/v3"
+PROVIDER_MGMT_URL="https://provider-management-uc3-applications.apps.ac3-cluster-2.rh-horizon.eu/management/v3"
 CONSUMER_MGMT_URL="https://consumer-management-connectors.apps.ac3-cluster-1.rh-horizon.eu/management/v3"
 CONSUMER_PROTOCOL="http://consumer-protocol-connectors.apps.ac3-cluster-1.rh-horizon.eu/protocol"
-PROVIDER_PROTOCOL="http://provider-protocol-connectors.apps.ac3-cluster-2.rh-horizon.eu/protocol"
+PROVIDER_PROTOCOL="http://provider-protocol-uc3-applications.apps.ac3-cluster-2.rh-horizon.eu/protocol"
 BEARER_TOKEN="eyJ0eXAiOiJKV1QiLCJraWQiOiJiNzlkODE3OS02MmFhLTRkMGYtODU0Zi1lMzQyMmNmYzE1MTciLCJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJpb25vc2Nsb3VkIiwiaWF0IjoxNzQ0ODE0NzE0LCJjbGllbnQiOiJVU0VSIiwiaWRlbnRpdHkiOnsicm9sZSI6ImFkbWluIiwiY29udHJhY3ROdW1iZXIiOjMyNDM5MjQ1LCJpc1BhcmVudCI6ZmFsc2UsInByaXZpbGVnZXMiOlsiREFUQV9DRU5URVJfQ1JFQVRFIiwiU05BUFNIT1RfQ1JFQVRFIiwiSVBfQkxPQ0tfUkVTRVJWRSIsIk1BTkFHRV9EQVRBUExBVEZPUk0iLCJBQ0NFU1NfQUNUSVZJVFlfTE9HIiwiUENDX0NSRUFURSIsIkFDQ0VTU19TM19PQkpFQ1RfU1RPUkFHRSIsIkJBQ0tVUF9VTklUX0NSRUFURSIsIkNSRUFURV9JTlRFUk5FVF9BQ0NFU1MiLCJLOFNfQ0xVU1RFUl9DUkVBVEUiLCJGTE9XX0xPR19DUkVBVEUiLCJBQ0NFU1NfQU5EX01BTkFHRV9NT05JVE9SSU5HIiwiQUNDRVNTX0FORF9NQU5BR0VfQ0VSVElGSUNBVEVTIiwiQUNDRVNTX0FORF9NQU5BR0VfTE9HR0lORyIsIk1BTkFHRV9EQkFBUyIsIkFDQ0VTU19BTkRfTUFOQUdFX0ROUyIsIk1BTkFHRV9SRUdJU1RSWSIsIkFDQ0VTU19BTkRfTUFOQUdFX0NETiIsIkFDQ0VTU19BTkRfTUFOQUdFX1ZQTiIsIkFDQ0VTU19BTkRfTUFOQUdFX0FQSV9HQVRFV0FZIiwiQUNDRVNTX0FORF9NQU5BR0VfTkdTIiwiQUNDRVNTX0FORF9NQU5BR0VfS0FBUyIsIkFDQ0VTU19BTkRfTUFOQUdFX05FVFdPUktfRklMRV9TVE9SQUdFIiwiQUNDRVNTX0FORF9NQU5BR0VfQUlfTU9ERUxfSFVCIiwiQ1JFQVRFX05FVFdPUktfU0VDVVJJVFlfR1JPVVBTIiwiQUNDRVNTX0FORF9NQU5BR0VfSUFNX1JFU09VUkNFUyJdLCJ1dWlkIjoiZWUxMjdlOGItOTMwNi00OTFhLTk1MDAtOGE0MWE4MjQ3YzhlIiwicmVzZWxsZXJJZCI6MSwicmVnRG9tYWluIjoiaW9ub3MuZGUifSwiZXhwIjoxNzc2MzUwNzE0fQ.K8axaTD53Mr1ymn5X9dJhI8DlAu2cO_IgknpBtFjs9tOPkSGPwKc8ImTfyiJbiA3UemXAoLQ4W67KUf7SR7E8dOJWRbnCdv4OAMk1MGDcQ58gRPlwQ-ztS6sHN0PWQsB7Os4IILkgDsUKMvDNj_FWWBFy3910ztnkqvrgmexQJcgOsm0VumxmBWntRnNPpaudl8GK2wJip-fn8iNOwss9qz_IqlN7PilmdYLzVMIk9KNIRUWnjLj2wdbYmJaS4tDkUFcm5y17pICx4hyaBNo19pN2B7FWEvDsWGK_avCsxkUiI5mpiYnEW5dIwPRMr_LsiQleFxUZnY46xa5ekttbA"
 KEEP_ID="f72ce80a-f4f8-43e2-b4e1-224258895a09"
 ACCESS_KEYS_URL="https://s3.ionos.com/accesskeys"
@@ -193,7 +193,7 @@ ASSET_PAYLOAD=$(jq -n \
         "dataAddress": {"type": "IonosS3", "bucketName": $bucket, "blobName": $asset_name}
 }')
 ASSET_RESPONSE=$(make_api_call POST "$PROVIDER_MGMT_URL/assets" "$ASSET_PAYLOAD")
-echo "$ASSET_RESPONSE"
+# echo "$ASSET_RESPONSE"
 ASSET_ID=$(extract_id "$ASSET_RESPONSE" "$ASSET_NAME")
 # Check if response is valid JSON and contains @id
 if echo "$ASSET_RESPONSE" | jq -e '.["@id"]' >/dev/null 2>&1; then
@@ -220,7 +220,7 @@ POLICY_PAYLOAD=$(jq -n \
     }
 }')
 POLICY_RESPONSE=$(make_api_call POST "$PROVIDER_MGMT_URL/policydefinitions" "$POLICY_PAYLOAD")
-echo "$POLICY_RESPONSE"
+#echo "$POLICY_RESPONSE"
 POLICY_ID=$(extract_id "$POLICY_RESPONSE" "$POLICY_NAME")
 # Check if response is valid JSON and contains @id
 if echo "$POLICY_RESPONSE" | jq -e '.["@id"]' >/dev/null 2>&1; then
@@ -241,7 +241,7 @@ CONTRACT_PAYLOAD=$(jq -n \
     "contractPolicyId": $policy_name
 }')
 CONTRACT_RESPONSE=$(make_api_call POST "$PROVIDER_MGMT_URL/contractdefinitions" "$CONTRACT_PAYLOAD")
-echo "$CONTRACT_RESPONSE"
+#echo "$CONTRACT_RESPONSE"
 CONTRACT_ID=$(extract_id "$CONTRACT_RESPONSE" "$CONTRACT_NAME")
 # Check if response is valid JSON and contains @id
 if echo "$CONTRACT_RESPONSE" | jq -e '.["@id"]' >/dev/null 2>&1; then
@@ -296,7 +296,7 @@ NEGOTIATION_PAYLOAD=$(jq -n \
         }
     }')
 NEGOTIATION_RESPONSE=$(make_api_call POST "$CONSUMER_MGMT_URL/contractnegotiations" "$NEGOTIATION_PAYLOAD")
-echo "$NEGOTIATION_RESPONSE"
+#echo "$NEGOTIATION_RESPONSE"
 NEGOTIATION_ID=$(extract_id "$NEGOTIATION_RESPONSE" "")
 if [ -z "$NEGOTIATION_ID" ]; then
     echo "[$2 -> $3] Failed to extract negotiation ID. Response:" >&2
@@ -336,7 +336,7 @@ TRANSFER_PAYLOAD=$(jq -n \
         }
     }')
 TRANSFER_RESPONSE=$(make_api_call POST "$CONSUMER_MGMT_URL/transferprocesses" "$TRANSFER_PAYLOAD")
-echo "$TRANSFER_RESPONSE"
+# echo "$TRANSFER_RESPONSE"
 TRANSFER_ID=$(extract_id "$TRANSFER_RESPONSE" "")
 if [ -z "$TRANSFER_ID" ]; then
     echo "[$2 -> $3] Failed to initiate transfer. Response:" >&2
@@ -353,7 +353,7 @@ echo "Transfer completed successfully."
 # Step 9: Deprovision Transfer
 echo "[$2 -> $3] Deprovisioning transfer..."
 DEPROVISION_RESPONSE=$(curl "${CURL_OPTS[@]}" -X POST "$CONSUMER_MGMT_URL/transferprocesses/$TRANSFER_ID/deprovision")
-echo -e "$DEPROVISION_RESPONSE"
+# echo -e "$DEPROVISION_RESPONSE"
 
 # Step 10: Poll Deprovision Status
 echo "[$2 -> $3] Polling deprovision status for transfer ID: $TRANSFER_ID..."
