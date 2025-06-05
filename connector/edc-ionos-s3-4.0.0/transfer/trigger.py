@@ -126,35 +126,31 @@ def synchronize_buckets(source_bucket_name, destination_bucket_name, source_pref
             source_objects = get_s3_objects(source_bucket_name, prefix=source_prefix)
             destination_objects = get_s3_objects(destination_bucket_name, prefix=destination_prefix)
 
-            if destination_prefix is "starlight/input/":
+            if destination_prefix == "starlight/input/":
                 processed_objects = get_s3_objects(destination_bucket_name, prefix="starlight/processed/")
                 source_assets = set(obj[len(source_prefix):] for obj in source_objects)
                 destination_assets = set(obj[len(destination_prefix):] for obj in destination_objects)
                 processed_assets = set(obj[len("starlight/processed/"):] for obj in processed_objects)
                 all_destination_assets = destination_assets.union(processed_assets)
-                logger.info(f"[{direction_key}] All destination assets: {all_destination_assets}")
-                logger.info(f"[{direction_key}] Source assets: {source_assets}")
                 new_assets = source_assets - all_destination_assets
                 logger.debug(f"[{direction_key}] New assets in {source_bucket_name}/{source_prefix}: {new_assets}")
             else:
                 source_assets = set(obj[len(source_prefix):] for obj in source_objects)
                 destination_assets = set(obj[len(destination_prefix):] for obj in destination_objects)
-                logger.info(f"[{direction_key}] All destination assets: {destination_assets}")
-                logger.info(f"[{direction_key}] Source assets: {source_assets}")
                 new_assets = source_assets - destination_assets
                 logger.debug(f"[{direction_key}] New assets in {source_bucket_name}/{source_prefix}: {new_assets}")
             if new_assets:
                 logger.info(
-                    f"[{direction_key}] Found {len(new_assets)} new assets in {source_bucket_name}/{source_prefix} compared to {destination_bucket_name}/{destination_prefix}: {new_assets} (Direction: {direction_key})"
+                    f"[{direction_key}] Found {len(new_assets)} new assets in {source_bucket_name}/{source_prefix} compared to {destination_bucket_name}/{destination_prefix}: {new_assets}"
                 )
                 for asset in new_assets:
                     full_asset_name = destination_prefix + asset
-                    logger.info(f"[{direction_key}] Attempting to transfer new asset to {destination_bucket_name}/{destination_prefix}: {full_asset_name} (Direction: {direction_key})")
+                    logger.info(f"[{direction_key}] Attempting to transfer new asset to {destination_bucket_name}/{destination_prefix}: {full_asset_name}")
                     trigger_transfer_script(full_asset_name, source_bucket_name, destination_bucket_name, direction_key)
                     time.sleep(5)
             else:
                 logger.info(
-                    f"[{direction_key}] {source_bucket_name}/{source_prefix} and {destination_bucket_name}/{destination_prefix} are synchronized. (Direction: {direction_key})"
+                    f"[{direction_key}] {source_bucket_name}/{source_prefix} and {destination_bucket_name}/{destination_prefix} are synchronized."
                 )
 
             time.sleep(poll_interval)

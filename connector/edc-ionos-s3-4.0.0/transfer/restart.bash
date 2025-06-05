@@ -17,7 +17,7 @@ if [ $? -ne 0 ]; then
   echo "Error: Failed to log in to cluster-2. Exiting."
   exit 1
 fi
-oc rollout restart deployment/provider -n connectors
+oc rollout restart deployment/provider -n uc3-applications
 if [ $? -ne 0 ]; then
   echo "Error restarting provider on cluster-2."
 fi
