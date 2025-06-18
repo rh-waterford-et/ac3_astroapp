@@ -23,20 +23,14 @@ func NewWatcher() *Watcher {
 
 }
 
-func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface) {
+func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, queue queue.QueueInterface) {
 	inputDirEnv := "EXPLORED_" + appName
 	outputDirEnv := "OUTPUT_" + appName
-	processedDirEnv := "PROCESSED_"+ appName
+	processedDirEnv := "PROCESSED_" + appName
 
 	inputDir := os.Getenv(inputDirEnv)
 	outputDir := os.Getenv(outputDirEnv)
 	processedDir := os.Getenv(processedDirEnv)
-
-	if inputDir == "" || outputDir == "" {
-		log.Printf("%s directories not set\n", appName)
-		return
-	}
-
 	batchSize, err := strconv.Atoi(os.Getenv("BATCH_SIZE"))
 	if err != nil {
 		log.Printf("Invalid batch size for %s: %v\n", appName, err)
@@ -45,14 +39,9 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface) 
 
 	var fileSource producer.FileSource
 	var length = 0
-
 	switch side {
 	case "producer":
 		watcher := s3bucket.NewS3Watcher()
-		/* // Initialize known assets on first run
-		if len(watcher.KnownAssets) == 0 {
-			watcher.Bucket.InitializeKnownAssets(inputDir)
-		} */
 		fileSource = &producer.S3FileSource{
 			Bucket:    watcher.Bucket,
 			AppName:   appName,
@@ -65,10 +54,11 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface) 
 			return
 		}
 		length = len(files)
+		log.Printf("Found %d files in %s: %v", length, inputDir, files)
 	case "processor":
 		fileSource = &producer.LocalFileSource{
-			InputDir:  inputDir,
-			OutputDir: outputDir,
+			InputDir:     inputDir,
+			OutputDir:    outputDir,
 			ProcessedDir: processedDir,
 		}
 		files, err := fileSource.ListFiles()
@@ -77,6 +67,7 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface) 
 			return
 		}
 		length = len(files)
+		log.Printf("Found %d files in %s: %v", length, inputDir, files)
 	default:
 		log.Printf("Invalid side: %s\n", side)
 		return
@@ -84,17 +75,10 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface) 
 
 	if length > 0 {
 		log.Printf("Processing %s files...\n", appName)
-		q, err := queue.NewRabbitMQConnection()
-		if err != nil {
-			log.Printf("Failed to connect to RabbitMQ: %v\n", err)
-			return
-		}
-		defer q.Close()
-
 		eventQueue := make(chan api.Event, 10)
-		producer := producer.NewProducer(batchSize, fileSource, eventQueue, utils)
-		producer.CreateEvent(appName, side, q)
-	} else {
+		producer := producer.NewProducer(batchSize, fileSource, eventQueue, utils, side)
+		producer.CreateEvent(appName, side, queue)
+	} /* else {
 		log.Printf("No files found in %s directories\n", appName)
-	}
+	}*/
 }

@@ -75,16 +75,7 @@ func (sb *S3Bucket) GetBucketName() string {
 	return sb.BucketName
 }
 
-/*
-	 func (sb *S3Bucket) InitializeKnownAssets(appName string) {
-		assets, err := sb.GetS3Objects(appName)
-		if err != nil {
-			log.Printf("Error getting initial assets: %v", err)
-			return
-		}
-		log.Printf("Initial assets in '%s': %v", appName, assets)
-	}
-*/
+
 func (sb *S3Bucket) GetNewAssets(appName string) ([]string, error) {
 	currentAssets, err := sb.GetS3Objects(appName)
 	if err != nil {

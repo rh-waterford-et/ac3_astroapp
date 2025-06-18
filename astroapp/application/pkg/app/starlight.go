@@ -146,6 +146,7 @@ func (s *Starlight) UpdateToProcessList(inFileName string, fileContent []byte) {
 	if err := s.Utils.TouchFile(PROCESS_LIST); err != nil {
 		log.Printf("│ ✗ Error creating process list: %w", err)
 		return
+	}else{log.Printf("│ ✓ Creating process list")
 	}
 
 	specialFilePath := filepath.Join(InFilePath, inFileName)

@@ -10,5 +10,6 @@ type MessageBody struct {
 }
 
 type Event struct {
+	ID    string     `json:"ID"`
 	Files []DataFile `json:"Files"`
 }

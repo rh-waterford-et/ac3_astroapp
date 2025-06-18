@@ -9,16 +9,21 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
+	"github.com/google/uuid"
 )
 
 type UtilsInterface interface {
 	Exists(path string) (bool, error)
 	FailOnError(msg string, err error)
 	TouchFile(name string) error
+	GenerateUUID() string
 }
 
 type Utils struct{}
 
+func (u *Utils) GenerateUUID() string {
+	return uuid.New().String()
+}
 func (u *Utils) Exists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
@@ -57,9 +62,9 @@ func (u *Utils) EnsureDirectoriesExist() error {
 		os.Getenv("EXPLORED_DIR_STECKMAP"),
 		os.Getenv("OUTPUT_DIR_STECKMAP"),
 		os.Getenv("IN_FILE_OUTPUT_PATH"),
-		os.Getenv("PROCESSED_DIR_STECKMAP"),
-		os.Getenv("PROCESSED_DIR_STARLIGHT"),
-		os.Getenv("PROCESSED_DIR_PPFX"),
+		os.Getenv("PROCESSED_STECKMAP"),
+		os.Getenv("PROCESSED_STARLIGHT"),
+		os.Getenv("PROCESSED_PPFX"),
 	}
 
 	for _, dir := range requiredDirs {
@@ -120,5 +125,12 @@ func (u *Utils) EnsureBucketDirectoriesExist(bucket s3bucket.S3BucketInterface) 
 			log.Printf("Directory already exists in bucket: %s", dir)
 		}
 	}
+
+	checkInFile := os.Getenv("IN_FILE_OUTPUT_PATH")
+	if err := os.MkdirAll(checkInFile, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", checkInFile, err)
+	}
+	log.Printf("Verified directory: %s", checkInFile)
+
 	return nil
 }

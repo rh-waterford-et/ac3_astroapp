@@ -74,9 +74,11 @@ func LaunchProducer(side string) error {
 	utils := &common.Utils{}
 
 	log.Printf("------------------ Starting Watcher() ---------------------")
-	/* if err := utils.EnsureDirectoriesExist(); err != nil {
-		log.Fatalf("Directory initialization failed: %v", err)
-	} */
+	
+	queue, err := queue.NewRabbitMQConnection()
+	if err != nil {
+		log.Fatalf("Failed to create RabbitMQ connection: %v", err)
+	}
 
 	if side == "producer" {
 		bucket := s3bucket.NewS3Bucket()
@@ -91,7 +93,7 @@ func LaunchProducer(side string) error {
 	appRunner := &watcher.Watcher{}
 	for {
 		for _, app := range apps {
-			appRunner.Run(app, side, utils)
+			appRunner.Run(app, side, utils, queue)
 		}
 		log.Println("Checking for new files...")
 		time.Sleep(10 * time.Second)
