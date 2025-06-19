@@ -7,9 +7,10 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
 	"github.com/google/uuid"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
 )
 
 type UtilsInterface interface {
@@ -102,30 +103,31 @@ func (u *Utils) EnsureBucketDirectoriesExist(bucket s3bucket.S3BucketInterface) 
 			dir += "/"
 		}
 
-		// Check if the directory exists by listing objects with this prefix
-		resp, err := bucket.GetS3Client().ListObjectsV2(&s3.ListObjectsV2Input{
-			Bucket:  aws.String(bucket.GetBucketName()),
-			Prefix:  aws.String(dir),
-			MaxKeys: aws.Int64(1),
-		})
-		if err != nil {
-			return fmt.Errorf("failed to check directory %s in bucket: %w", dir, err)
-		}
+		_, err := bucket.GetS3Client().HeadObject(&s3.HeadObjectInput{
+            Bucket: aws.String(bucket.GetBucketName()),
+            Key:    aws.String(dir),
+        })
 
-		if len(resp.Contents) == 0 && len(resp.CommonPrefixes) == 0 {
-			_, err := bucket.GetS3Client().PutObject(&s3.PutObjectInput{
-				Bucket: aws.String(bucket.GetBucketName()),
-				Key:    aws.String(dir),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create directory %s in bucket: %w", dir, err)
-			}
-			log.Printf("Created directory in bucket: %s", dir)
-		} else {
-			log.Printf("Directory already exists in bucket: %s", dir)
-		}
-	}
+		   if err == nil {
+            log.Printf("Directory already exists in bucket: %s", dir)
+            continue
+        }
 
+
+        if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != "NotFound" {
+            return fmt.Errorf("failed to check directory %s in bucket: %w", dir, err)
+        }
+
+        _, err = bucket.GetS3Client().PutObject(&s3.PutObjectInput{
+            Bucket: aws.String(bucket.GetBucketName()),
+            Key:    aws.String(dir),
+        })
+        if err != nil {
+            return fmt.Errorf("failed to create directory %s in bucket: %w", dir, err)
+        }
+        log.Printf("Created directory in bucket: %s", dir)
+    }
+	
 	checkInFile := os.Getenv("IN_FILE_OUTPUT_PATH")
 	if err := os.MkdirAll(checkInFile, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", checkInFile, err)
