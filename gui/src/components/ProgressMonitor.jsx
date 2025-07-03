@@ -1,10 +1,46 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
+import { uploadFiles as apiUploadFiles, getDatasets, createDataset } from '../services/api';
 
 function FileUpload({ selectedDataset, datasetName }) {
+  // TODO: selectedDataset and datasetName could be used to customize upload path or display info
   const [dragActive, setDragActive] = useState(false);
   const [uploadQueue, setUploadQueue] = useState([]);
   const fileInputRef = useRef(null);
+  
+  // Dataset management
+  const [availableDatasets, setAvailableDatasets] = useState([]);
+  const [currentDataset, setCurrentDataset] = useState(selectedDataset || '');
+  const [newDatasetName, setNewDatasetName] = useState('');
+  const [isCreatingNewDataset, setIsCreatingNewDataset] = useState(false);
+  const [loadingDatasets, setLoadingDatasets] = useState(false);
+  const [datasetError, setDatasetError] = useState(null);
+
+  // Load datasets on component mount
+  useEffect(() => {
+    loadDatasets();
+  }, []);
+
+  const loadDatasets = async () => {
+    setLoadingDatasets(true);
+    setDatasetError(null);
+    try {
+      const datasets = await getDatasets();
+      setAvailableDatasets(datasets);
+      console.log('Loaded datasets:', datasets);
+      console.log('Available datasets state:', availableDatasets);
+      
+      // If no dataset is selected and we have datasets, select the first one
+      if (!currentDataset && datasets.length > 0) {
+        setCurrentDataset(datasets[0]);
+      }
+    } catch (error) {
+      console.error('Failed to load datasets:', error);
+      setDatasetError(error.message || 'Failed to load datasets');
+    } finally {
+      setLoadingDatasets(false);
+    }
+  };
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -39,11 +75,17 @@ function FileUpload({ selectedDataset, datasetName }) {
       file: file,
       name: file.name,
       size: formatFileSize(file.size),
+      rawSize: file.size, // Store raw size for total calculation
       status: 'ready',
       progress: 0
     }));
     
     setUploadQueue(prev => [...prev, ...newFiles]);
+    
+    // Reset file input to allow selecting the same files again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const formatFileSize = (bytes) => {
@@ -54,58 +96,150 @@ function FileUpload({ selectedDataset, datasetName }) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const calculateTotalSize = () => {
+    const totalBytes = uploadQueue.reduce((sum, file) => sum + (file.rawSize || 0), 0);
+    return formatFileSize(totalBytes);
+  };
+
   const removeFile = (fileId) => {
     setUploadQueue(prev => prev.filter(f => f.id !== fileId));
   };
 
-  /**
-   * Update file progress to 50%
-   * @param {string} fileId - The file ID to update
-   */
-  const updateFileToHalfProgress = (fileId) => {
-    setUploadQueue(prev => prev.map(f => 
-      f.id === fileId ? { ...f, status: 'uploading', progress: 50 } : f
-    ));
-  };
 
-  /**
-   * Complete file upload (100% progress)
-   * @param {string} fileId - The file ID to complete
-   */
-  const completeFileUpload = (fileId) => {
-    setUploadQueue(prev => prev.map(f => 
-      f.id === fileId ? { ...f, status: 'completed', progress: 100 } : f
-    ));
-  };
 
-  /**
-   * Simulate upload progress for a single file
-   * @param {Object} file - File object with ID
-   * @param {number} delay - Initial delay before starting upload
-   */
-  const simulateFileUpload = (file, delay) => {
-    setTimeout(() => {
-      updateFileToHalfProgress(file.id);
-      setTimeout(() => completeFileUpload(file.id), 1000);
-    }, delay);
-  };
+  const uploadFiles = async () => {
+    // Validate dataset selection
+    if (!currentDataset || currentDataset.trim() === '') {
+      alert('Please select a dataset before uploading files');
+      return;
+    }
 
-  const uploadFiles = () => {
-    // Mock upload process - in real app this would upload to S3
+    // Set all files to uploading status
     setUploadQueue(prev => prev.map(file => ({
       ...file,
       status: 'uploading',
       progress: 0
     })));
 
-    // Simulate upload progress for each file
-    uploadQueue.forEach((file, index) => {
-      simulateFileUpload(file, index * 200);
-    });
+    // Get files that are ready to upload
+    const filesToUpload = uploadQueue
+      .filter(queueItem => queueItem.status === 'ready')
+      .map(queueItem => queueItem.file);
+
+    if (filesToUpload.length === 0) {
+      console.log('No files to upload');
+      return;
+    }
+
+    try {
+      // Upload files using the API service
+      const results = await apiUploadFiles(
+        filesToUpload,
+        currentDataset,
+        // Progress callback for individual files
+        (file, progress) => {
+          setUploadQueue(prev => prev.map(queueItem => 
+            queueItem.file === file 
+              ? { ...queueItem, progress: progress }
+              : queueItem
+          ));
+        },
+        // Overall progress callback
+        (overallProgress) => {
+          console.log(`Overall upload progress: ${overallProgress}%`);
+        }
+      );
+
+      // Update file statuses based on results
+      results.forEach(result => {
+        setUploadQueue(prev => prev.map(queueItem => 
+          queueItem.file === result.file 
+            ? { 
+                ...queueItem, 
+                status: result.success ? 'completed' : 'error',
+                progress: result.success ? 100 : 0,
+                error: result.success ? null : result.error
+              }
+            : queueItem
+        ));
+      });
+
+      console.log('Upload completed:', results);
+    } catch (error) {
+      console.error('Upload failed:', error);
+      
+      // Set all uploading files to error status
+      setUploadQueue(prev => prev.map(file => 
+        file.status === 'uploading' 
+          ? { ...file, status: 'error', progress: 0, error: error.message }
+          : file
+      ));
+    } finally {
+      // Reset file input to allow selecting files again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const clearCompleted = () => {
     setUploadQueue(prev => prev.filter(f => f.status !== 'completed'));
+  };
+
+  const clearAll = () => {
+    setUploadQueue([]);
+  };
+
+  const handleDatasetSelection = (e) => {
+    const value = e.target.value;
+    if (value === 'NEW_DATASET') {
+      setIsCreatingNewDataset(true);
+      setCurrentDataset('');
+    } else {
+      setIsCreatingNewDataset(false);
+      setCurrentDataset(value);
+    }
+  };
+
+  const handleNewDatasetCreate = async () => {
+    if (newDatasetName.trim()) {
+      const sanitizedName = newDatasetName.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+      if (sanitizedName) {
+        setLoadingDatasets(true);
+        setDatasetError(null);
+        
+        try {
+          // Create the dataset in S3
+          const result = await createDataset(sanitizedName);
+          
+          if (result.success) {
+            setCurrentDataset(sanitizedName);
+            setIsCreatingNewDataset(false);
+            setNewDatasetName('');
+            
+            // Reload datasets to get the updated list from S3
+            await loadDatasets();
+            
+            console.log('Dataset created successfully:', sanitizedName);
+          } else {
+            setDatasetError(result.message || 'Failed to create dataset');
+            console.error('Failed to create dataset:', result.message);
+          }
+        } catch (error) {
+          setDatasetError(error.message || 'Failed to create dataset');
+          console.error('Error creating dataset:', error);
+        } finally {
+          setLoadingDatasets(false);
+        }
+      }
+    }
+  };
+
+  const handleNewDatasetCancel = () => {
+    setIsCreatingNewDataset(false);
+    setNewDatasetName('');
+    // Reset to first available dataset or empty
+    setCurrentDataset(availableDatasets.length > 0 ? availableDatasets[0] : '');
   };
 
   const getStatusColor = (status) => {
@@ -140,7 +274,7 @@ function FileUpload({ selectedDataset, datasetName }) {
   return (
     <div className="file-upload">
       <div className="upload-header">
-        <h3>Upload Files to S3</h3>
+        <h3>Upload Files to S3 - {datasetName || selectedDataset}</h3>
         <div className="upload-actions">
           {uploadQueue.length > 0 && (
             <>
@@ -158,14 +292,89 @@ function FileUpload({ selectedDataset, datasetName }) {
               >
                 Clear Completed
               </button>
+              <button 
+                className="clear-btn clear-all-btn"
+                onClick={clearAll}
+              >
+                Clear All
+              </button>
             </>
           )}
         </div>
       </div>
       
       <div className="upload-content">
-        {/* Upload Zone */}
-        <div className="upload-section">
+        {/* Dataset Selection Section */}
+        <div className="upload-section dataset-section">
+          <div className="section-header">
+            <h4>Select Dataset</h4>
+            {loadingDatasets && <div className="loading-spinner">Loading datasets...</div>}
+            {datasetError && (
+              <div className="error-message">
+                ⚠️ {datasetError}
+                <button onClick={loadDatasets} className="retry-btn">Retry</button>
+              </div>
+            )}
+          </div>
+          <div className="dataset-selection">
+            {!isCreatingNewDataset ? (
+              <div className="dataset-select-wrapper">
+                <select 
+                  className="dataset-select"
+                  value={currentDataset}
+                  onChange={handleDatasetSelection}
+                  disabled={loadingDatasets}
+                >
+                  <option value="">-- Select Dataset --</option>
+                  {availableDatasets.map(dataset => (
+                    <option key={dataset} value={dataset}>{dataset}</option>
+                  ))}
+                  <option value="NEW_DATASET">+ Create New Dataset</option>
+                </select>
+                {currentDataset && (
+                  <div className="dataset-info">
+                    <span className="dataset-path">📁 starlight/input/{currentDataset}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="new-dataset-form">
+                <div className="new-dataset-input-group">
+                  <input
+                    type="text"
+                    className="new-dataset-input"
+                    placeholder="Enter dataset name (e.g., NGC7025)"
+                    value={newDatasetName}
+                    onChange={(e) => setNewDatasetName(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleNewDatasetCreate()}
+                  />
+                  <button 
+                    className="create-dataset-btn"
+                    onClick={handleNewDatasetCreate}
+                    disabled={!newDatasetName.trim()}
+                  >
+                    Create
+                  </button>
+                  <button 
+                    className="cancel-dataset-btn"
+                    onClick={handleNewDatasetCancel}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div className="dataset-preview">
+                  📁 starlight/input/{newDatasetName.trim().replace(/[^a-zA-Z0-9_-]/g, '')}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Upload Files Section */}
+        <div className="upload-section upload-files-section">
+          <div className="section-header">
+            <h4>Upload Files</h4>
+          </div>
           <div 
             className={`upload-zone ${dragActive ? 'drag-active' : ''}`}
             onDragEnter={handleDrag}
@@ -194,19 +403,24 @@ function FileUpload({ selectedDataset, datasetName }) {
           </div>
         </div>
 
-        {/* Upload Queue */}
-        {uploadQueue.length > 0 && (
-          <div className="upload-section">
-            <div className="section-header">
-              <h4>Upload Queue</h4>
-              <div className="queue-summary">{uploadQueue.length} files</div>
-            </div>
-            <div className="upload-queue">
-              {uploadQueue.map(file => (
+        {/* Files List Section */}
+        <div className="upload-section files-list-section">
+          <div className="section-header">
+            <h4>Files List</h4>
+            {uploadQueue.length > 0 && (
+              <div className="queue-summary">{uploadQueue.length} files • {calculateTotalSize()}</div>
+            )}
+          </div>
+          <div className="upload-queue">
+            {uploadQueue.length > 0 ? (
+              uploadQueue.map(file => (
                 <div key={file.id} className="queue-item">
                   <div className="queue-file-info">
                     <div className="queue-file-name">{file.name}</div>
                     <div className="queue-file-size">{file.size}</div>
+                    {file.status === 'error' && file.error && (
+                      <div className="queue-error-message">{file.error}</div>
+                    )}
                   </div>
                   
                   <div className="queue-status">
@@ -224,11 +438,11 @@ function FileUpload({ selectedDataset, datasetName }) {
                     <span 
                       className="queue-status-dot"
                       style={{ backgroundColor: getStatusColor(file.status) }}
-                      title={file.status}
+                      title={file.status === 'error' && file.error ? file.error : file.status}
                     ></span>
                   </div>
                   
-                  {file.status === 'ready' && (
+                  {(file.status === 'ready' || file.status === 'error') && (
                     <button 
                       className="remove-file-btn"
                       onClick={() => removeFile(file.id)}
@@ -237,10 +451,15 @@ function FileUpload({ selectedDataset, datasetName }) {
                     </button>
                   )}
                 </div>
-              ))}
-            </div>
+              ))
+            ) : (
+              <div className="empty-files-list">
+                <div className="empty-message">No files selected</div>
+                <div className="empty-hint">Add files using the upload area above</div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
