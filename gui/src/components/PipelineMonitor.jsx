@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 // Re-enabling FileUpload component
 import FileUpload from './ProgressMonitor';
 import PipelineProgressMonitor from './PipelineProgressMonitor';
@@ -260,5 +261,9 @@ function PipelineMonitor({ selectedApp }) {
     </div>
   );
 }
+
+PipelineMonitor.propTypes = {
+  selectedApp: PropTypes.string.isRequired,
+};
 
 export default PipelineMonitor; 

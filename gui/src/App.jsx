@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import React from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Rnd } from 'react-rnd';
 import './App.css';
 import Sidebar from './components/Sidebar';
 import Gallery from './components/Gallery';
@@ -14,6 +16,141 @@ function App() {
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState('maps'); // 'maps' or 'pipeline'
   const [selectedApp, setSelectedApp] = useState('starlight'); // 'starlight', 'ppxf', 'steckmap'
+  const modalRndRef = useRef(null);
+
+  /**
+   * Center the modal using react-rnd's positioning API
+   */
+  const centerModal = () => {
+    if (modalRndRef.current) {
+      const modalWidth = 600;
+      const modalHeight = 500;
+      const centerX = Math.max(0, (window.innerWidth - modalWidth) / 2);
+      const centerY = Math.max(0, (window.innerHeight - modalHeight) / 2);
+      
+      modalRndRef.current.updatePosition({ x: centerX, y: centerY });
+    }
+  };
+
+  // Make centerModal globally available
+  useEffect(() => {
+    window.centerModal = centerModal;
+  }, []);
+
+  // Sidebar checkbox states
+  const [sidebarState, setSidebarState] = useState({
+    // Map checkboxes
+    'map-stellar-velocity': false,
+    'map-stellar-velocity-error': false,
+    'map-velocity-dispersion': false,
+    'map-velocity-dispersion-error': false,
+    'map-h3': false,
+    'map-h4': false,
+    'map-age-weighted': false,
+    'map-age-mass-weighted': false,
+    'map-metallicity': false,
+    // Display option checkboxes
+    'display-grid': false,
+    'display-reticle': true, // Default checked
+    'display-labels': false,
+    'display-healpix': false
+  });
+
+  // Handler for checkbox state changes
+  const handleCheckboxChange = (checkboxId, isChecked) => {
+    setSidebarState(prev => ({
+      ...prev,
+      [checkboxId]: isChecked
+    }));
+
+    // Handle display controls
+    if (aladinInstance) {
+      if (checkboxId === 'display-grid') {
+        try {
+          if (isChecked) {
+            aladinInstance.showCooGrid();
+            console.log('Coordinate grid enabled');
+          } else {
+            aladinInstance.hideCooGrid();
+            console.log('Coordinate grid disabled');
+          }
+        } catch (error) {
+          console.error('Grid control error:', error);
+        }
+      } else if (checkboxId === 'display-reticle') {
+        try {
+          aladinInstance.showReticle(isChecked);
+          console.log(`Reticle ${isChecked ? 'enabled' : 'disabled'}`);
+        } catch (error) {
+          console.error('Reticle control error:', error);
+        }
+      } else if (checkboxId === 'display-labels') {
+        console.log(`Object labels ${isChecked ? 'enabled' : 'disabled'}`);
+        try {
+          const catalogs = aladinInstance.getCatalogs();
+          catalogs.forEach(catalog => {
+            if (catalog.setShowLabels) {
+              catalog.setShowLabels(isChecked);
+            }
+          });
+        } catch (error) {
+          console.log('Label display control not available:', error);
+        }
+      } else if (checkboxId === 'display-healpix') {
+        try {
+          aladinInstance.showHealpixGrid(isChecked);
+          console.log(`HEALPix grid ${isChecked ? 'enabled' : 'disabled'}`);
+        } catch (error) {
+          console.error('HEALPix grid control error:', error);
+        }
+      }
+    }
+
+    // Handle map controls
+    const mapControls = {
+      'map-stellar-velocity': { label: 'Stellar velocity', icon: '🌀' },
+      'map-velocity-dispersion': { label: 'Velocity dispersion', icon: '📊' },
+      'map-stellar-velocity-error': { label: 'Stellar velocity Error', icon: '⚠️' },
+      'map-velocity-dispersion-error': { label: 'Velocity dispersion Error', icon: '📈' },
+      'map-h3': { label: 'h3', icon: 'H₃' },
+      'map-h4': { label: 'h4', icon: 'H₄' },
+      'map-age-weighted': { label: 'Age (lum. weighted)', icon: '⏳' },
+      'map-age-mass-weighted': { label: 'Age (Mass Weighted)', icon: '⚖️' },
+      'map-metallicity': { label: 'Metallicity', icon: '⚛️' }
+    };
+
+    if (mapControls[checkboxId]) {
+      const config = mapControls[checkboxId];
+      const currentObject = window.currentLoadedObject;
+      
+      console.log(`📋 Checkbox ${checkboxId} changed to ${isChecked}, currentObject: ${currentObject}`);
+      
+      if (currentObject) {
+        // If an object is loaded, reload its images based on current selections
+        console.log(`🔄 Reloading images for ${currentObject} due to ${config.label} change`);
+        if (window.loadObjectImages) {
+          window.loadObjectImages(currentObject);
+        }
+      } else {
+        // No object loaded, use placeholder system
+        const mapType = checkboxId.replace('map-', '');
+        
+        if (isChecked) {
+          // Add to gallery
+          if (window.addMapToGallery) {
+            window.addMapToGallery(mapType, config.label, config.icon);
+          }
+          console.log(`Added ${config.label} to gallery`);
+        } else {
+          // Remove from gallery
+          if (window.removeMapFromGallery) {
+            window.removeMapFromGallery(mapType);
+          }
+          console.log(`Removed ${config.label} from gallery`);
+        }
+      }
+    }
+  };
 
   useEffect(() => {
     loadAladinScript();
@@ -31,6 +168,71 @@ function App() {
     setupControls(aladinInstance);
     setupKeyboardControls(aladinInstance);
   }, [aladinInstance]);
+
+  // Restore gallery state and search functionality when switching to Maps tab
+  useEffect(() => {
+    if (activeTab === 'maps') {
+      // Small delay to ensure gallery component is mounted
+      setTimeout(() => {
+        // Re-establish search controls when switching back to Maps tab
+        if (aladinInstance) {
+          console.log('Re-establishing search controls for Maps tab');
+          setupSearchControls(aladinInstance);
+        }
+        
+        // Store current object and coordinates before clearing gallery
+        const currentObject = window.currentLoadedObject;
+        const currentCoords = window.currentObjectCoords;
+        
+        // Clear gallery items (but preserve object state)
+        const galleryItems = document.getElementById('gallery-items');
+        if (galleryItems) {
+          const mapItems = galleryItems.querySelectorAll('.gallery-item');
+          mapItems.forEach(item => item.remove());
+          console.log('Gallery items cleared for tab switch');
+        }
+        
+        // Restore object state after clearing
+        if (currentObject) {
+          window.currentLoadedObject = currentObject;
+          window.currentObjectCoords = currentCoords;
+        }
+        
+        const mapControls = {
+          'map-stellar-velocity': { label: 'Stellar velocity', icon: '🌀' },
+          'map-velocity-dispersion': { label: 'Velocity dispersion', icon: '📊' },
+          'map-stellar-velocity-error': { label: 'Stellar velocity Error', icon: '⚠️' },
+          'map-velocity-dispersion-error': { label: 'Velocity dispersion Error', icon: '📈' },
+          'map-h3': { label: 'h3', icon: 'H₃' },
+          'map-h4': { label: 'h4', icon: 'H₄' },
+          'map-age-weighted': { label: 'Age (lum. weighted)', icon: '⏳' },
+          'map-age-mass-weighted': { label: 'Age (Mass Weighted)', icon: '⚖️' },
+          'map-metallicity': { label: 'Metallicity', icon: '⚛️' }
+        };
+
+        if (currentObject) {
+          // If an object is loaded, reload its images based on current selections
+          console.log(`Restoring gallery for object: ${currentObject}`);
+          if (window.loadObjectImages) {
+            window.loadObjectImages(currentObject);
+          }
+        } else {
+          // No object loaded, restore placeholder system based on checked items
+          Object.entries(mapControls).forEach(([checkboxId, config]) => {
+            const isChecked = sidebarState[checkboxId];
+            if (isChecked) {
+              const mapType = checkboxId.replace('map-', '');
+              
+              // Add to gallery
+              if (window.addMapToGallery) {
+                window.addMapToGallery(mapType, config.label, config.icon);
+              }
+            }
+          });
+        }
+      }, 100);
+    }
+  }, [activeTab, aladinInstance]); // Run when tab changes or when aladinInstance becomes available
 
   /**
    * Load the Aladin Lite v3 script dynamically
@@ -80,6 +282,63 @@ function App() {
   };
 
   /**
+   * Hide coordinate display elements via DOM manipulation
+   */
+  const hideCoordinateElements = () => {
+    try {
+      const aladinDiv = document.getElementById('aladin-lite-div');
+      if (!aladinDiv) return;
+
+      // Hide coordinate box and position info
+      const coordElements = aladinDiv.querySelectorAll('.aladin-location-text, .aladin-coord-text, .aladin-statusBar, .aladin-box-coord');
+      coordElements.forEach(el => {
+        el.style.display = 'none';
+      });
+      
+      // Also try to hide any elements with coordinate-related classes
+      const possibleCoordElements = aladinDiv.querySelectorAll('[class*="coord"], [class*="position"], [class*="location"]');
+      possibleCoordElements.forEach(el => {
+        if (el.textContent && el.textContent.includes('°')) {
+          el.style.display = 'none';
+        }
+      });
+    } catch (error) {
+      console.log('Could not hide coordinate elements via DOM:', error);
+    }
+  };
+
+  /**
+   * Hide coordinate frame displays using Aladin API
+   */
+  const hideCoordinateFrames = (aladin) => {
+    try {
+      if (aladin.hideCooFrame) aladin.hideCooFrame();
+      if (aladin.hideFrame) aladin.hideFrame();
+    } catch (error) {
+      console.log('Could not hide coordinate frame:', error);
+    }
+  };
+
+  /**
+   * Setup Aladin instance after initialization
+   */
+  const setupAladinInstance = (aladin) => {
+    console.log('Aladin instance created:', aladin);
+    setAladinInstance(aladin);
+    
+    // Make Aladin instance globally available for coordinate checking
+    window.aladinInstance = aladin;
+    
+    // Hide coordinate frame displays
+    hideCoordinateFrames(aladin);
+    
+    // Additional coordinate display hiding with delay
+    setTimeout(hideCoordinateElements, 1000);
+    
+    setIsLoading(false);
+  };
+
+  /**
    * Initialize Aladin Lite v3
    */
   const initializeAladin = async () => {
@@ -119,46 +378,7 @@ function App() {
           log: true
         });
 
-        console.log('Aladin instance created:', aladin);
-        setAladinInstance(aladin);
-        
-        // Make Aladin instance globally available for coordinate checking
-        window.aladinInstance = aladin;
-        
-        // Hide any coordinate frame displays
-        try {
-          if (aladin.hideCooFrame) aladin.hideCooFrame();
-          if (aladin.hideFrame) aladin.hideFrame();
-        } catch (error) {
-          console.log('Could not hide coordinate frame:', error);
-        }
-        
-        // Additional coordinate display hiding
-        setTimeout(() => {
-          try {
-            // Hide coordinate display elements via DOM manipulation
-            const aladinDiv = document.getElementById('aladin-lite-div');
-            if (aladinDiv) {
-              // Hide coordinate box and position info
-              const coordElements = aladinDiv.querySelectorAll('.aladin-location-text, .aladin-coord-text, .aladin-statusBar, .aladin-box-coord');
-              coordElements.forEach(el => {
-                el.style.display = 'none';
-              });
-              
-              // Also try to hide any elements with coordinate-related classes
-              const possibleCoordElements = aladinDiv.querySelectorAll('[class*="coord"], [class*="position"], [class*="location"]');
-              possibleCoordElements.forEach(el => {
-                if (el.textContent && el.textContent.includes('°')) {
-                  el.style.display = 'none';
-                }
-              });
-            }
-          } catch (error) {
-            console.log('Could not hide coordinate elements via DOM:', error);
-          }
-        }, 1000);
-        
-        setIsLoading(false);
+        setupAladinInstance(aladin);
       });
 
     } catch (error) {
@@ -320,7 +540,7 @@ function App() {
               gap: '8px'
             }}>
               <span>⚠️</span>
-              Aladin Loading Error
+              <span>Aladin Loading Error</span>
             </div>
             <p style={{
               color: '#E2E8F0',
@@ -374,7 +594,11 @@ function App() {
           {activeTab === 'maps' && (
             <>
               {/* Right Sidebar */}
-              <Sidebar aladinInstance={aladinInstance} />
+              <Sidebar 
+                aladinInstance={aladinInstance} 
+                checkboxStates={sidebarState}
+                onCheckboxChange={handleCheckboxChange}
+              />
             </>
           )}
 
@@ -408,53 +632,87 @@ function App() {
       {/* Image Modal - Positioned at app level for full overlay */}
       <div className="image-modal" id="image-modal">
         <div className="modal-backdrop" id="modal-backdrop"></div>
-        <div className="modal-content" id="modal-content">
-          <div className="modal-header">
-            <span className="modal-object-code" id="modal-object">Object</span>
-            <h3 className="modal-title" id="modal-title">Image Title</h3>
-            <div className="modal-nav-buttons">
-              <button className="modal-nav-btn modal-prev" id="modal-prev" title="Previous image">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-              <button className="modal-nav-btn modal-next" id="modal-next" title="Next image">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </div>
-            <div className="modal-controls">
-              <div className="transparency-control">
-                <label htmlFor="transparency-slider" className="transparency-label">
+        <Rnd
+          ref={modalRndRef}
+          default={{
+            x: 0,
+            y: 0,
+            width: 600,
+            height: 500,
+          }}
+          minWidth={480}
+          minHeight={320}
+          maxWidth="90vw"
+          maxHeight="85vh"
+          bounds="window"
+          dragHandleClassName="modal-header"
+          cancel=".modal-close, .transparency-control, .modal-nav-buttons"
+          className="modal-content-rnd"
+          onDragStart={() => {
+            const modalContent = document.querySelector('.modal-content');
+            if (modalContent) {
+              modalContent.classList.add('dragging');
+            }
+          }}
+          onDragStop={() => {
+            const modalContent = document.querySelector('.modal-content');
+            if (modalContent) {
+              modalContent.classList.remove('dragging');
+            }
+          }}
+          style={{
+            display: 'none', // Hidden by default, shown when modal is active
+          }}
+        >
+          <div className="modal-content" id="modal-content">
+            <div className="modal-header">
+              <span className="modal-object-code" id="modal-object">Object</span>
+              <h3 className="modal-title" id="modal-title">Image Title</h3>
+              <div className="modal-nav-buttons">
+                <button className="modal-nav-btn modal-prev" id="modal-prev" title="Previous image">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-                    <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1" stroke="currentColor" strokeWidth="2"/>
+                    <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                </label>
-                <input 
-                  type="range" 
-                  id="transparency-slider" 
-                  className="transparency-slider"
-                  min="20" 
-                  max="100" 
-                  defaultValue="95"
-                  onChange={(e) => {
-                    const modalBody = document.querySelector('.modal-body');
-                    if (modalBody) {
-                      const opacity = e.target.value / 100;
-                      modalBody.style.opacity = opacity;
-                    }
-                  }}
-                />
+                </button>
+                <button className="modal-nav-btn modal-next" id="modal-next" title="Next image">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
               </div>
-              <button className="modal-close" id="modal-close">×</button>
+              <div className="modal-controls">
+                <div className="transparency-control">
+                  <label htmlFor="transparency-slider" className="transparency-label" aria-label="Image transparency control">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+                      <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1" stroke="currentColor" strokeWidth="2"/>
+                    </svg>
+                  </label>
+                  <input 
+                    type="range" 
+                    id="transparency-slider" 
+                    className="transparency-slider"
+                    min="20" 
+                    max="100" 
+                    defaultValue="95"
+                    aria-label="Adjust image transparency from 20% to 100%"
+                    onChange={(e) => {
+                      const modalBody = document.querySelector('.modal-body');
+                      if (modalBody) {
+                        const opacity = e.target.value / 100;
+                        modalBody.style.opacity = opacity;
+                      }
+                    }}
+                  />
+                </div>
+                <button className="modal-close" id="modal-close">×</button>
+              </div>
+            </div>
+            <div className="modal-body">
+              <img className="modal-image" id="modal-image" alt="" />
             </div>
           </div>
-          <div className="modal-body">
-            <img className="modal-image" id="modal-image" alt="" />
-          </div>
-        </div>
+        </Rnd>
       </div>
     </div>
   );
@@ -490,13 +748,31 @@ const setupControls = (aladin) => {
     });
   }
 
-  // Galaxy search
+  // Galaxy search - use the dedicated function
+  setupSearchControls(aladin);
+
+  console.log('Controls set up');
+};
+
+/**
+ * Set up or re-establish search controls
+ * @param {Object} aladin - The Aladin Lite instance
+ */
+const setupSearchControls = (aladin) => {
   const searchGalaxyBtn = document.getElementById('search-galaxy-btn');
   const galaxySearchInput = document.getElementById('galaxy-search');
   
   if (searchGalaxyBtn && galaxySearchInput) {
-    searchGalaxyBtn.addEventListener('click', () => {
-      const input = galaxySearchInput.value.trim();
+    // Remove existing event listeners to prevent duplicates
+    const newSearchBtn = searchGalaxyBtn.cloneNode(true);
+    const newSearchInput = galaxySearchInput.cloneNode(true);
+    
+    searchGalaxyBtn.parentNode.replaceChild(newSearchBtn, searchGalaxyBtn);
+    galaxySearchInput.parentNode.replaceChild(newSearchInput, galaxySearchInput);
+    
+    // Add fresh event listeners
+    newSearchBtn.addEventListener('click', () => {
+      const input = newSearchInput.value.trim();
       console.log('Search button clicked, input:', input);
       if (input) {
         handleGalaxySearch(aladin, input);
@@ -504,19 +780,17 @@ const setupControls = (aladin) => {
         console.log('No input provided for search');
       }
     });
-  }
 
-  // Enter key support for galaxy search
-  if (galaxySearchInput) {
-    galaxySearchInput.addEventListener('keypress', (event) => {
+    // Enter key support for galaxy search
+    newSearchInput.addEventListener('keypress', (event) => {
       if (event.key === 'Enter') {
         console.log('Enter key pressed in search input');
-        searchGalaxyBtn?.click();
+        newSearchBtn.click();
       }
     });
+    
+    console.log('Search controls established');
   }
-
-  console.log('Controls set up');
 };
 
 /**
@@ -728,7 +1002,8 @@ const parseCoordinates = (input) => {
   const cleaned = input.trim().replace(/\s+/g, ' ');
   
   // Try decimal degrees format: "ra dec" or "ra, dec"
-  const decimalMatch = cleaned.match(/^(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)$/);
+  // Fixed regex to prevent ReDoS - more deterministic pattern
+  const decimalMatch = cleaned.match(/^(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)$/);
   if (decimalMatch) {
     const ra = parseFloat(decimalMatch[1]);
     const dec = parseFloat(decimalMatch[2]);
@@ -738,7 +1013,8 @@ const parseCoordinates = (input) => {
   }
 
   // Try HMS DMS format: "HH:MM:SS DD:MM:SS" or "HH MM SS DD MM SS"
-  const hmsMatch = cleaned.match(/^(\d{1,2}):(\d{2}):(\d{2}\.?\d*)\s+([+-]?\d{1,2}):(\d{2}):(\d{2}\.?\d*)$/);
+  // Fixed regex to prevent ReDoS - more specific patterns
+  const hmsMatch = cleaned.match(/^(\d{1,2}):(\d{2}):(\d{1,2}(?:\.\d+)?)\s+([+-]?\d{1,2}):(\d{2}):(\d{1,2}(?:\.\d+)?)$/);
   if (hmsMatch) {
     const h = parseInt(hmsMatch[1]);
     const m = parseInt(hmsMatch[2]);

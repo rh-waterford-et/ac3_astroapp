@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import DatasetProgressBar from './DatasetProgressBar';
 
 function PipelineProgressMonitor({ datasets }) {
@@ -18,41 +19,67 @@ function PipelineProgressMonitor({ datasets }) {
     setProgressData(initialProgress);
   }, [datasets]);
 
+  /**
+   * Update stage based on progress percentage
+   * @param {number} progress - Current progress percentage
+   * @returns {string} - Stage description
+   */
+  const getStageForProgress = (progress) => {
+    if (progress >= 90) return 'Finalizing results';
+    if (progress >= 70) return 'Generating output files';
+    if (progress >= 40) return 'Stellar population analysis';
+    if (progress >= 10) return 'Data preprocessing';
+    return 'Starting...';
+  };
+
+  /**
+   * Update progress for a single dataset
+   * @param {Object} dataset - Dataset configuration
+   * @param {Object} currentData - Current progress data for the dataset
+   * @returns {Object} - Updated progress data or null if no update needed
+   */
+  const updateDatasetProgress = (dataset, currentData) => {
+    if (dataset.status !== 'processing' || !currentData || currentData.progress >= 100) {
+      return null;
+    }
+
+    // Simulate progress increment (0.5-2% every 2 seconds)
+    // Note: Math.random() is safe here - only used for UI simulation, not security
+    const increment = Math.random() * 1.5 + 0.5;
+    const newProgress = Math.min(currentData.progress + increment, 100);
+    
+    return {
+      ...currentData,
+      progress: newProgress,
+      stage: getStageForProgress(newProgress),
+      lastUpdated: new Date()
+    };
+  };
+
+  /**
+   * Update progress data for all datasets
+   * @param {Object} prevData - Previous progress data
+   * @returns {Object} - Updated progress data
+   */
+  const updateAllProgress = (prevData) => {
+    const updated = { ...prevData };
+    let hasUpdates = false;
+
+    datasets.forEach(dataset => {
+      const updatedDataset = updateDatasetProgress(dataset, updated[dataset.id]);
+      if (updatedDataset) {
+        updated[dataset.id] = updatedDataset;
+        hasUpdates = true;
+      }
+    });
+
+    return hasUpdates ? updated : prevData;
+  };
+
   // Simulate real-time progress updates for processing datasets
   useEffect(() => {
     const interval = setInterval(() => {
-      setProgressData(prev => {
-        const updated = { ...prev };
-        let hasUpdates = false;
-
-        datasets.forEach(dataset => {
-          if (dataset.status === 'processing' && updated[dataset.id] && updated[dataset.id].progress < 100) {
-            // Simulate progress increment (0.5-2% every 2 seconds)
-            const increment = Math.random() * 1.5 + 0.5;
-            const newProgress = Math.min(updated[dataset.id].progress + increment, 100);
-            
-            updated[dataset.id] = {
-              ...updated[dataset.id],
-              progress: newProgress,
-              lastUpdated: new Date()
-            };
-            hasUpdates = true;
-
-            // Update stage based on progress
-            if (newProgress >= 90) {
-              updated[dataset.id].stage = 'Finalizing results';
-            } else if (newProgress >= 70) {
-              updated[dataset.id].stage = 'Generating output files';
-            } else if (newProgress >= 40) {
-              updated[dataset.id].stage = 'Stellar population analysis';
-            } else if (newProgress >= 10) {
-              updated[dataset.id].stage = 'Data preprocessing';
-            }
-          }
-        });
-
-        return hasUpdates ? updated : prev;
-      });
+      setProgressData(updateAllProgress);
     }, 2000);
 
     return () => clearInterval(interval);
@@ -237,5 +264,9 @@ function PipelineProgressMonitor({ datasets }) {
     </div>
   );
 }
+
+PipelineProgressMonitor.propTypes = {
+  datasets: PropTypes.array.isRequired,
+};
 
 export default PipelineProgressMonitor; 

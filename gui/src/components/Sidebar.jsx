@@ -1,11 +1,12 @@
 import React, { useEffect } from 'react';
+import PropTypes from 'prop-types';
 
-const Sidebar = ({ aladinInstance }) => {
+const Sidebar = ({ aladinInstance, checkboxStates, onCheckboxChange }) => {
   useEffect(() => {
     if (!aladinInstance) return;
     
-    setupSidebarControls(aladinInstance);
-  }, [aladinInstance]);
+    setupSidebarControls(aladinInstance, checkboxStates, onCheckboxChange);
+  }, [aladinInstance, checkboxStates, onCheckboxChange]);
 
   return (
     <div className="right-sidebar">
@@ -19,34 +20,64 @@ const Sidebar = ({ aladinInstance }) => {
             <h5>Kinematics</h5>
             <div className="checkbox-list">
               <label className="checkbox-item">
-                <input type="checkbox" id="map-stellar-velocity" />
+                <input 
+                  type="checkbox" 
+                  id="map-stellar-velocity" 
+                  checked={checkboxStates['map-stellar-velocity']}
+                  onChange={(e) => onCheckboxChange('map-stellar-velocity', e.target.checked)}
+                />
                 <span className="checkmark"></span>
-                Stellar velocity
+                <span> </span>Stellar velocity
               </label>
               <label className="checkbox-item">
-                <input type="checkbox" id="map-stellar-velocity-error" />
+                <input 
+                  type="checkbox" 
+                  id="map-stellar-velocity-error" 
+                  checked={checkboxStates['map-stellar-velocity-error']}
+                  onChange={(e) => onCheckboxChange('map-stellar-velocity-error', e.target.checked)}
+                />
                 <span className="checkmark"></span>
-                Stellar velocity Error
+                <span> </span>Stellar velocity Error
               </label>
               <label className="checkbox-item">
-                <input type="checkbox" id="map-velocity-dispersion" />
+                <input 
+                  type="checkbox" 
+                  id="map-velocity-dispersion" 
+                  checked={checkboxStates['map-velocity-dispersion']}
+                  onChange={(e) => onCheckboxChange('map-velocity-dispersion', e.target.checked)}
+                />
                 <span className="checkmark"></span>
-                Velocity dispersion
+                <span> </span>Velocity dispersion
               </label>
               <label className="checkbox-item">
-                <input type="checkbox" id="map-velocity-dispersion-error" />
+                <input 
+                  type="checkbox" 
+                  id="map-velocity-dispersion-error" 
+                  checked={checkboxStates['map-velocity-dispersion-error']}
+                  onChange={(e) => onCheckboxChange('map-velocity-dispersion-error', e.target.checked)}
+                />
                 <span className="checkmark"></span>
-                Velocity dispersion Error
+                <span> </span>Velocity dispersion Error
               </label>
               <label className="checkbox-item">
-                <input type="checkbox" id="map-h3" />
+                <input 
+                  type="checkbox" 
+                  id="map-h3" 
+                  checked={checkboxStates['map-h3']}
+                  onChange={(e) => onCheckboxChange('map-h3', e.target.checked)}
+                />
                 <span className="checkmark"></span>
-                h3
+                <span> </span>h3
               </label>
               <label className="checkbox-item">
-                <input type="checkbox" id="map-h4" />
+                <input 
+                  type="checkbox" 
+                  id="map-h4" 
+                  checked={checkboxStates['map-h4']}
+                  onChange={(e) => onCheckboxChange('map-h4', e.target.checked)}
+                />
                 <span className="checkmark"></span>
-                h4
+                <span> </span>h4
               </label>
             </div>
           </div>
@@ -55,19 +86,34 @@ const Sidebar = ({ aladinInstance }) => {
             <h5>Stellar Populations</h5>
             <div className="checkbox-list">
               <label className="checkbox-item">
-                <input type="checkbox" id="map-age-weighted" />
+                <input 
+                  type="checkbox" 
+                  id="map-age-weighted" 
+                  checked={checkboxStates['map-age-weighted']}
+                  onChange={(e) => onCheckboxChange('map-age-weighted', e.target.checked)}
+                />
                 <span className="checkmark"></span>
-                Age (lum. weighted)
+                <span> </span>Age (lum. weighted)
               </label>
               <label className="checkbox-item">
-                <input type="checkbox" id="map-age-mass-weighted" />
+                <input 
+                  type="checkbox" 
+                  id="map-age-mass-weighted" 
+                  checked={checkboxStates['map-age-mass-weighted']}
+                  onChange={(e) => onCheckboxChange('map-age-mass-weighted', e.target.checked)}
+                />
                 <span className="checkmark"></span>
-                Age (Mass Weighted)
+                <span> </span>Age (Mass Weighted)
               </label>
               <label className="checkbox-item">
-                <input type="checkbox" id="map-metallicity" />
+                <input 
+                  type="checkbox" 
+                  id="map-metallicity" 
+                  checked={checkboxStates['map-metallicity']}
+                  onChange={(e) => onCheckboxChange('map-metallicity', e.target.checked)}
+                />
                 <span className="checkmark"></span>
-                Metallicity
+                <span> </span>Metallicity
               </label>
             </div>
           </div>
@@ -78,24 +124,44 @@ const Sidebar = ({ aladinInstance }) => {
           <h4>Display Options</h4>
           <div className="checkbox-list">
             <label className="checkbox-item">
-              <input type="checkbox" id="display-grid" />
+              <input 
+                type="checkbox" 
+                id="display-grid" 
+                checked={checkboxStates['display-grid']}
+                onChange={(e) => onCheckboxChange('display-grid', e.target.checked)}
+              />
               <span className="checkmark"></span>
-              Coordinate Grid
+              <span> </span>Coordinate Grid
             </label>
             <label className="checkbox-item">
-              <input type="checkbox" id="display-reticle" defaultChecked />
+              <input 
+                type="checkbox" 
+                id="display-reticle" 
+                checked={checkboxStates['display-reticle']}
+                onChange={(e) => onCheckboxChange('display-reticle', e.target.checked)}
+              />
               <span className="checkmark"></span>
-              Center Reticle
+              <span> </span>Center Reticle
             </label>
             <label className="checkbox-item">
-              <input type="checkbox" id="display-labels" />
+              <input 
+                type="checkbox" 
+                id="display-labels" 
+                checked={checkboxStates['display-labels']}
+                onChange={(e) => onCheckboxChange('display-labels', e.target.checked)}
+              />
               <span className="checkmark"></span>
-              Object Labels
+              <span> </span>Object Labels
             </label>
             <label className="checkbox-item">
-              <input type="checkbox" id="display-healpix" />
+              <input 
+                type="checkbox" 
+                id="display-healpix" 
+                checked={checkboxStates['display-healpix']}
+                onChange={(e) => onCheckboxChange('display-healpix', e.target.checked)}
+              />
               <span className="checkmark"></span>
-              HEALPix Grid
+              <span> </span>HEALPix Grid
             </label>
           </div>
         </div>
@@ -109,127 +175,61 @@ const Sidebar = ({ aladinInstance }) => {
 /**
  * Set up sidebar controls functionality
  * @param {Object} aladin - The Aladin Lite instance
+ * @param {Object} checkboxStates - Current checkbox states
+ * @param {Function} onCheckboxChange - Callback for checkbox changes
  */
-const setupSidebarControls = (aladin) => {
-
-  // Display options - using correct Aladin v3 API methods
-  const displayControls = {
-    'display-grid': () => {
-      const checkbox = document.getElementById('display-grid');
-      const isChecked = checkbox.checked;
-      
-      try {
-        if (isChecked) {
-          aladin.showCooGrid();
-          console.log('Coordinate grid enabled');
-        } else {
-          aladin.hideCooGrid();
-          console.log('Coordinate grid disabled');
-        }
-      } catch (error) {
-        console.error('Grid control error:', error);
-      }
-    },
-    
-    'display-reticle': () => {
-      const checkbox = document.getElementById('display-reticle');
-      const isChecked = checkbox.checked;
-      
-      try {
-        aladin.showReticle(isChecked);
-        console.log(`Reticle ${isChecked ? 'enabled' : 'disabled'}`);
-      } catch (error) {
-        console.error('Reticle control error:', error);
-      }
-    },
-    'display-labels': () => {
-      const checkbox = document.getElementById('display-labels');
-      console.log(`Object labels ${checkbox.checked ? 'enabled' : 'disabled'}`);
-      // This would require catalog management - for now just log
-      try {
-        // Try to toggle catalog labels if any catalogs are loaded
-        const catalogs = aladin.getCatalogs();
-        catalogs.forEach(catalog => {
-          if (catalog.setShowLabels) {
-            catalog.setShowLabels(checkbox.checked);
-          }
-        });
-      } catch (error) {
-        console.log('Label display control not available:', error);
-      }
-    },
-
-    'display-healpix': () => {
-      const checkbox = document.getElementById('display-healpix');
-      const isChecked = checkbox.checked;
-      
-      try {
-        aladin.showHealpixGrid(isChecked);
-        console.log(`HEALPix grid ${isChecked ? 'enabled' : 'disabled'}`);
-      } catch (error) {
-        console.error('HEALPix grid control error:', error);
-      }
+const setupSidebarControls = (aladin, checkboxStates, onCheckboxChange) => {
+  // Apply current display states to Aladin when component mounts
+  if (checkboxStates['display-grid']) {
+    try {
+      aladin.showCooGrid();
+      console.log('Coordinate grid enabled (on mount)');
+    } catch (error) {
+      console.error('Grid control error:', error);
     }
-  };
-
-  Object.entries(displayControls).forEach(([checkboxId, handler]) => {
-    const checkbox = document.getElementById(checkboxId);
-    if (checkbox) {
-      checkbox.addEventListener('change', handler);
+  }
+  
+  if (checkboxStates['display-reticle']) {
+    try {
+      aladin.showReticle(true);
+      console.log('Reticle enabled (on mount)');
+    } catch (error) {
+      console.error('Reticle control error:', error);
     }
-  });
-
-  // Available Maps controls - connect to gallery
-  const mapControls = {
-    'map-stellar-velocity': { label: 'Stellar velocity', icon: '🌀' },
-    'map-velocity-dispersion': { label: 'Velocity dispersion', icon: '📊' },
-    'map-stellar-velocity-error': { label: 'Stellar velocity Error', icon: '⚠️' },
-    'map-velocity-dispersion-error': { label: 'Velocity dispersion Error', icon: '📈' },
-    'map-h3': { label: 'h3', icon: 'H₃' },
-    'map-h4': { label: 'h4', icon: 'H₄' },
-    'map-age-weighted': { label: 'Age (lum. weighted)', icon: '⏳' },
-    'map-age-mass-weighted': { label: 'Age (Mass Weighted)', icon: '⚖️' },
-    'map-metallicity': { label: 'Metallicity', icon: '⚛️' }
-  };
-
-  Object.entries(mapControls).forEach(([checkboxId, config]) => {
-    const checkbox = document.getElementById(checkboxId);
-    if (checkbox) {
-      checkbox.addEventListener('change', (event) => {
-        // Check if we have a current object loaded
-        const currentObject = window.currentLoadedObject;
-        
-        console.log(`📋 Checkbox ${checkboxId} changed to ${event.target.checked}, currentObject: ${currentObject}`);
-        
-        if (currentObject) {
-          // If an object is loaded, reload its images based on current selections
-          console.log(`🔄 Reloading images for ${currentObject} due to ${config.label} change`);
-          if (window.loadObjectImages) {
-            window.loadObjectImages(currentObject);
-          }
-        } else {
-          // No object loaded, use placeholder system
-          const mapType = checkboxId.replace('map-', '');
-          
-          if (event.target.checked) {
-            // Add to gallery
-            if (window.addMapToGallery) {
-              window.addMapToGallery(mapType, config.label, config.icon);
-            }
-            console.log(`Added ${config.label} to gallery`);
-          } else {
-            // Remove from gallery
-            if (window.removeMapFromGallery) {
-              window.removeMapFromGallery(mapType);
-            }
-            console.log(`Removed ${config.label} from gallery`);
-          }
+  }
+  
+  if (checkboxStates['display-labels']) {
+    try {
+      const catalogs = aladin.getCatalogs();
+      catalogs.forEach(catalog => {
+        if (catalog.setShowLabels) {
+          catalog.setShowLabels(true);
         }
       });
+      console.log('Object labels enabled (on mount)');
+    } catch (error) {
+      console.log('Label display control not available:', error);
     }
-  });
+  }
 
-  console.log('Sidebar controls set up');
+  if (checkboxStates['display-healpix']) {
+    try {
+      aladin.showHealpixGrid(true);
+      console.log('HEALPix grid enabled (on mount)');
+    } catch (error) {
+      console.error('HEALPix grid control error:', error);
+    }
+  }
+
+  // Note: Gallery manipulation is handled by App component's handleCheckboxChange
+  // to prevent duplicate images when switching tabs
+  console.log('Sidebar controls set up with preserved state');
+};
+
+Sidebar.propTypes = {
+  aladinInstance: PropTypes.object,
+  checkboxStates: PropTypes.object.isRequired,
+  onCheckboxChange: PropTypes.func.isRequired,
 };
 
 export default Sidebar; 

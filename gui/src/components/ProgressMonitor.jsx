@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import PropTypes from 'prop-types';
 
 function FileUpload({ selectedDataset, datasetName }) {
   const [dragActive, setDragActive] = useState(false);
@@ -57,6 +58,38 @@ function FileUpload({ selectedDataset, datasetName }) {
     setUploadQueue(prev => prev.filter(f => f.id !== fileId));
   };
 
+  /**
+   * Update file progress to 50%
+   * @param {string} fileId - The file ID to update
+   */
+  const updateFileToHalfProgress = (fileId) => {
+    setUploadQueue(prev => prev.map(f => 
+      f.id === fileId ? { ...f, status: 'uploading', progress: 50 } : f
+    ));
+  };
+
+  /**
+   * Complete file upload (100% progress)
+   * @param {string} fileId - The file ID to complete
+   */
+  const completeFileUpload = (fileId) => {
+    setUploadQueue(prev => prev.map(f => 
+      f.id === fileId ? { ...f, status: 'completed', progress: 100 } : f
+    ));
+  };
+
+  /**
+   * Simulate upload progress for a single file
+   * @param {Object} file - File object with ID
+   * @param {number} delay - Initial delay before starting upload
+   */
+  const simulateFileUpload = (file, delay) => {
+    setTimeout(() => {
+      updateFileToHalfProgress(file.id);
+      setTimeout(() => completeFileUpload(file.id), 1000);
+    }, delay);
+  };
+
   const uploadFiles = () => {
     // Mock upload process - in real app this would upload to S3
     setUploadQueue(prev => prev.map(file => ({
@@ -65,19 +98,9 @@ function FileUpload({ selectedDataset, datasetName }) {
       progress: 0
     })));
 
-    // Simulate upload progress
+    // Simulate upload progress for each file
     uploadQueue.forEach((file, index) => {
-      setTimeout(() => {
-        setUploadQueue(prev => prev.map(f => 
-          f.id === file.id ? { ...f, status: 'uploading', progress: 50 } : f
-        ));
-        
-        setTimeout(() => {
-          setUploadQueue(prev => prev.map(f => 
-            f.id === file.id ? { ...f, status: 'completed', progress: 100 } : f
-          ));
-        }, 1000);
-      }, index * 200);
+      simulateFileUpload(file, index * 200);
     });
   };
 
@@ -92,6 +115,25 @@ function FileUpload({ selectedDataset, datasetName }) {
       case 'completed': return '#68D391';
       case 'error': return '#FC8181';
       default: return '#A0AEC0';
+    }
+  };
+
+  /**
+   * Handle file input trigger from click or keyboard
+   */
+  const triggerFileInput = () => {
+    fileInputRef.current?.click();
+  };
+
+  /**
+   * Handle keyboard interactions for upload zone
+   * @param {KeyboardEvent} e - Keyboard event
+   */
+  const handleKeyDown = (e) => {
+    // Trigger file input on Enter or Space key
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      triggerFileInput();
     }
   };
 
@@ -130,7 +172,11 @@ function FileUpload({ selectedDataset, datasetName }) {
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
             onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={triggerFileInput}
+            onKeyDown={handleKeyDown}
+            tabIndex={0}
+            role="button"
+            aria-label="Upload files - click or press Enter/Space to browse files, or drag and drop files here"
           >
             <input
               ref={fileInputRef}
@@ -199,5 +245,10 @@ function FileUpload({ selectedDataset, datasetName }) {
     </div>
   );
 }
+
+FileUpload.propTypes = {
+  selectedDataset: PropTypes.string.isRequired,
+  datasetName: PropTypes.string.isRequired
+};
 
 export default FileUpload; 

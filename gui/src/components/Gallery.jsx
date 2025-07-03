@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import PropTypes from 'prop-types';
 
 const Gallery = ({ aladinInstance }) => {
   useEffect(() => {
@@ -13,7 +14,7 @@ const Gallery = ({ aladinInstance }) => {
         <div className="gallery-items" id="gallery-items">
           {/* Gallery starts empty - images appear when sidebar options are selected */}
           <div className="empty-gallery-message" id="empty-gallery-message">
-            <p>Select options from the sidebar and navigate to a celestial object to view maps</p>
+            <p>Select at least 1 option from the sidebar and navigate to a celestial object to view maps</p>
           </div>
         </div>
       </div>
@@ -58,6 +59,15 @@ const setupViewChangeMonitoring = (aladin) => {
  * Set up image modal functionality
  */
 const setupImageModal = () => {
+  // Setup modal with react-rnd integration
+  setupModalRnd();
+};
+
+/**
+ * Setup modal for react-rnd integration
+ */
+const setupModalRnd = () => {
+  // The modal is now handled by react-rnd, so we only need to setup basic modal functionality
   const modal = document.getElementById('image-modal');
   const modalClose = document.getElementById('modal-close');
   const modalBackdrop = document.getElementById('modal-backdrop');
@@ -78,142 +88,6 @@ const setupImageModal = () => {
       closeImageModal();
     }
   });
-  
-  // Setup modal dragging
-  setupModalDrag();
-};
-
-/**
- * Setup modal drag functionality
- */
-const setupModalDrag = () => {
-  const modalHeader = document.querySelector('.modal-header');
-  const modalContent = document.querySelector('.modal-content');
-  
-  if (!modalHeader || !modalContent) return;
-  
-  let isDragging = false;
-  let startX = 0;
-  let startY = 0;
-  let initialX = 0;
-  let initialY = 0;
-  
-  // Initialize modal position
-  modalContent._currentX = 0;
-  modalContent._currentY = 0;
-  
-  const updateModalPosition = () => {
-    modalContent.style.transform = `translate(${modalContent._currentX}px, ${modalContent._currentY}px)`;
-  };
-  
-  const handleMouseDown = (e) => {
-    // Only allow dragging if clicking on the header (not close button, transparency controls, or nav buttons)
-    if (e.target.closest('.modal-close') || e.target.closest('.transparency-control') || e.target.closest('.modal-nav-buttons')) return;
-    
-    isDragging = true;
-    startX = e.clientX;
-    startY = e.clientY;
-    initialX = modalContent._currentX;
-    initialY = modalContent._currentY;
-    
-    modalContent.classList.add('dragging');
-    document.body.style.userSelect = 'none';
-    
-    e.preventDefault();
-  };
-  
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    
-    const deltaX = e.clientX - startX;
-    const deltaY = e.clientY - startY;
-    
-    modalContent._currentX = initialX + deltaX;
-    modalContent._currentY = initialY + deltaY;
-    
-    // Keep modal within viewport bounds
-    const rect = modalContent.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    // Prevent modal from going too far off screen
-    const minX = -rect.width + 100; // Keep at least 100px visible
-    const maxX = viewportWidth - 100;
-    const minY = -rect.height + 100;
-    const maxY = viewportHeight - 100;
-    
-    modalContent._currentX = Math.max(minX, Math.min(maxX, modalContent._currentX));
-    modalContent._currentY = Math.max(minY, Math.min(maxY, modalContent._currentY));
-    
-    updateModalPosition();
-    e.preventDefault();
-  };
-  
-  const handleMouseUp = () => {
-    if (!isDragging) return;
-    
-    isDragging = false;
-    modalContent.classList.remove('dragging');
-    document.body.style.userSelect = '';
-  };
-  
-  // Touch events for mobile
-  const handleTouchStart = (e) => {
-    if (e.target.closest('.modal-close') || e.target.closest('.transparency-control') || e.target.closest('.modal-nav-buttons')) return;
-    
-    const touch = e.touches[0];
-    isDragging = true;
-    startX = touch.clientX;
-    startY = touch.clientY;
-    initialX = modalContent._currentX;
-    initialY = modalContent._currentY;
-    
-    modalContent.classList.add('dragging');
-    
-    e.preventDefault();
-  };
-  
-  const handleTouchMove = (e) => {
-    if (!isDragging) return;
-    
-    const touch = e.touches[0];
-    const deltaX = touch.clientX - startX;
-    const deltaY = touch.clientY - startY;
-    
-    modalContent._currentX = initialX + deltaX;
-    modalContent._currentY = initialY + deltaY;
-    
-    // Keep modal within viewport bounds
-    const rect = modalContent.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    const minX = -rect.width + 100;
-    const maxX = viewportWidth - 100;
-    const minY = -rect.height + 100;
-    const maxY = viewportHeight - 100;
-    
-    modalContent._currentX = Math.max(minX, Math.min(maxX, modalContent._currentX));
-    modalContent._currentY = Math.max(minY, Math.min(maxY, modalContent._currentY));
-    
-    updateModalPosition();
-    e.preventDefault();
-  };
-  
-  const handleTouchEnd = () => {
-    isDragging = false;
-    modalContent.classList.remove('dragging');
-  };
-  
-  // Add event listeners
-  modalHeader.addEventListener('mousedown', handleMouseDown);
-  document.addEventListener('mousemove', handleMouseMove);
-  document.addEventListener('mouseup', handleMouseUp);
-  
-  // Touch events
-  modalHeader.addEventListener('touchstart', handleTouchStart);
-  document.addEventListener('touchmove', handleTouchMove);
-  document.addEventListener('touchend', handleTouchEnd);
 };
 
 /**
@@ -368,11 +242,11 @@ const openImageModal = (imageSrc, title, objectName, clickedItem = null) => {
   const modalImage = document.getElementById('modal-image');
   const modalTitle = document.getElementById('modal-title');
   const modalObject = document.getElementById('modal-object');
-  const modalContent = document.querySelector('.modal-content');
+  const modalRnd = document.querySelector('.modal-content-rnd');
   const modalBody = document.querySelector('.modal-body');
   const transparencySlider = document.getElementById('transparency-slider');
   
-  if (modal && modalImage && modalTitle && modalObject && modalContent) {
+  if (modal && modalImage && modalTitle && modalObject && modalRnd) {
     modalImage.src = imageSrc;
     modalImage.alt = `${title} for ${objectName}`;
     modalTitle.textContent = title;
@@ -380,11 +254,6 @@ const openImageModal = (imageSrc, title, objectName, clickedItem = null) => {
     
     // Set up navigation state
     setupNavigationState(clickedItem, imageSrc);
-    
-    // Reset modal position - center horizontally, raise vertically
-    modalContent._currentX = 0;
-    modalContent._currentY = -80; // Raise modal 80px above center
-    modalContent.style.transform = 'translate(0, -80px)';
     
     // Reset transparency to default (only affect body)
     if (transparencySlider && modalBody) {
@@ -402,8 +271,15 @@ const openImageModal = (imageSrc, title, objectName, clickedItem = null) => {
     // Set up navigation if not already done
     setupModalNavigation();
     
+    // Show the modal and the Rnd component
     modal.classList.add('active');
+    modalRnd.style.display = 'block';
     document.body.style.overflow = 'hidden'; // Prevent background scrolling
+    
+    // Center the modal using react-rnd's positioning API
+    if (window.centerModal) {
+      window.centerModal();
+    }
     
     console.log(`🖼️ Opened modal for ${title} - ${objectName} (${currentImageIndex + 1}/${currentGalleryItems.length})`);
   }
@@ -450,18 +326,16 @@ const setupNavigationState = (clickedItem, imageSrc) => {
 const closeImageModal = () => {
   const modal = document.getElementById('image-modal');
   const modalImage = document.getElementById('modal-image');
-  const modalContent = document.querySelector('.modal-content');
+  const modalRnd = document.querySelector('.modal-content-rnd');
   const modalBody = document.querySelector('.modal-body');
   
   if (modal) {
     modal.classList.remove('active');
     document.body.style.overflow = ''; // Restore scrolling
     
-    // Reset modal position
-    if (modalContent) {
-      modalContent._currentX = 0;
-      modalContent._currentY = -80;
-      modalContent.style.transform = 'translate(0, -80px)';
+    // Hide the Rnd component
+    if (modalRnd) {
+      modalRnd.style.display = 'none';
     }
     
     // Reset modal body opacity
@@ -694,6 +568,59 @@ const removeInteractionListeners = (image) => {
 };
 
 /**
+ * Process image loading for checked map types
+ * @param {Array} mapTypes - Array of map type configurations
+ * @param {string} normalizedName - Normalized object name
+ * @param {string} objectName - Original object name
+ * @returns {Promise<number>} - Number of images loaded
+ */
+const processImageLoading = async (mapTypes, normalizedName, objectName) => {
+  let imagesLoaded = 0;
+  
+  for (const mapType of mapTypes) {
+    const checkbox = document.getElementById(mapType.checkboxId);
+    
+    if (checkbox && checkbox.checked) {
+      const imageName = `${normalizedName}_${mapType.suffix}`;
+      const imageFound = await tryLoadObjectImage(imageName, mapType, objectName);
+      if (imageFound) {
+        imagesLoaded++;
+      }
+    }
+  }
+  
+  return imagesLoaded;
+};
+
+/**
+ * Handle the final status after image loading
+ * @param {number} imagesLoaded - Number of images loaded
+ * @param {Array} mapTypes - Array of map type configurations
+ * @param {string} objectName - Original object name
+ */
+const handleLoadingStatus = (imagesLoaded, mapTypes, objectName) => {
+  if (imagesLoaded === 0) {
+    const anyChecked = mapTypes.some(mapType => {
+      const checkbox = document.getElementById(mapType.checkboxId);
+      return checkbox && checkbox.checked;
+    });
+    
+    if (!anyChecked) {
+      showNoOptionsSelectedMessage(objectName);
+    } else {
+      showNoImagesMessage(objectName);
+    }
+  } else {
+    console.log(`Loaded ${imagesLoaded} images for ${objectName}`);
+    
+    const statusElement = document.getElementById('current-status');
+    if (statusElement) {
+      statusElement.textContent = `Loaded ${imagesLoaded} maps for ${objectName} - click on an image to select`;
+    }
+  }
+};
+
+/**
  * Load object images when navigating to a celestial object
  * @param {string} objectName - The name of the object (e.g., 'NGC7025')
  */
@@ -739,44 +666,11 @@ const loadObjectImages = async (objectName) => {
     { key: 'metallicity', suffix: 'metallicity', label: 'Metallicity', checkboxId: 'map-metallicity' }
   ];
   
-  let imagesLoaded = 0;
+  // Process image loading for checked map types
+  const imagesLoaded = await processImageLoading(mapTypes, normalizedName, objectName);
   
-  // Try to load each map type, but only if it's checked in the sidebar
-  for (const mapType of mapTypes) {
-    const checkbox = document.getElementById(mapType.checkboxId);
-    
-    // Only load image if the corresponding checkbox is checked
-    if (checkbox && checkbox.checked) {
-      const imageName = `${normalizedName}_${mapType.suffix}`;
-      const imageFound = await tryLoadObjectImage(imageName, mapType, objectName);
-      if (imageFound) {
-        imagesLoaded++;
-      }
-    }
-  }
-  
-  if (imagesLoaded === 0) {
-    // Check if any checkboxes are selected
-    const anyChecked = mapTypes.some(mapType => {
-      const checkbox = document.getElementById(mapType.checkboxId);
-      return checkbox && checkbox.checked;
-    });
-    
-    if (!anyChecked) {
-      showNoOptionsSelectedMessage(objectName);
-    } else {
-      // Checkboxes are selected but no images found
-      showNoImagesMessage(objectName);
-    }
-  } else {
-    console.log(`Loaded ${imagesLoaded} images for ${objectName}`);
-    
-    // Update status
-    const statusElement = document.getElementById('current-status');
-    if (statusElement) {
-      statusElement.textContent = `Loaded ${imagesLoaded} maps for ${objectName} - click on an image to select`;
-    }
-  }
+  // Handle final status
+  handleLoadingStatus(imagesLoaded, mapTypes, objectName);
 };
 
 /**
@@ -1004,7 +898,25 @@ const isAtObjectCoordinates = (objectName) => {
  * @param {string} icon - The icon to display
  */
 const addMapToGallery = (mapType, label, icon) => {
-  console.log(`📦 Adding placeholder: ${label} (${mapType})`);
+  console.log(`📦 Checking conditions for placeholder: ${label} (${mapType})`);
+  
+  // Check if at least 1 checkbox is selected
+  const allCheckboxes = document.querySelectorAll('input[type="checkbox"][id^="map-"]');
+  const checkedCount = Array.from(allCheckboxes).filter(cb => cb.checked).length;
+  
+  if (checkedCount < 1) {
+    console.log(`❌ Not enough options selected (${checkedCount}/1 minimum required)`);
+    return;
+  }
+  
+  // Check if we're at object coordinates
+  if (!window.currentLoadedObject || !isAtObjectCoordinates(window.currentLoadedObject)) {
+    console.log(`❌ Not at object coordinates or no object loaded`);
+    return;
+  }
+  
+  console.log(`✅ Both conditions met - adding placeholder: ${label} (${mapType})`);
+  
   const galleryItems = document.getElementById('gallery-items');
   const emptyMessage = document.getElementById('empty-gallery-message');
   
@@ -1062,12 +974,23 @@ const removeMapFromGallery = (mapType) => {
   if (mapItem) {
     mapItem.remove();
     console.log(`Removed ${mapType} from gallery`);
-    
-    // Show empty message if no items left
-    const remainingItems = galleryItems.querySelectorAll('.gallery-item');
-    if (remainingItems.length === 0) {
-      showEmptyGalleryMessage();
-    }
+  }
+  
+  // Check if we still meet the conditions for showing placeholders
+  const allCheckboxes = document.querySelectorAll('input[type="checkbox"][id^="map-"]');
+  const checkedCount = Array.from(allCheckboxes).filter(cb => cb.checked).length;
+  
+  if (checkedCount < 1) {
+    // Remove all remaining placeholders since we don't meet the minimum requirement
+    const remainingPlaceholders = galleryItems.querySelectorAll('.placeholder-item');
+    remainingPlaceholders.forEach(item => item.remove());
+    console.log(`Removed all placeholders - only ${checkedCount} options selected (minimum 1 required)`);
+  }
+  
+  // Show empty message if no items left
+  const remainingItems = galleryItems.querySelectorAll('.gallery-item');
+  if (remainingItems.length === 0) {
+    showEmptyGalleryMessage();
   }
 };
 
@@ -1109,7 +1032,7 @@ const showEmptyGalleryMessage = () => {
     newEmptyMessage.className = 'empty-gallery-message';
     newEmptyMessage.id = 'empty-gallery-message';
     newEmptyMessage.innerHTML = `
-      <p>Select options from the sidebar and navigate to a celestial object to view maps</p>
+      <p>Select at least 1 option from the sidebar and navigate to a celestial object to view maps</p>
     `;
     galleryItems.appendChild(newEmptyMessage);
   }
@@ -1120,5 +1043,9 @@ window.addMapToGallery = addMapToGallery;
 window.removeMapFromGallery = removeMapFromGallery;
 window.clearGallery = clearGallery;
 window.loadObjectImages = loadObjectImages;
+
+Gallery.propTypes = {
+  aladinInstance: PropTypes.object, // Can be null during initialization
+};
 
 export default Gallery; 

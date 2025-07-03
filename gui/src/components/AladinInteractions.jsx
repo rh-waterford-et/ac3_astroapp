@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import PropTypes from 'prop-types';
 
 const AladinInteractions = ({ aladinInstance }) => {
   useEffect(() => {
@@ -285,6 +286,10 @@ Enjoy exploring the universe! 🌌
   `;
   
   alert(helpText);
+};
+
+AladinInteractions.propTypes = {
+  aladinInstance: PropTypes.object, // Can be null during initialization
 };
 
 export default AladinInteractions; 

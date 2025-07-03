@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 
 function DatasetProgressBar({ 
   progress = 0, 
@@ -7,7 +8,7 @@ function DatasetProgressBar({
   height = 8,
   animated = false 
 }) {
-  const getProgressColor = (status, progress) => {
+  const getProgressColor = (status) => {
     switch (status) {
       case 'completed': return '#68D391';
       case 'processing': return '#4FD1C5';  
@@ -31,7 +32,7 @@ function DatasetProgressBar({
   const getProgressFillStyles = () => ({
     height: '100%',
     width: `${Math.min(Math.max(progress, 0), 100)}%`,
-    backgroundColor: getProgressColor(status, progress),
+    backgroundColor: getProgressColor(status),
     borderRadius: '4px',
     transition: 'width 0.3s ease, background-color 0.3s ease',
     position: 'relative',
@@ -92,5 +93,13 @@ function DatasetProgressBar({
     </div>
   );
 }
+
+DatasetProgressBar.propTypes = {
+  progress: PropTypes.number,
+  status: PropTypes.oneOf(['completed', 'processing', 'queued', 'ready', 'error']),
+  showPercentage: PropTypes.bool,
+  height: PropTypes.number,
+  animated: PropTypes.bool,
+};
 
 export default DatasetProgressBar; 
