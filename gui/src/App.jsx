@@ -174,10 +174,10 @@ function App() {
     if (activeTab === 'maps') {
       // Small delay to ensure gallery component is mounted
       setTimeout(() => {
-        // Re-establish search controls when switching back to Maps tab
+        // Re-establish all controls when switching back to Maps tab
         if (aladinInstance) {
-          console.log('Re-establishing search controls for Maps tab');
-          setupSearchControls(aladinInstance);
+          console.log('Re-establishing all controls for Maps tab');
+          setupControls(aladinInstance);
         }
         
         // Store current object and coordinates before clearing gallery
