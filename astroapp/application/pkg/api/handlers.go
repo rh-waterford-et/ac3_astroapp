@@ -37,6 +37,19 @@ type CreateDatasetResponse struct {
 	Message string `json:"message"`
 }
 
+type DatasetFile struct {
+	Name      string `json:"name"`
+	Size      int64  `json:"size"`
+	Timestamp string `json:"timestamp"`
+	Key       string `json:"key"`
+}
+
+type ListDatasetFilesResponse struct {
+	Success bool          `json:"success"`
+	Files   []DatasetFile `json:"files"`
+	Message string        `json:"message,omitempty"`
+}
+
 func NewFileUploadHandler(s3Bucket s3bucket.S3BucketInterface) *FileUploadHandler {
 	return &FileUploadHandler{
 		S3Bucket: s3Bucket,
@@ -310,4 +323,200 @@ func (h *FileUploadHandler) CreateDataset(w http.ResponseWriter, r *http.Request
 		Message: "Dataset created successfully",
 	}
 	json.NewEncoder(w).Encode(response)
-} 
+}
+
+func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get dataset name from URL query parameter
+	dataset := r.URL.Query().Get("dataset")
+	if dataset == "" {
+		response := ListDatasetFilesResponse{
+			Success: false,
+			Files:   []DatasetFile{},
+			Message: "Dataset parameter is required",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Validate dataset name
+	if strings.Contains(dataset, "/") || strings.Contains(dataset, "\\") {
+		response := ListDatasetFilesResponse{
+			Success: false,
+			Files:   []DatasetFile{},
+			Message: "Invalid dataset name",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// List objects in the specific dataset's input folder
+	folderPath := fmt.Sprintf("starlight/input/%s", dataset)
+	objects, err := h.S3Bucket.GetS3Objects(folderPath)
+	if err != nil {
+		log.Printf("Error listing S3 objects for dataset %s: %v", dataset, err)
+		response := ListDatasetFilesResponse{
+			Success: false,
+			Files:   []DatasetFile{},
+			Message: "Failed to list dataset files",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Convert objects to DatasetFile structs
+	files := make([]DatasetFile, 0)
+	for _, object := range objects {
+		// GetS3Objects returns just the filename (without the full path)
+		filename := object
+		
+		// Skip placeholder files
+		if filename == ".dataset_placeholder" {
+			continue
+		}
+		
+		// Get file metadata from S3
+		fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
+		metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
+		if err != nil {
+			log.Printf("Warning: Could not get metadata for %s: %v", filename, err)
+			// Still include the file with basic info
+			files = append(files, DatasetFile{
+				Name:      filename,
+				Size:      0,
+				Timestamp: "Unknown",
+				Key:       fullObjectKey,
+			})
+			continue
+		}
+		
+		files = append(files, DatasetFile{
+			Name:      filename,
+			Size:      metadata.Size,
+			Timestamp: metadata.LastModified.Format("2006-01-02 15:04:05"),
+			Key:       fullObjectKey,
+		})
+	}
+
+	log.Printf("Found %d files in dataset %s", len(files), dataset)
+
+	response := ListDatasetFilesResponse{
+		Success: true,
+		Files:   files,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get dataset name from URL query parameter
+	dataset := r.URL.Query().Get("dataset")
+	if dataset == "" {
+		response := ListDatasetFilesResponse{
+			Success: false,
+			Files:   []DatasetFile{},
+			Message: "Dataset parameter is required",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Validate dataset name
+	if strings.Contains(dataset, "/") || strings.Contains(dataset, "\\") {
+		response := ListDatasetFilesResponse{
+			Success: false,
+			Files:   []DatasetFile{},
+			Message: "Invalid dataset name",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// List objects in the specific dataset's output folder
+	folderPath := fmt.Sprintf("starlight/output/%s", dataset)
+	objects, err := h.S3Bucket.GetS3Objects(folderPath)
+	if err != nil {
+		log.Printf("Error listing S3 objects for dataset %s output: %v", dataset, err)
+		response := ListDatasetFilesResponse{
+			Success: false,
+			Files:   []DatasetFile{},
+			Message: "Failed to list dataset output files",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Convert objects to DatasetFile structs
+	files := make([]DatasetFile, 0)
+	for _, object := range objects {
+		// GetS3Objects returns just the filename (without the full path)
+		filename := object
+		
+		// Skip placeholder files
+		if filename == ".dataset_placeholder" {
+			continue
+		}
+		
+		// Get file metadata from S3
+		fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
+		metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
+		if err != nil {
+			log.Printf("Warning: Could not get metadata for %s: %v", filename, err)
+			// Still include the file with basic info
+			files = append(files, DatasetFile{
+				Name:      filename,
+				Size:      0,
+				Timestamp: "Unknown",
+				Key:       fullObjectKey,
+			})
+			continue
+		}
+		
+		files = append(files, DatasetFile{
+			Name:      filename,
+			Size:      metadata.Size,
+			Timestamp: metadata.LastModified.Format("2006-01-02 15:04:05"),
+			Key:       fullObjectKey,
+		})
+	}
+
+	log.Printf("Found %d output files in dataset %s", len(files), dataset)
+
+	response := ListDatasetFilesResponse{
+		Success: true,
+		Files:   files,
+	}
+	json.NewEncoder(w).Encode(response)
+}

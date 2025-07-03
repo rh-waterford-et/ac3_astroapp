@@ -3,96 +3,157 @@ import PropTypes from 'prop-types';
 // Re-enabling FileUpload component
 import FileUpload from './ProgressMonitor';
 import PipelineProgressMonitor from './PipelineProgressMonitor';
+import { getDatasets, getDatasetFiles, getDatasetOutputFiles } from '../services/api';
 
 function PipelineMonitor({ selectedApp }) {
-  const [selectedDataset, setSelectedDataset] = useState('dataset1');
+  const [selectedDataset, setSelectedDataset] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const [datasets] = useState([
-    {
-      id: 'dataset1',
-      name: 'NGC7025',
-      type: 'MEGARA',
-      status: 'ready',
-      progress: 0,
-      stage: 'Ready for processing'
-    },
-    {
-      id: 'dataset2', 
-      name: 'IC1683',
-      type: 'MEGARA',
-      status: 'processing',
-      progress: 67,
-      stage: 'Stellar population analysis'
-    },
-    {
-      id: 'dataset3',
-      name: 'NGC2906',
-      type: 'MUSE',
-      status: 'completed',
-      progress: 100,
-      stage: 'Analysis completed'
-    },
-    {
-      id: 'dataset4',
-      name: 'MANGA-8250',
-      type: 'MANGA',
-      status: 'queued',
-      progress: 0,
-      stage: 'Waiting in queue'
-    }
-  ]);
+  // Real datasets from S3
+  const [datasets, setDatasets] = useState([]);
+  const [loadingDatasets, setLoadingDatasets] = useState(false);
+  const [datasetError, setDatasetError] = useState(null);
 
-  // File data for each dataset
-  const [fileData] = useState({
-    dataset1: {
-      input: [
-        { name: 'NGC7025_LR-V_final_cube.fits', size: '2.3 GB', uploaded: '2024-01-15 14:30:22', status: 'processed' },
-        { name: 'NGC7025_spectrum_xpos_00_ypos_01.txt', size: '156 KB', uploaded: '2024-01-15 14:30:45', status: 'processed' },
-        { name: 'NGC7025_spectrum_xpos_00_ypos_02.txt', size: '158 KB', uploaded: '2024-01-15 14:30:47', status: 'processed' },
-        { name: 'NGC7025_kinematic_info.txt', size: '8.2 KB', uploaded: '2024-01-15 14:30:50', status: 'ready' },
-        { name: 'NGC7025_grid_example.in', size: '1.4 KB', uploaded: '2024-01-15 14:31:02', status: 'ready' }
-      ],
-      output: [
-        { name: 'NGC7025_age_mass_weighted.fits', size: '1.8 GB', generated: '2024-01-15 15:45:12', status: 'ready' },
-        { name: 'NGC7025_metallicity_light_weighted.fits', size: '1.8 GB', generated: '2024-01-15 15:45:18', status: 'ready' },
-        { name: 'NGC7025_velocity_dispersion.fits', size: '1.7 GB', generated: '2024-01-15 15:45:22', status: 'ready' },
-        { name: 'NGC7025_stellar_velocity.fits', size: '1.7 GB', generated: '2024-01-15 15:45:25', status: 'ready' }
-      ]
-    },
-    dataset2: {
-      input: [
-        { name: 'IC1683_LR-R_final_cube.fits', size: '2.1 GB', uploaded: '2024-01-16 09:15:33', status: 'processing' },
-        { name: 'IC1683_LR-V_final_cube.fits', size: '2.2 GB', uploaded: '2024-01-16 09:16:12', status: 'processing' },
-        { name: 'IC1683_kinematic_info.txt', size: '7.8 KB', uploaded: '2024-01-16 09:16:45', status: 'queued' }
-      ],
-      output: [
-        { name: 'IC1683_age_mass_weighted.fits', size: '1.9 GB', generated: 'Processing...', status: 'processing' },
-        { name: 'IC1683_metallicity_light_weighted.fits', size: 'Processing...', generated: 'Processing...', status: 'queued' }
-      ]
-    },
-    dataset3: {
-      input: [
-        { name: 'NGC2906_cube.fits', size: '3.4 GB', uploaded: '2024-01-10 16:22:18', status: 'processed' },
-        { name: 'NGC2906_spectrum_files.tar.gz', size: '245 MB', uploaded: '2024-01-10 16:23:42', status: 'processed' },
-        { name: 'NGC2906_kinematic_info.txt', size: '12.1 KB', uploaded: '2024-01-10 16:24:15', status: 'processed' }
-      ],
-      output: [
-        { name: 'NGC2906_age_mass_weighted.fits', size: '2.8 GB', generated: '2024-01-10 18:45:33', status: 'ready' },
-        { name: 'NGC2906_metallicity_light_weighted.fits', size: '2.8 GB', generated: '2024-01-10 18:46:12', status: 'ready' },
-        { name: 'NGC2906_velocity_dispersion.fits', size: '2.7 GB', generated: '2024-01-10 18:46:45', status: 'ready' },
-        { name: 'NGC2906_stellar_velocity.fits', size: '2.7 GB', generated: '2024-01-10 18:47:18', status: 'ready' },
-        { name: 'NGC2906_starlight_summary.log', size: '67 KB', generated: '2024-01-10 18:47:55', status: 'ready' }
-      ]
-    },
-    dataset4: {
-      input: [
-        { name: 'manga-8250-1902-LINCUBE.fits', size: '1.8 GB', uploaded: '2024-01-17 11:30:45', status: 'queued' },
-        { name: 'manga-8250-1902-LOGCUBE.fits', size: '1.8 GB', uploaded: '2024-01-17 11:31:22', status: 'queued' }
-      ],
-      output: []
+  // Real input files from S3
+  const [inputFiles, setInputFiles] = useState([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [filesError, setFilesError] = useState(null);
+
+  // Real output files from S3
+  const [outputFiles, setOutputFiles] = useState([]);
+  const [loadingOutputFiles, setLoadingOutputFiles] = useState(false);
+  const [outputFilesError, setOutputFilesError] = useState(null);
+
+  // Load datasets on component mount
+  useEffect(() => {
+    loadDatasets();
+  }, []);
+
+  // Load files when selected dataset changes
+  useEffect(() => {
+    if (selectedDataset) {
+      loadDatasetFiles(selectedDataset);
+      loadDatasetOutputFiles(selectedDataset);
+    } else {
+      setInputFiles([]);
+      setOutputFiles([]);
     }
-  });
+  }, [selectedDataset]);
+
+  const loadDatasets = async () => {
+    setLoadingDatasets(true);
+    setDatasetError(null);
+    try {
+      const datasetNames = await getDatasets();
+      
+      // Transform dataset names into dataset objects
+      const datasetObjects = datasetNames.map(name => ({
+        id: name,
+        name: name,
+        status: 'ready', // Default status - can be enhanced later
+        progress: 0,
+        stage: 'Ready for processing'
+      }));
+      
+      setDatasets(datasetObjects);
+      
+      // If no dataset is selected and we have datasets, select the first one
+      if (!selectedDataset && datasetObjects.length > 0) {
+        setSelectedDataset(datasetObjects[0].id);
+      }
+      // If selectedDataset doesn't exist in the loaded datasets, select the first one
+      else if (selectedDataset && !datasetObjects.find(d => d.id === selectedDataset) && datasetObjects.length > 0) {
+        setSelectedDataset(datasetObjects[0].id);
+      }
+    } catch (error) {
+      console.error('Failed to load datasets:', error);
+      setDatasetError(error.message || 'Failed to load datasets');
+    } finally {
+      setLoadingDatasets(false);
+    }
+  };
+
+  const loadDatasetFiles = async (datasetName) => {
+    setLoadingFiles(true);
+    setFilesError(null);
+    try {
+      const files = await getDatasetFiles(datasetName);
+      
+      // Transform API response to match current file structure
+      const transformedFiles = files.map(file => ({
+        name: file.name,
+        size: formatFileSize(file.size),
+        uploaded: file.timestamp,
+        status: 'processed', // Default status for existing files
+        key: file.key
+      }));
+      
+      setInputFiles(transformedFiles);
+    } catch (error) {
+      console.error('Failed to load dataset files:', error);
+      setFilesError(error.message || 'Failed to load dataset files');
+      setInputFiles([]);
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
+
+  const loadDatasetOutputFiles = async (datasetName) => {
+    setLoadingOutputFiles(true);
+    setOutputFilesError(null);
+    try {
+      const files = await getDatasetOutputFiles(datasetName);
+      
+      // Transform API response to match current file structure
+      const transformedFiles = files.map(file => ({
+        name: file.name,
+        size: formatFileSize(file.size),
+        uploaded: file.timestamp,
+        status: 'completed', // Default status for output files
+        key: file.key
+      }));
+      
+      setOutputFiles(transformedFiles);
+    } catch (error) {
+      console.error('Failed to load dataset output files:', error);
+      setOutputFilesError(error.message || 'Failed to load dataset output files');
+      setOutputFiles([]);
+    } finally {
+      setLoadingOutputFiles(false);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const truncateFileName = (fileName, maxLength = 50) => {
+    if (fileName.length <= maxLength) return fileName;
+    
+    const lastDotIndex = fileName.lastIndexOf('.');
+    if (lastDotIndex === -1) {
+      // No extension, just truncate from the end
+      return fileName.substring(0, maxLength - 3) + '...';
+    }
+    
+    const extension = fileName.substring(lastDotIndex);
+    const nameWithoutExt = fileName.substring(0, lastDotIndex);
+    
+    const availableLength = maxLength - extension.length - 3; // 3 for "..."
+    
+    if (availableLength <= 0) {
+      // Extension is too long, just show extension
+      return '...' + extension;
+    }
+    
+    return nameWithoutExt.substring(0, availableLength) + '...' + extension;
+  };
+
+
 
   const getDatasetStatusColor = (status) => {
     switch (status) {
@@ -116,7 +177,6 @@ function PipelineMonitor({ selectedApp }) {
     }
   };
 
-  const currentFiles = fileData[selectedDataset] || { input: [], output: [] };
   const selectedDatasetInfo = datasets.find(dataset => dataset.id === selectedDataset);
   const datasetName = selectedDatasetInfo ? selectedDatasetInfo.name : 'Unknown';
 
@@ -144,25 +204,40 @@ function PipelineMonitor({ selectedApp }) {
             <div className="pane-count">{datasets.length}</div>
           </div>
           <div className="pane-content">
-            {datasets.map(dataset => (
-              <button
-                key={dataset.id}
-                className={`dataset-item ${selectedDataset === dataset.id ? 'active' : ''}`}
-                onClick={() => setSelectedDataset(dataset.id)}
-              >
-                <div className="dataset-info">
-                  <div className="dataset-name">{dataset.name}</div>
-                  <div className="dataset-type">{dataset.type}</div>
-                </div>
-                <div className="dataset-status">
-                  <span 
-                    className="status-dot"
-                    style={{ backgroundColor: getDatasetStatusColor(dataset.status) }}
-                    title={dataset.status}
-                  ></span>
-                </div>
-              </button>
-            ))}
+            {loadingDatasets ? (
+              <div className="loading-state">
+                <div className="loading-spinner">Loading datasets...</div>
+              </div>
+            ) : datasetError ? (
+              <div className="error-state">
+                <div className="error-message">⚠️ {datasetError}</div>
+              </div>
+            ) : datasets.length > 0 ? (
+              datasets.map(dataset => (
+                <button
+                  key={dataset.id}
+                  className={`dataset-item ${selectedDataset === dataset.id ? 'active' : ''}`}
+                  onClick={() => setSelectedDataset(dataset.id)}
+                >
+                  <div className="dataset-info">
+                    <div className="dataset-name">{dataset.name}</div>
+                    <div className="dataset-stage">{dataset.stage}</div>
+                  </div>
+                  <div className="dataset-status">
+                    <span 
+                      className="status-dot"
+                      style={{ backgroundColor: getDatasetStatusColor(dataset.status) }}
+                      title={dataset.status}
+                    ></span>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <div className="empty-pane">
+                <div className="empty-icon">📊</div>
+                <p>No datasets found</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -170,20 +245,26 @@ function PipelineMonitor({ selectedApp }) {
         <div className="pipeline-pane files-pane">
           <div className="pane-header">
             <h3>Input Files - {datasetName}</h3>
-            <div className="pane-count">{currentFiles.input.length}</div>
+            <div className="pane-count">{inputFiles.length}</div>
           </div>
           <div className="pane-content">
-            {currentFiles.input.length > 0 ? (
-              currentFiles.input.map((file, index) => (
+            {loadingFiles ? (
+              <div className="loading-state">
+                <div className="loading-spinner">Loading files...</div>
+              </div>
+            ) : filesError ? (
+              <div className="error-state">
+                <div className="error-message">⚠️ {filesError}</div>
+              </div>
+            ) : inputFiles.length > 0 ? (
+              inputFiles.map((file, index) => (
                 <div key={index} className="file-item">
                   <div className="file-info">
-                    <div className="file-name">{file.name}</div>
-                    <div className="file-details">
-                      <span className="file-size">{file.size}</span>
-                      <span className="file-timestamp">{file.uploaded}</span>
-                    </div>
+                    <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
+                    <div className="file-timestamp" style={{ marginLeft: '3rem' }}>{file.uploaded}</div>
                   </div>
-                  <div className="file-status">
+                  <div className="file-status" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="file-size">{file.size}</span>
                     <span 
                       className="status-dot"
                       style={{ backgroundColor: getFileStatusColor(file.status) }}
@@ -204,30 +285,27 @@ function PipelineMonitor({ selectedApp }) {
         {/* Right Pane - Output Files */}
         <div className="pipeline-pane files-pane">
           <div className="pane-header">
-            <div className="pane-header-left">
-              <h3>Output Files - {datasetName}</h3>
-            </div>
-            <div className="pane-header-right">
-              <div className="pane-count">{currentFiles.output.length}</div>
-              {currentFiles.output.some(file => file.status === 'ready') && (
-                              <button className="download-all-btn">
-                Download All
-              </button>
-              )}
-            </div>
+            <h3>Output Files - {datasetName}</h3>
+            <div className="pane-count">{outputFiles.length}</div>
           </div>
           <div className="pane-content">
-            {currentFiles.output.length > 0 ? (
-              currentFiles.output.map((file, index) => (
+            {loadingOutputFiles ? (
+              <div className="loading-state">
+                <div className="loading-spinner">Loading output files...</div>
+              </div>
+            ) : outputFilesError ? (
+              <div className="error-state">
+                <div className="error-message">⚠️ {outputFilesError}</div>
+              </div>
+            ) : outputFiles.length > 0 ? (
+              outputFiles.map((file, index) => (
                 <div key={index} className="file-item">
                   <div className="file-info">
-                    <div className="file-name">{file.name}</div>
-                    <div className="file-details">
-                      <span className="file-size">{file.size}</span>
-                      <span className="file-timestamp">{file.generated}</span>
-                    </div>
+                    <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
+                    <div className="file-timestamp" style={{ marginLeft: '2rem' }}>{file.uploaded}</div>
                   </div>
-                  <div className="file-status">
+                  <div className="file-status" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="file-size">{file.size}</span>
                     <span 
                       className="status-dot"
                       style={{ backgroundColor: getFileStatusColor(file.status) }}
@@ -240,6 +318,7 @@ function PipelineMonitor({ selectedApp }) {
               <div className="empty-pane">
                 <div className="empty-icon">📄</div>
                 <p>No output files</p>
+                <div className="empty-hint">Output files will appear here after processing</div>
               </div>
             )}
           </div>
@@ -249,7 +328,7 @@ function PipelineMonitor({ selectedApp }) {
       </div>
       
       {/* File Upload - Re-enabled */}
-      <FileUpload selectedDataset={selectedDataset} datasetName={datasetName} />
+      <FileUpload />
       
       {/* Pipeline Progress Monitor */}
       <PipelineProgressMonitor datasets={datasets} />

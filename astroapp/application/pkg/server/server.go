@@ -30,6 +30,12 @@ func (s *Server) setupRoutes() {
 	// List datasets endpoint
 	http.HandleFunc("/api/datasets", s.fileUploadHandler.ListDatasets)
 	
+	// List dataset files endpoint
+	http.HandleFunc("/api/datasets/files", s.fileUploadHandler.ListDatasetFiles)
+	
+	// List dataset output files endpoint
+	http.HandleFunc("/api/datasets/output-files", s.fileUploadHandler.ListDatasetOutputFiles)
+	
 	// Create dataset endpoint
 	http.HandleFunc("/api/datasets/create", s.fileUploadHandler.CreateDataset)
 	
@@ -53,6 +59,8 @@ func (s *Server) Start() {
 	log.Printf("Starting HTTP server on port %s", port)
 	log.Printf("File upload endpoint: http://localhost:%s/api/upload", port)
 	log.Printf("List datasets endpoint: http://localhost:%s/api/datasets", port)
+	log.Printf("List dataset files endpoint: http://localhost:%s/api/datasets/files", port)
+	log.Printf("List dataset output files endpoint: http://localhost:%s/api/datasets/output-files", port)
 	log.Printf("Create dataset endpoint: http://localhost:%s/api/datasets/create", port)
 	log.Printf("Health check endpoint: http://localhost:%s/api/health", port)
 	

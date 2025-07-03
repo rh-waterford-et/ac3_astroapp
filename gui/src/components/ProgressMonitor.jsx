@@ -2,15 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { uploadFiles as apiUploadFiles, getDatasets, createDataset } from '../services/api';
 
-function FileUpload({ selectedDataset, datasetName }) {
-  // TODO: selectedDataset and datasetName could be used to customize upload path or display info
+function FileUpload() {
   const [dragActive, setDragActive] = useState(false);
   const [uploadQueue, setUploadQueue] = useState([]);
   const fileInputRef = useRef(null);
   
   // Dataset management
   const [availableDatasets, setAvailableDatasets] = useState([]);
-  const [currentDataset, setCurrentDataset] = useState(selectedDataset || '');
+  const [currentDataset, setCurrentDataset] = useState('');
   const [newDatasetName, setNewDatasetName] = useState('');
   const [isCreatingNewDataset, setIsCreatingNewDataset] = useState(false);
   const [loadingDatasets, setLoadingDatasets] = useState(false);
@@ -274,7 +273,7 @@ function FileUpload({ selectedDataset, datasetName }) {
   return (
     <div className="file-upload">
       <div className="upload-header">
-        <h3>Upload Files to S3 - {datasetName || selectedDataset}</h3>
+        <h3>Upload Files to S3 - {currentDataset || 'Select Dataset'}</h3>
         <div className="upload-actions">
           {uploadQueue.length > 0 && (
             <>
@@ -466,8 +465,7 @@ function FileUpload({ selectedDataset, datasetName }) {
 }
 
 FileUpload.propTypes = {
-  selectedDataset: PropTypes.string.isRequired,
-  datasetName: PropTypes.string.isRequired
+  // No props required - component manages its own state
 };
 
 export default FileUpload; 

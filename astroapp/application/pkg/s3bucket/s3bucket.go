@@ -6,12 +6,18 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 )
+
+type ObjectMetadata struct {
+	Size         int64
+	LastModified time.Time
+}
 
 type S3BucketInterface interface {
 	//InitializeKnownAssets(appName string)
@@ -20,6 +26,7 @@ type S3BucketInterface interface {
 	GetS3Client() *s3.S3
 	GetBucketName() string
 	UploadFileToBucket(folderPath string, fileName string, content []byte) error
+	GetObjectMetadata(objectKey string) (*ObjectMetadata, error)
 }
 
 type S3Watcher struct {
@@ -135,4 +142,22 @@ func (sb *S3Bucket) UploadFileToBucket(folderPath string, fileName string, conte
 
 	log.Printf("Successfully uploaded content to s3://%s/%s", sb.BucketName, fullKey)
 	return nil
+}
+
+func (sb *S3Bucket) GetObjectMetadata(objectKey string) (*ObjectMetadata, error) {
+	// Use HeadObject to get metadata without downloading the file
+	result, err := sb.S3Client.HeadObject(&s3.HeadObjectInput{
+		Bucket: aws.String(sb.BucketName),
+		Key:    aws.String(objectKey),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object metadata: %v", err)
+	}
+
+	metadata := &ObjectMetadata{
+		Size:         *result.ContentLength,
+		LastModified: *result.LastModified,
+	}
+
+	return metadata, nil
 }
