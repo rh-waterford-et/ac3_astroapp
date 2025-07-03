@@ -180,6 +180,8 @@ body {
     0 1px 3px rgba(0, 0, 0, 0.1),
     inset 0 1px 2px rgba(79, 209, 197, 0.05);
   min-width: 180px;
+  cursor: text;
+  caret-color: #e2e8f0;
 }
 
 .header-search-input::placeholder {
@@ -231,12 +233,16 @@ body {
   background-color: transparent !important;
   background-image: none !important;
   color: #e2e8f0 !important;
+  cursor: text !important;
+  caret-color: #e2e8f0 !important;
 }
 
 /* Additional browser compatibility */
 .header-search-input:-moz-autofill {
   background-color: transparent !important;
   color: #e2e8f0 !important;
+  cursor: text !important;
+  caret-color: #e2e8f0 !important;
 }
 
 .header-search-input:-ms-input-placeholder {
@@ -254,6 +260,8 @@ body {
     rgba(56, 178, 172, 0.04) 50%, 
     rgba(49, 151, 149, 0.02) 100%) !important;
   color: #e2e8f0 !important;
+  cursor: text !important;
+  caret-color: #e2e8f0 !important;
 }
 
 /* Override browser defaults with animation delay trick */
@@ -265,6 +273,8 @@ body {
   -webkit-box-shadow: 0 0 0 1000px rgba(45, 55, 72, 0.95) inset !important;
   transition: background-color 5000s ease-in-out 0s !important;
   background-color: transparent !important;
+  cursor: text !important;
+  caret-color: #e2e8f0 !important;
 }
 
 .header-search-btn {
