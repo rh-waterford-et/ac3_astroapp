@@ -3,8 +3,6 @@ import PropTypes from 'prop-types';
 // Re-enabling FileUpload component
 import FileUpload from './ProgressMonitor';
 import PipelineProgressMonitor from './PipelineProgressMonitor';
-// Temporarily commented out to test Aladin loading
-// import EnvironmentStatus from './EnvironmentStatus';
 
 function PipelineMonitor({ selectedApp }) {
   const [selectedDataset, setSelectedDataset] = useState('dataset1');
@@ -256,9 +254,7 @@ function PipelineMonitor({ selectedApp }) {
       {/* Pipeline Progress Monitor */}
       <PipelineProgressMonitor datasets={datasets} />
       
-      {/* Environment Status - Temporarily commented out to test Aladin loading */}
-      {/* <EnvironmentStatus /> */}
-    </div>
+            </div>
   );
 }
 
