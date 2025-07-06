@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq-exporter
+  namespace: uc3-applications
+  labels:
+    app: rabbitmq-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq-exporter
+  template:
+    metadata:
+      labels:
+        app: rabbitmq-exporter
+    spec:
+      containers:
+      - name: rabbitmq-exporter
+        image: kbudde/rabbitmq-exporter:latest
+        env:
+        - name: RABBIT_URL
+          value: "http://rabbitmq.uc3-applications.svc.cluster.local:15672"
+        - name: RABBIT_USER
+          value: "guest"  
+        - name: RABBIT_PASSWORD
+          value: "guest"  
+        ports:
+        - containerPort: 9419
+          name: metrics
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-exporter
+  namespace: uc3-applications
+  labels:
+    app: rabbitmq-exporter
+spec:
+  selector:
+    app: rabbitmq-exporter
+  ports:
+  - port: 9419
+    targetPort: 9419
+    name: metrics
+---
+# ServiceMonitor for User Workload Monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rabbitmq-exporter
+  namespace: uc3-applications
+  labels:
+    prometheus: user-workload
+spec:
+  selector:
+    matchLabels:
+      app: rabbitmq-exporter
+  endpoints:
+  - port: metrics
+    interval: 30s
+    scheme: http
+  namespaceSelector:
+    matchNames:
+    - uc3-applications
+---
+# PrometheusRule for Thanos Integration
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rabbitmq-exporter-rules
+  namespace: uc3-applications
+  labels:
+    prometheus: user-workload
+spec:
+  groups:
+  - name: rabbitmq.rules
+    rules:
+    - alert: RabbitMQDown
+      expr: rabbitmq_up == 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "RabbitMQ instance is down"
+        description: "RabbitMQ exporter is not able to connect to the instance."
