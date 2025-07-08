@@ -317,7 +317,7 @@ function PipelineMonitor({ selectedApp }) {
         {/* Middle Pane - Processed Input Files */}
         <div className="pipeline-pane files-pane">
           <div className="pane-header">
-            <h3>Processed Input Files - {datasetName}</h3>
+            <h3>Input Files - {datasetName}</h3>
             <div className="pane-count">{inputFiles.length}</div>
           </div>
           <div className="pane-content">

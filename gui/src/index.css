@@ -2563,6 +2563,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  max-height: 30vh;
 }
 
 /* Dataset items */
@@ -2945,9 +2946,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  flex: 1;
+  flex: 0 0 auto;
   overflow-y: auto;
   min-height: 0;
+  max-height: 30vh;
+  height: 30vh;
 }
 
 .dataset-section .dataset-selection,
