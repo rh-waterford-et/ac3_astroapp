@@ -1,149 +1,76 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import DatasetProgressBar from './DatasetProgressBar';
-import { getAllPipelineProgress, getDatasetPipelineProgress } from '../services/api';
 
-function PipelineProgressMonitor({ datasets, isCollapsed = false, onToggleCollapse }) {
+function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapsed = false, onToggleCollapse }) {
   const [progressData, setProgressData] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
 
-  // Fetch progress data from backend
-  const fetchProgressData = async (isInitialLoad = false) => {
-    if (datasets.length === 0) return;
-
-    // Only show loading spinner on initial load, not on polling refreshes
-    if (isInitialLoad) {
-      setLoading(true);
-    } else {
-      setRefreshing(true);
-    }
-    setError(null);
-
-    try {
-      // Fetch all pipeline progress data
-      const allProgress = await getAllPipelineProgress();
-
-      // Convert backend progress to UI format
-      const progressMap = {};
-      
-      datasets.forEach(dataset => {
-        // Try to find progress for this dataset
-        const datasetProgress = Object.values(allProgress).find(
-          progress => progress.dataset_name === dataset.name || 
-                     progress.dataset_id === dataset.id ||
-                     progress.dataset_id.includes(dataset.name)
-        );
-
-        if (datasetProgress) {
-          progressMap[dataset.id] = {
-            progress: datasetProgress.progress || 0,
-            status: mapBackendStage(datasetProgress.stage),
-            stage: mapBackendStageToDescription(datasetProgress.stage),
-            lastUpdated: new Date(datasetProgress.last_updated),
-            filesTotal: datasetProgress.files_total || 0,
-            filesProcessed: datasetProgress.files_processed || 0,
-            errorMessage: datasetProgress.error_message || ''
-          };
-        } else {
-          // Default progress for datasets not in pipeline
-          progressMap[dataset.id] = {
-            progress: dataset.progress || 0,
-            status: dataset.status || 'ready',
-            stage: dataset.stage || 'Ready',
-            lastUpdated: new Date(),
-            filesTotal: 0,
-            filesProcessed: 0,
-            errorMessage: ''
-          };
-        }
-      });
-
-      setProgressData(progressMap);
-      
-      // Mark initial load as complete
-      if (isInitialLoad) {
-        setInitialLoad(false);
-      }
-    } catch (err) {
-      console.error('Error fetching pipeline progress:', err);
-      
-      // Since API functions now handle 404s gracefully, only show errors for genuine problems
-      setError('Unable to connect to pipeline progress service. Please check your connection.');
-
-      // Always provide fallback data even if there's an error
-      const fallbackProgress = {};
-      datasets.forEach(dataset => {
-        fallbackProgress[dataset.id] = {
-          progress: dataset.progress || 0,
-          status: dataset.status || 'ready',
-          stage: dataset.stage || 'Ready',
-          lastUpdated: new Date(),
-          filesTotal: 0,
-          filesProcessed: 0,
-          errorMessage: ''
-        };
-      });
-      setProgressData(fallbackProgress);
-    } finally {
-      if (isInitialLoad) {
-        setLoading(false);
-      } else {
-        setRefreshing(false);
-      }
-    }
-  };
-
-  // Initial fetch and refresh on datasets change
+  // Calculate progress data from the file counts
   useEffect(() => {
-    setInitialLoad(true);
-    fetchProgressData(true);
-  }, [datasets]);
+    console.log('PipelineProgressMonitor calculating progress from props');
+    console.log('Datasets:', datasets);
+    console.log('Input files:', inputFiles.length);
+    console.log('Output files:', outputFiles.length);
+    
+    const progressMap = {};
+    
+    datasets.forEach(dataset => {
+      const processedCount = inputFiles.length;
+      const outputCount = outputFiles.length;
+      
+      let progress = 0;
+      let status = 'ready';
+      let stage = 'Ready';
+      
+      if (processedCount > 0) {
+        progress = Math.min((outputCount / processedCount) * 100, 100);
+        
+        console.log(`Dataset ${dataset.name}: ${processedCount} processed files, ${outputCount} output files, ${progress.toFixed(1)}% progress`);
+        
+        // Determine status and stage based on progress
+        if (progress >= 100) {
+          status = 'completed';
+          stage = 'Completed';
+        } else if (progress > 0) {
+          status = 'processing';
+          stage = 'Starlight analysis';
+        } else {
+          status = 'queued';
+          stage = 'Queued for processing';
+        }
+      } else if (outputCount > 0) {
+        // Edge case: output files exist but no processed files
+        progress = 100;
+        status = 'completed';
+        stage = 'Completed';
+      }
+      
+      progressMap[dataset.id] = {
+        progress: progress,
+        status: status,
+        stage: stage,
+        lastUpdated: new Date(),
+        filesTotal: processedCount,
+        filesProcessed: outputCount,
+        errorMessage: ''
+      };
+    });
+    
+    console.log('Final progress map:', progressMap);
+    setProgressData(progressMap);
+    
+  }, [datasets, inputFiles, outputFiles]);
 
-  // Periodic refresh of pipeline progress data
+  // Periodic refresh indicator
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchProgressData(false); // Background refresh, no loading spinner
-    }, 3000); // Refresh every 3 seconds
+      setRefreshing(true);
+      setTimeout(() => setRefreshing(false), 500);
+    }, 3000);
 
     return () => clearInterval(interval);
-  }, [datasets]);
-
-  /**
-   * Map backend stage to frontend status
-   * @param {string} backendStage - Backend stage string
-   * @returns {string} - Frontend status string
-   */
-  const mapBackendStage = (backendStage) => {
-    switch (backendStage) {
-      case 'processing': return 'processing';
-      case 'analysis': return 'processing';
-      case 'complete': return 'completed';
-      case 'queued': return 'queued';
-      case 'error': return 'error';
-      case 'ready': return 'ready';
-      default: return 'ready';
-    }
-  };
-
-  /**
-   * Map backend stage to frontend stage description
-   * @param {string} backendStage - Backend stage string
-   * @returns {string} - Frontend stage description
-   */
-  const mapBackendStageToDescription = (backendStage) => {
-    switch (backendStage) {
-      case 'ready': return 'Ready';
-      case 'queued': return 'Queued for processing';
-      case 'processing': return 'Data preprocessing';
-      case 'analysis': return 'Starlight analysis';
-      case 'complete': return 'Completed';
-      case 'error': return 'Error occurred';
-      default: return 'Ready';
-    }
-  };
+  }, []);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -156,19 +83,22 @@ function PipelineProgressMonitor({ datasets, isCollapsed = false, onToggleCollap
     }
   };
 
-  const getEstimatedTime = (progress, status) => {
+  const getEstimatedTime = (progress, status, filesProcessed, filesTotal) => {
     if (status === 'completed') return 'Completed';
-    if (status === 'queued') return 'Waiting in queue';
+    if (status === 'queued') return 'Waiting to start';
     if (status === 'ready') return 'Ready to start';
     if (status === 'error') return 'Error occurred';
     
-    if (progress > 0) {
-      const remainingProgress = 100 - progress;
-      const estimatedMinutes = Math.ceil((remainingProgress / progress) * 2); // Rough estimation
+    if (status === 'processing' && filesProcessed > 0 && filesTotal > 0) {
+      const remainingFiles = filesTotal - filesProcessed;
+      if (remainingFiles === 0) return 'Finalizing...';
+      
+      // Estimate 2-3 minutes per file for STARLIGHT processing
+      const estimatedMinutes = remainingFiles * 2.5;
       if (estimatedMinutes > 60) {
         return `~${Math.ceil(estimatedMinutes / 60)}h remaining`;
       }
-      return `~${estimatedMinutes}m remaining`;
+      return `~${Math.ceil(estimatedMinutes)}m remaining`;
     }
     
     return 'Calculating...';
@@ -205,26 +135,16 @@ function PipelineProgressMonitor({ datasets, isCollapsed = false, onToggleCollap
       
       {!isCollapsed && (
         <>
-          {loading && (
-            <div className="loading-state">
-              <div className="astro-loader-galaxy"></div>
-              <span>Loading pipeline progress...</span>
-            </div>
-          )}
-          
-          {error && (
-            <div className="error-state">
-              <span>⚠️ Error loading progress: {error}</span>
-              <button className="retry-btn" onClick={() => fetchProgressData(true)}>Retry</button>
-            </div>
-          )}
-          
           <div className="progress-list">
             {datasets.map(dataset => {
               const currentProgress = progressData[dataset.id] || {
-                progress: dataset.progress || 0,
-                status: dataset.status,
-                stage: dataset.stage
+                progress: 0,
+                status: 'ready',
+                stage: 'Ready',
+                lastUpdated: new Date(),
+                filesTotal: 0,
+                filesProcessed: 0,
+                errorMessage: ''
               };
 
               return (
@@ -253,7 +173,7 @@ function PipelineProgressMonitor({ datasets, isCollapsed = false, onToggleCollap
                       </div>
                     </div>
                     <div className="pipeline-progress-time">
-                      {getEstimatedTime(currentProgress.progress, currentProgress.status)}
+                      {getEstimatedTime(currentProgress.progress, currentProgress.status, currentProgress.filesProcessed, currentProgress.filesTotal)}
                     </div>
                   </div>
                   
@@ -262,9 +182,20 @@ function PipelineProgressMonitor({ datasets, isCollapsed = false, onToggleCollap
                     status={currentProgress.status}
                   />
                   
-                  {currentProgress.status === 'processing' && (
+                  {(currentProgress.status === 'processing' || currentProgress.status === 'completed') && (
                     <div className="pipeline-progress-processing-info">
-                      <span>Processing...</span>
+                      <span>
+                        {currentProgress.filesProcessed} of {currentProgress.filesTotal} files processed
+                      </span>
+                      <span>Last updated: {currentProgress.lastUpdated?.toLocaleTimeString()}</span>
+                    </div>
+                  )}
+                  
+                  {currentProgress.status === 'queued' && currentProgress.filesTotal > 0 && (
+                    <div className="pipeline-progress-processing-info">
+                      <span>
+                        {currentProgress.filesTotal} files ready for processing
+                      </span>
                       <span>Last updated: {currentProgress.lastUpdated?.toLocaleTimeString()}</span>
                     </div>
                   )}
@@ -292,7 +223,7 @@ function PipelineProgressMonitor({ datasets, isCollapsed = false, onToggleCollap
           </div>
           
           {/* Show helpful message when no active processing */}
-          {!loading && !error && datasets.length > 0 && 
+          {datasets.length > 0 && 
            Object.values(progressData).every(d => d.status === 'ready') && (
             <div className="pipeline-progress-summary" style={{ 
               borderColor: 'rgba(160, 174, 192, 0.3)',
@@ -319,6 +250,8 @@ PipelineProgressMonitor.propTypes = {
       stage: PropTypes.string,
     })
   ).isRequired,
+  inputFiles: PropTypes.array.isRequired,
+  outputFiles: PropTypes.array.isRequired,
   isCollapsed: PropTypes.bool,
   onToggleCollapse: PropTypes.func.isRequired,
 };

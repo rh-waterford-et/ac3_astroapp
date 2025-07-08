@@ -407,6 +407,8 @@ function PipelineMonitor({ selectedApp }) {
       {/* Pipeline Progress Monitor */}
       <PipelineProgressMonitor 
         datasets={datasets} 
+        inputFiles={inputFiles}
+        outputFiles={outputFiles}
         isCollapsed={isPipelineProgressCollapsed}
         onToggleCollapse={togglePipelineProgressCollapsed}
       />
