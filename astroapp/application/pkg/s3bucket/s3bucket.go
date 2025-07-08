@@ -28,6 +28,8 @@ type S3BucketInterface interface {
 	GetBucketName() string
 	UploadFileToBucket(folderPath string, fileName string, content []byte) error
 	GetObjectMetadata(objectKey string) (*ObjectMetadata, error)
+	DeleteDirectory(directoryPath string) error
+	DeleteFile(fileKey string) error
 }
 
 type S3Watcher struct {
@@ -247,4 +249,72 @@ func (sb *S3Bucket) GetObjectMetadata(objectKey string) (*ObjectMetadata, error)
 	}
 
 	return metadata, nil
+}
+
+func (sb *S3Bucket) DeleteDirectory(directoryPath string) error {
+	// Ensure the directory path ends with a slash
+	if !strings.HasSuffix(directoryPath, "/") {
+		directoryPath = directoryPath + "/"
+	}
+
+	// List all objects in the directory
+	objects, err := sb.S3Client.ListObjects(&s3.ListObjectsInput{
+		Bucket: aws.String(sb.BucketName),
+		Prefix: aws.String(directoryPath),
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to list objects in directory %s: %v", directoryPath, err)
+	}
+
+	// If no objects found, directory is already empty or doesn't exist
+	if len(objects.Contents) == 0 {
+		return nil
+	}
+
+	// Prepare batch delete request
+	var deleteObjects []*s3.ObjectIdentifier
+	for _, object := range objects.Contents {
+		deleteObjects = append(deleteObjects, &s3.ObjectIdentifier{
+			Key: object.Key,
+		})
+	}
+
+	// Delete objects in batches (S3 allows up to 1000 objects per batch)
+	batchSize := 1000
+	for i := 0; i < len(deleteObjects); i += batchSize {
+		end := i + batchSize
+		if end > len(deleteObjects) {
+			end = len(deleteObjects)
+		}
+
+		batchObjects := deleteObjects[i:end]
+
+		_, err := sb.S3Client.DeleteObjects(&s3.DeleteObjectsInput{
+			Bucket: aws.String(sb.BucketName),
+			Delete: &s3.Delete{
+				Objects: batchObjects,
+			},
+		})
+
+		if err != nil {
+			return fmt.Errorf("failed to delete objects in directory %s: %v", directoryPath, err)
+		}
+	}
+
+	return nil
+}
+
+func (sb *S3Bucket) DeleteFile(fileKey string) error {
+	// Delete the specific file from S3
+	_, err := sb.S3Client.DeleteObject(&s3.DeleteObjectInput{
+		Bucket: aws.String(sb.BucketName),
+		Key:    aws.String(fileKey),
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to delete file %s: %v", fileKey, err)
+	}
+
+	return nil
 }

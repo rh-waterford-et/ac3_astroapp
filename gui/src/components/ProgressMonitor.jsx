@@ -206,17 +206,6 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
     setUploadQueue([]);
   };
 
-  const handleDatasetSelection = (e) => {
-    const value = e.target.value;
-    if (value === 'NEW_DATASET') {
-      setIsCreatingNewDataset(true);
-      setCurrentDataset('');
-    } else {
-      setIsCreatingNewDataset(false);
-      setCurrentDataset(value);
-    }
-  };
-
   const handleNewDatasetCreate = async () => {
     if (newDatasetName.trim()) {
       const sanitizedName = newDatasetName.trim().replace(/[^a-zA-Z0-9_-]/g, '');
@@ -254,8 +243,6 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
   const handleNewDatasetCancel = () => {
     setIsCreatingNewDataset(false);
     setNewDatasetName('');
-    // Reset to first available dataset or empty
-    setCurrentDataset(availableDatasets.length > 0 ? availableDatasets[0] : '');
   };
 
   const getStatusColor = (status) => {
@@ -344,72 +331,92 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
               </div>
             )}
             {datasetError && (
-              <div className="error-message">
-                ⚠️ {datasetError}
-                <button onClick={() => loadDatasets(true)} className="retry-btn">Retry</button>
+              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading datasets...</div>
               </div>
             )}
           </div>
           
           <div className="dataset-selection">
-            {!isCreatingNewDataset ? (
-              <div className="dataset-select-wrapper">
-                <select 
-                  className="dataset-select"
-                  value={currentDataset}
-                  onChange={handleDatasetSelection}
+            <div className="dataset-select-wrapper">
+              <select 
+                className="dataset-select"
+                value={currentDataset}
+                onChange={(e) => setCurrentDataset(e.target.value)}
+                disabled={loadingDatasets}
+              >
+                <option value="">-- Select Dataset --</option>
+                {availableDatasets.map(dataset => (
+                  <option key={dataset} value={dataset}>{dataset}</option>
+                ))}
+              </select>
+              {currentDataset && (
+                <div className="dataset-info">
+                  <span className="dataset-path">📁 starlight/input/{currentDataset}</span>
+                </div>
+              )}
+            </div>
+            
+            {/* Create Dataset Button */}
+            {!isCreatingNewDataset && (
+              <div className="create-dataset-section">
+                <button 
+                  className="create-dataset-toggle-btn"
+                  onClick={() => setIsCreatingNewDataset(!isCreatingNewDataset)}
                   disabled={loadingDatasets}
                 >
-                  <option value="">-- Select Dataset --</option>
-                  {availableDatasets.map(dataset => (
-                    <option key={dataset} value={dataset}>{dataset}</option>
-                  ))}
-                  <option value="NEW_DATASET">+ Create New Dataset</option>
-                </select>
-                {currentDataset && (
-                  <div className="dataset-info">
-                    <span className="dataset-path">📁 starlight/input/{currentDataset}</span>
-                  </div>
-                )}
+                  Create Dataset
+                </button>
               </div>
-            ) : (
-              <div className="new-dataset-form">
-                <div className="new-dataset-input-group">
-                  <input
-                    type="text"
-                    className="new-dataset-input"
-                    placeholder="Enter dataset name (e.g., NGC7025)"
-                    value={newDatasetName}
-                    onChange={(e) => setNewDatasetName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleNewDatasetCreate();
-                      } else if (e.key === 'Escape') {
-                        handleNewDatasetCancel();
-                      }
-                    }}
-                  />
-                  <button 
-                    className="create-dataset-btn"
-                    onClick={handleNewDatasetCreate}
-                    disabled={!newDatasetName.trim() || loadingDatasets}
-                  >
-                    Create
-                  </button>
-                  <button 
-                    className="cancel-dataset-btn"
-                    onClick={handleNewDatasetCancel}
-                    disabled={loadingDatasets}
-                  >
-                    Cancel
-                  </button>
+            )}
+            
+            {/* Create Dataset Form */}
+            {isCreatingNewDataset && (
+              <>
+                <div className="dataset-form-divider"></div>
+                <div className="new-dataset-form">
+                  <div className="new-dataset-input-group">
+                    <input
+                      type="text"
+                      className="new-dataset-input"
+                      placeholder="Enter dataset name (e.g., NGC7025)"
+                      value={newDatasetName}
+                      onChange={(e) => setNewDatasetName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleNewDatasetCreate();
+                        } else if (e.key === 'Escape') {
+                          handleNewDatasetCancel();
+                        }
+                      }}
+                    />
+                  </div>
+                  {newDatasetName.trim() && (
+                    <div className="dataset-preview">
+                      📁 starlight/input/{newDatasetName.trim().replace(/[^a-zA-Z0-9_-]/g, '')}
+                    </div>
+                  )}
+                  
+                  {/* Action buttons side-by-side */}
+                  <div className="dataset-form-actions">
+                    <button 
+                      className="create-dataset-btn"
+                      onClick={handleNewDatasetCreate}
+                      disabled={!newDatasetName.trim() || loadingDatasets}
+                    >
+                      Create
+                    </button>
+                    <button 
+                      className="create-dataset-toggle-btn cancel-variant"
+                      onClick={() => setIsCreatingNewDataset(false)}
+                      disabled={loadingDatasets}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                {newDatasetName.trim() && (
-                  <div className="dataset-preview">
-                    📁 starlight/input/{newDatasetName.trim().replace(/[^a-zA-Z0-9_-]/g, '')}
-                  </div>
-                )}
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -458,12 +465,17 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
           <div className="upload-queue">
             {uploadQueue.length > 0 ? (
               uploadQueue.map(file => (
-                <div key={file.id} className="queue-item">
+                <div key={file.id} className="queue-item" data-upload-status={file.status}>
                   <div className="queue-file-info">
                     <div className="queue-file-name">{file.name}</div>
                     <div className="queue-file-size">{file.size}</div>
                     {file.status === 'error' && file.error && (
-                      <div className="queue-error-message">{file.error}</div>
+                      <div className="queue-error-message">
+                        <div className="astro-loading-container" style={{ padding: '0.25rem 0', gap: '0.25rem' }}>
+                          <div className="astro-loader-galaxy" style={{ width: '12px', height: '12px' }}></div>
+                          <div className="astro-loading-text" style={{ fontSize: '10px' }}>Retrying...</div>
+                        </div>
+                      </div>
                     )}
                   </div>
                   

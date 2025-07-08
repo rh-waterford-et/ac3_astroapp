@@ -191,6 +191,80 @@ export const createDataset = async (datasetName) => {
 };
 
 /**
+ * Delete a dataset by removing all its directories
+ * @param {string} datasetName - The name of the dataset to delete
+ * @param {string} appType - The application type (default: 'starlight')
+ * @returns {Promise<Object>} - Delete response
+ */
+export const deleteDataset = async (datasetName, appType = 'starlight') => {
+  try {
+    console.log('Deleting dataset:', datasetName, 'for app:', appType);
+    const response = await fetch(`${API_BASE_URL}/datasets/delete?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(appType)}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log('Delete dataset response status:', response.status);
+    console.log('Delete dataset response ok:', response.ok);
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete dataset: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Delete dataset response data:', data);
+    
+    if (data.success) {
+      return { success: true, message: data.message };
+    } else {
+      throw new Error(data.message || 'Failed to delete dataset');
+    }
+  } catch (error) {
+    console.error('Error deleting dataset:', error);
+    return { success: false, message: error.message || 'Failed to delete dataset' };
+  }
+};
+
+/**
+ * Delete a specific file from S3
+ * @param {string} fileKey - The S3 key/path of the file to delete
+ * @param {string} appType - The application type (default: 'starlight')
+ * @returns {Promise<Object>} - Delete response
+ */
+export const deleteFile = async (fileKey, appType = 'starlight') => {
+  try {
+    console.log('Deleting file:', fileKey, 'for app:', appType);
+    const response = await fetch(`${API_BASE_URL}/files/delete?key=${encodeURIComponent(fileKey)}&app=${encodeURIComponent(appType)}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log('Delete file response status:', response.status);
+    console.log('Delete file response ok:', response.ok);
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete file: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Delete file response data:', data);
+    
+    if (data.success) {
+      return { success: true, message: data.message };
+    } else {
+      throw new Error(data.message || 'Failed to delete file');
+    }
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    return { success: false, message: error.message || 'Failed to delete file' };
+  }
+};
+
+/**
  * Get list of files in a specific dataset
  * @param {string} datasetName - The name of the dataset
  * @returns {Promise<Array>} - Array of file objects

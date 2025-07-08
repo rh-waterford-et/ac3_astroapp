@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 // Re-enabling FileUpload component
 import FileUpload from './ProgressMonitor';
 import PipelineProgressMonitor from './PipelineProgressMonitor';
-import { getDatasets, getDatasetFiles, getDatasetOutputFiles } from '../services/api';
+import { getDatasets, getDatasetFiles, getDatasetOutputFiles, deleteDataset, deleteFile } from '../services/api';
 
 function PipelineMonitor({ selectedApp }) {
   const [selectedDataset, setSelectedDataset] = useState('');
@@ -186,14 +186,30 @@ function PipelineMonitor({ selectedApp }) {
   }, []);
 
   // Auto-refresh function (background, no loading indicators)
-  const autoRefresh = useCallback(() => {
-    console.log('Auto-refresh triggered');
-    loadDatasets(false);
-    if (selectedDataset) {
-      loadDatasetFiles(selectedDataset, false);
-      loadDatasetOutputFiles(selectedDataset, false);
+  const autoRefresh = useCallback(async () => {
+    // Skip auto-refresh if user is currently interacting with UI
+    if (loadingDatasets || loadingFiles || loadingOutputFiles) {
+      console.log('Skipping auto-refresh - operation in progress');
+      return;
     }
-  }, [selectedDataset, loadDatasets, loadDatasetFiles, loadDatasetOutputFiles]);
+    
+    console.log('Auto-refresh triggered');
+    try {
+      // Refresh datasets first
+      await loadDatasets(false);
+      
+      // Only refresh files if we have a selected dataset
+      if (selectedDataset) {
+        await Promise.all([
+          loadDatasetFiles(selectedDataset, false),
+          loadDatasetOutputFiles(selectedDataset, false)
+        ]);
+      }
+    } catch (error) {
+      console.warn('Auto-refresh failed:', error);
+      // Don't show alerts for auto-refresh failures to avoid interrupting user
+    }
+  }, [selectedDataset, loadDatasets, loadDatasetFiles, loadDatasetOutputFiles, loadingDatasets, loadingFiles, loadingOutputFiles]);
 
   // Load datasets on component mount
   useEffect(() => {
@@ -277,6 +293,105 @@ function PipelineMonitor({ selectedApp }) {
   const selectedDatasetInfo = datasets.find(dataset => dataset.id === selectedDataset);
   const datasetName = selectedDatasetInfo ? selectedDatasetInfo.name : 'Unknown';
 
+  // Delete dataset function
+  const handleDeleteDataset = async (datasetId, datasetName) => {
+    const confirmed = window.confirm(`Are you sure you want to delete the dataset "${datasetName}"?`);
+    
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      console.log('Deleting dataset:', datasetId);
+      
+      const result = await deleteDataset(datasetId, selectedApp || 'starlight');
+      
+      if (result.success) {
+        console.log('Dataset deleted successfully:', datasetId);
+        
+        // Handle selection logic before refreshing datasets
+        if (selectedDataset === datasetId) {
+          // Find remaining datasets (excluding the deleted one)
+          const remainingDatasets = datasets.filter(d => d.id !== datasetId);
+          
+          if (remainingDatasets.length > 0) {
+            // Select the first remaining dataset (alphabetically sorted)
+            const nextDataset = remainingDatasets[0];
+            setSelectedDataset(nextDataset.id);
+            // File loading will be handled by the useEffect when selectedDataset changes
+          } else {
+            // No datasets left, clear everything
+            setSelectedDataset('');
+            setInputFiles([]);
+            setOutputFiles([]);
+            setFilesError(null);
+            setOutputFilesError(null);
+          }
+        }
+        
+        // Refresh datasets list to get updated list
+        await loadDatasets(true);
+        
+        // Give user feedback
+        console.log(`Dataset "${datasetName}" deleted successfully`);
+      } else {
+        console.error('Failed to delete dataset:', result.message);
+      }
+    } catch (error) {
+      console.error('Error deleting dataset:', error.message);
+    }
+  };
+
+  // Delete file function
+  const handleDeleteFile = async (fileKey, fileName, isInputFile = true) => {
+    const confirmed = window.confirm(`Are you sure you want to delete the file "${fileName}"?`);
+    
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      console.log('Deleting file:', fileKey);
+      
+      // Immediately remove the file from the UI for instant feedback
+      if (isInputFile) {
+        setInputFiles(prevFiles => prevFiles.filter(file => file.key !== fileKey));
+      } else {
+        setOutputFiles(prevFiles => prevFiles.filter(file => file.key !== fileKey));
+      }
+      
+      const result = await deleteFile(fileKey, selectedApp || 'starlight');
+      
+      if (result.success) {
+        console.log('File deleted successfully');
+        // Remove the file from the UI optimistically
+        if (isInputFile) {
+          setInputFiles(prev => prev.filter(f => f.key !== fileKey));
+        } else {
+          setOutputFiles(prev => prev.filter(f => f.key !== fileKey));
+        }
+      } else {
+        console.error('Failed to delete file:', result.message);
+        
+        // Restore the file in the UI if deletion failed, then refresh
+        if (isInputFile) {
+          await loadDatasetFiles(selectedDataset, true);
+        } else {
+          await loadDatasetOutputFiles(selectedDataset, true);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      
+      // Restore the correct state if deletion failed
+      if (isInputFile) {
+        await loadDatasetFiles(selectedDataset, true);
+      } else {
+        await loadDatasetOutputFiles(selectedDataset, true);
+      }
+    }
+  };
+
   return (
     <div className="pipeline-wrapper">
       {/* File Upload Container */}
@@ -313,28 +428,40 @@ function PipelineMonitor({ selectedApp }) {
                 <div className="astro-loading-text">Loading datasets...</div>
               </div>
             ) : datasetError ? (
-              <div className="error-state">
-                <div className="error-message">⚠️ {datasetError}</div>
+              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading datasets...</div>
               </div>
             ) : datasets.length > 0 ? (
               datasets.map(dataset => (
-                <button
-                  key={dataset.id}
-                  className={`dataset-item ${selectedDataset === dataset.id ? 'active' : ''}`}
-                  onClick={() => setSelectedDataset(dataset.id)}
-                >
-                  <div className="dataset-info">
-                    <div className="dataset-name">{dataset.name}</div>
-                    <div className="dataset-stage">{dataset.stage}</div>
-                  </div>
-                  <div className="dataset-status">
-                    <span 
-                      className="status-dot"
-                      style={{ backgroundColor: getDatasetStatusColor(dataset.status) }}
-                      title={dataset.status}
-                    ></span>
-                  </div>
-                </button>
+                <div key={dataset.id} className={`dataset-item-container ${selectedDataset === dataset.id ? 'active' : ''}`}>
+                  <button
+                    className="dataset-item"
+                    onClick={() => setSelectedDataset(dataset.id)}
+                  >
+                    <div className="dataset-info">
+                      <div className="dataset-name">{dataset.name}</div>
+                      <div className="dataset-stage">{dataset.stage}</div>
+                    </div>
+                    <div className="dataset-status">
+                      <span 
+                        className="status-dot"
+                        style={{ backgroundColor: getDatasetStatusColor(dataset.status) }}
+                        title={dataset.status}
+                      ></span>
+                    </div>
+                  </button>
+                  <button
+                    className="dataset-delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteDataset(dataset.id, dataset.name);
+                    }}
+                    title={`Delete dataset "${dataset.name}"`}
+                  >
+                    ×
+                  </button>
+                </div>
               ))
             ) : (
               <div className="empty-pane">
@@ -355,30 +482,45 @@ function PipelineMonitor({ selectedApp }) {
             <div className="pane-count">{inputFiles.length}</div>
           </div>
           <div className="pane-content">
-            {loadingFiles ? (
-              <div className="astro-loading-container">
-                <div className="astro-loader-galaxy"></div>
-                <div className="astro-loading-text">Loading files...</div>
+            {!loadingFiles && !filesError && inputFiles.length === 0 ? (
+              <div className="empty-pane">
+                <div className="empty-icon">📁</div>
+                <p>No input files available</p>
+              </div>
+            ) : loadingFiles ? (
+              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading files...</div>
               </div>
             ) : filesError ? (
-              <div className="error-state">
-                <div className="error-message">⚠️ {filesError}</div>
+              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading files...</div>
               </div>
             ) : inputFiles.length > 0 ? (
               inputFiles.map((file, index) => (
-                <div key={index} className="file-item">
-                  <div className="file-info">
-                    <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
-                    <div className="file-timestamp" style={{ marginLeft: '3rem' }}>{file.uploaded}</div>
+                <div key={index} className="file-item-container">
+                  <div className="file-item">
+                    <div className="file-info">
+                      <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
+                      <div className="file-details">
+                        <div className="file-size">{file.size}</div>
+                      </div>
+                    </div>
+                    <div className="file-status">
+                      <span className="status-dot" style={{ backgroundColor: getFileStatusColor(file.status) }}></span>
+                    </div>
                   </div>
-                  <div className="file-status" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className="file-size">{file.size}</span>
-                    <span 
-                      className="status-dot"
-                      style={{ backgroundColor: getFileStatusColor(file.status) }}
-                      title={file.status}
-                    ></span>
-                  </div>
+                  <button 
+                    className="file-delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteFile(file.key, file.name, true);
+                    }}
+                    title={`Delete file "${file.name}"`}
+                  >
+                    ×
+                  </button>
                 </div>
               ))
             ) : (
@@ -397,37 +539,56 @@ function PipelineMonitor({ selectedApp }) {
             <div className="pane-count">{outputFiles.length}</div>
           </div>
           <div className="pane-content">
-            {loadingOutputFiles ? (
-              <div className="astro-loading-container">
-                <div className="astro-loader-galaxy"></div>
-                <div className="astro-loading-text">Loading output files...</div>
+            {!loadingOutputFiles && !outputFilesError && outputFiles.length === 0 ? (
+              <div className="empty-pane">
+                <div className="empty-icon">📁</div>
+                <p>No output files available</p>
+              </div>
+            ) : loadingOutputFiles ? (
+              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading output files...</div>
               </div>
             ) : outputFilesError ? (
-              <div className="error-state">
-                <div className="error-message">⚠️ {outputFilesError}</div>
+              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading output files...</div>
               </div>
             ) : outputFiles.length > 0 ? (
               outputFiles.map((file, index) => (
-                <div key={index} className="file-item">
-                  <div className="file-info">
-                    <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
-                    <div className="file-timestamp" style={{ marginLeft: '2rem' }}>{file.uploaded}</div>
+                <div key={index} className="file-item-container">
+                  <div className="file-item">
+                    <div className="file-info">
+                      <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
+                      <div className="file-details">
+                        <div className="file-size">{file.size}</div>
+                      </div>
+                    </div>
+                    <div className="file-status" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="file-size">{file.size}</span>
+                      <span 
+                        className="status-dot"
+                        style={{ backgroundColor: getFileStatusColor(file.status) }}
+                        title={file.status}
+                      ></span>
+                    </div>
                   </div>
-                  <div className="file-status" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span className="file-size">{file.size}</span>
-                    <span 
-                      className="status-dot"
-                      style={{ backgroundColor: getFileStatusColor(file.status) }}
-                      title={file.status}
-                    ></span>
-                  </div>
+                  <button
+                    className="file-delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteFile(file.key, file.name, false);
+                    }}
+                    title={`Delete file "${file.name}"`}
+                  >
+                    ×
+                  </button>
                 </div>
               ))
             ) : (
               <div className="empty-pane">
-                <div className="empty-icon">📄</div>
-                <p>No processed files</p>
-                <div className="empty-hint">Processed files will appear here after processing</div>
+                <div className="empty-icon">📁</div>
+                <p>No processed output files</p>
               </div>
             )}
           </div>

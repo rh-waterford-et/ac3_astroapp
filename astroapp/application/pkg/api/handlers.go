@@ -418,6 +418,185 @@ func (h *FileUploadHandler) CreateDataset(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(response)
 }
 
+func (h *FileUploadHandler) DeleteDataset(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "DELETE" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get dataset name from URL query parameter
+	datasetName := r.URL.Query().Get("dataset")
+	if datasetName == "" {
+		response := CreateDatasetResponse{
+			Success: false,
+			Message: "Dataset name parameter is required",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Get application type from query parameter (default to starlight)
+	appType := r.URL.Query().Get("app")
+	if appType == "" {
+		appType = "starlight" // default
+	}
+
+	// Validate application type
+	allowedApps := []string{"starlight", "ppfx", "steckmap"}
+	isValidApp := false
+	for _, app := range allowedApps {
+		if strings.ToLower(appType) == app {
+			appType = app
+			isValidApp = true
+			break
+		}
+	}
+
+	if !isValidApp {
+		response := CreateDatasetResponse{
+			Success: false,
+			Message: fmt.Sprintf("Invalid application type. Allowed: %s", strings.Join(allowedApps, ", ")),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Validate dataset name
+	if strings.Contains(datasetName, "/") || strings.Contains(datasetName, "\\") {
+		response := CreateDatasetResponse{
+			Success: false,
+			Message: "Invalid dataset name",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Delete all three directories for the dataset
+	directories := []string{
+		fmt.Sprintf("%s/input/%s", appType, datasetName),
+		fmt.Sprintf("%s/output/%s", appType, datasetName),
+		fmt.Sprintf("%s/processed/%s", appType, datasetName),
+	}
+
+	deletedDirs := 0
+	for _, dir := range directories {
+		err := h.S3Bucket.DeleteDirectory(dir)
+		if err != nil {
+			log.Printf("Warning: Failed to delete directory %s: %v", dir, err)
+			// Continue with other directories even if one fails
+		} else {
+			log.Printf("Successfully deleted directory: %s", dir)
+			deletedDirs++
+		}
+	}
+
+	if deletedDirs == 0 {
+		response := CreateDatasetResponse{
+			Success: false,
+			Message: "Failed to delete any dataset directories",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	log.Printf("Successfully deleted dataset: %s for application: %s (%d/%d directories)",
+		datasetName, appType, deletedDirs, len(directories))
+
+	response := CreateDatasetResponse{
+		Success: true,
+		Message: fmt.Sprintf("Dataset deleted successfully (%d/%d directories)", deletedDirs, len(directories)),
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *FileUploadHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "DELETE" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get file key from URL query parameter
+	fileKey := r.URL.Query().Get("key")
+	if fileKey == "" {
+		response := CreateDatasetResponse{
+			Success: false,
+			Message: "File key parameter is required",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Get application type from query parameter (default to starlight)
+	appType := r.URL.Query().Get("app")
+	if appType == "" {
+		appType = "starlight" // default
+	}
+
+	// Validate application type
+	allowedApps := []string{"starlight", "ppfx", "steckmap"}
+	isValidApp := false
+	for _, app := range allowedApps {
+		if strings.ToLower(appType) == app {
+			appType = app
+			isValidApp = true
+			break
+		}
+	}
+
+	if !isValidApp {
+		response := CreateDatasetResponse{
+			Success: false,
+			Message: fmt.Sprintf("Invalid application type. Allowed: %s", strings.Join(allowedApps, ", ")),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Delete the specific file from S3
+	err := h.S3Bucket.DeleteFile(fileKey)
+	if err != nil {
+		log.Printf("Error deleting file %s: %v", fileKey, err)
+		response := CreateDatasetResponse{
+			Success: false,
+			Message: "Failed to delete file",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	log.Printf("Successfully deleted file: %s", fileKey)
+
+	response := CreateDatasetResponse{
+		Success: true,
+		Message: "File deleted successfully",
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
 func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Request) {
 	// Set CORS headers
 	w.Header().Set("Access-Control-Allow-Origin", "*")

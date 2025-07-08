@@ -291,11 +291,6 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
           {datasets.length > 0 && (
             <div className="pane-count">{datasets.length}</div>
           )}
-          {refreshing && (
-            <span className="pipeline-progress-refresh-indicator">
-              🔄
-            </span>
-          )}
         </div>
       </div>
       
@@ -376,8 +371,11 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
                   )}
                   
                   {currentProgress.status === 'error' && currentProgress.errorMessage && (
-                    <div className="pipeline-progress-processing-info" style={{ color: '#E53E3E' }}>
-                      <span>❌ Error: {currentProgress.errorMessage}</span>
+                    <div className="pipeline-progress-processing-info" style={{ color: '#4FD1C5' }}>
+                      <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                        <div className="astro-loader-galaxy" style={{ width: '16px', height: '16px' }}></div>
+                        <div className="astro-loading-text" style={{ fontSize: '11px' }}>Processing...</div>
+                      </div>
                     </div>
                   )}
                 </div>
