@@ -1,10 +1,101 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
+import { mean, median, standardDeviation } from 'simple-statistics';
 import DatasetProgressBar from './DatasetProgressBar';
 
 function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapsed = false, onToggleCollapse }) {
   const [progressData, setProgressData] = useState({});
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Enhanced state for tracking processing times
+  const [processingHistory, setProcessingHistory] = useState({});
+  const [fileProcessingTimes, setFileProcessingTimes] = useState({});
+  const previousOutputFiles = useRef([]);
+  const processingStartTimes = useRef({});
+
+  // Track when files start and complete processing
+  useEffect(() => {
+    const currentOutputCount = outputFiles.length;
+    const previousOutputCount = previousOutputFiles.current.length;
+    
+    console.log(`File tracking: Current output ${currentOutputCount}, Previous output ${previousOutputCount}, Input ${inputFiles.length}`);
+    
+    // If we have more output files than before, some files were just processed
+    if (currentOutputCount > previousOutputCount) {
+      const newFiles = outputFiles.slice(previousOutputCount);
+      const processingEndTime = Date.now();
+      
+      console.log(`New output files detected:`, newFiles.map(f => f.name));
+      
+      newFiles.forEach(file => {
+        const fileId = file.key || file.name;
+        const startTime = processingStartTimes.current[fileId];
+        
+        console.log(`Processing file ${fileId}: startTime = ${startTime}, endTime = ${processingEndTime}`);
+        
+        if (startTime) {
+          const processingTime = processingEndTime - startTime;
+          const fileSize = file.size || 0;
+          
+          console.log(`File ${fileId} processed in ${processingTime}ms (${(processingTime/1000/60).toFixed(2)} minutes)`);
+          
+          // Store processing time with metadata
+          setFileProcessingTimes(prev => ({
+            ...prev,
+            [fileId]: {
+              processingTime,
+              fileSize,
+              timestamp: processingEndTime,
+              fileName: file.name
+            }
+          }));
+          
+          // Update processing history for the dataset
+          const datasetId = datasets.find(d => d.id)?.id || 'default';
+          console.log(`Adding to processing history for dataset: ${datasetId}`);
+          
+          setProcessingHistory(prev => ({
+            ...prev,
+            [datasetId]: [
+              ...(prev[datasetId] || []),
+              {
+                processingTime,
+                fileSize,
+                timestamp: processingEndTime,
+                fileName: file.name
+              }
+            ].slice(-20) // Keep only last 20 processing times
+          }));
+          
+          // Clean up start time tracking
+          delete processingStartTimes.current[fileId];
+        } else {
+          console.log(`No start time found for file ${fileId}, cannot calculate processing time`);
+        }
+      });
+    }
+    
+    // Track when files start processing (when we have input files but fewer output files)
+    if (inputFiles.length > currentOutputCount) {
+      const processingFiles = inputFiles.slice(currentOutputCount);
+      const processingStartTime = Date.now();
+      
+      console.log(`Files starting to process:`, processingFiles.map(f => f.name));
+      
+      processingFiles.forEach(file => {
+        const fileId = file.key || file.name;
+        if (!processingStartTimes.current[fileId]) {
+          processingStartTimes.current[fileId] = processingStartTime;
+          console.log(`Set start time for file ${fileId}: ${processingStartTime}`);
+        }
+      });
+      
+      console.log(`Current processing start times:`, Object.keys(processingStartTimes.current));
+    }
+    
+    // Update reference
+    previousOutputFiles.current = outputFiles;
+  }, [outputFiles, inputFiles, datasets]);
 
   // Calculate progress data from the file counts
   useEffect(() => {
@@ -53,14 +144,16 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
         lastUpdated: new Date(),
         filesTotal: processedCount,
         filesProcessed: outputCount,
-        errorMessage: ''
+        errorMessage: '',
+        // Add processing history reference
+        processingHistory: processingHistory[dataset.id] || []
       };
     });
     
     console.log('Final progress map:', progressMap);
     setProgressData(progressMap);
     
-  }, [datasets, inputFiles, outputFiles]);
+  }, [datasets, inputFiles, outputFiles, processingHistory]);
 
   // Periodic refresh indicator
   useEffect(() => {
@@ -83,7 +176,7 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
     }
   };
 
-  const getEstimatedTime = (progress, status, filesProcessed, filesTotal) => {
+  const getEstimatedTime = (progress, status, filesProcessed, filesTotal, processingHistory = []) => {
     if (status === 'completed') return 'Completed';
     if (status === 'queued') return 'Waiting to start';
     if (status === 'ready') return 'Ready to start';
@@ -93,8 +186,61 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
       const remainingFiles = filesTotal - filesProcessed;
       if (remainingFiles === 0) return 'Finalizing...';
       
-      // Estimate 2-3 minutes per file for STARLIGHT processing
-      const estimatedMinutes = remainingFiles * 2.5;
+      // Debug logging
+      console.log(`Time estimation for ${filesTotal} total files, ${filesProcessed} processed, ${remainingFiles} remaining`);
+      console.log(`Processing history available:`, processingHistory.length, 'entries');
+      
+      // Use actual processing history if available
+      if (processingHistory.length > 0) {
+        const recentHistory = processingHistory.slice(-10); // Use last 10 files
+        const processingTimes = recentHistory.map(h => h.processingTime / 1000 / 60); // Convert to minutes
+        
+        console.log(`Using processing history:`, processingTimes.map(t => `${t.toFixed(2)}m`));
+        
+        let estimatedMinutesPerFile;
+        
+        if (processingTimes.length >= 3) {
+          // Use statistical analysis for better estimates
+          const avgTime = mean(processingTimes);
+          const medianTime = median(processingTimes);
+          const stdDev = standardDeviation(processingTimes);
+          
+          console.log(`Stats - Avg: ${avgTime.toFixed(2)}m, Median: ${medianTime.toFixed(2)}m, StdDev: ${stdDev.toFixed(2)}m`);
+          
+          // Use median if there's high variance, otherwise use mean
+          if (stdDev > avgTime * 0.5) {
+            estimatedMinutesPerFile = medianTime;
+            console.log(`High variance detected, using median: ${medianTime.toFixed(2)}m`);
+          } else {
+            estimatedMinutesPerFile = avgTime;
+            console.log(`Low variance, using mean: ${avgTime.toFixed(2)}m`);
+          }
+          
+          // Add buffer for uncertainty (10-20% based on standard deviation)
+          const uncertaintyBuffer = Math.min(0.2, stdDev / avgTime * 0.5);
+          estimatedMinutesPerFile *= (1 + uncertaintyBuffer);
+          
+        } else {
+          // Use simple average for small sample sizes
+          estimatedMinutesPerFile = mean(processingTimes);
+          console.log(`Small sample, using simple average: ${estimatedMinutesPerFile.toFixed(2)}m`);
+        }
+        
+        const estimatedMinutes = remainingFiles * estimatedMinutesPerFile;
+        console.log(`Final estimate: ${remainingFiles} files × ${estimatedMinutesPerFile.toFixed(2)}m = ${estimatedMinutes.toFixed(1)}m`);
+        
+        if (estimatedMinutes > 60) {
+          const hours = Math.ceil(estimatedMinutes / 60);
+          return `~${hours}h remaining`;
+        }
+        return `~${Math.ceil(estimatedMinutes)}m remaining`;
+      }
+      
+      // Improved fallback estimate based on user feedback: 10 minutes total / ~40-50 files = ~15 seconds per file
+      console.log(`No processing history, using fallback estimate`);
+      const estimatedSeconds = remainingFiles * 15; // 15 seconds per file
+      const estimatedMinutes = estimatedSeconds / 60;
+      
       if (estimatedMinutes > 60) {
         return `~${Math.ceil(estimatedMinutes / 60)}h remaining`;
       }
@@ -102,6 +248,26 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
     }
     
     return 'Calculating...';
+  };
+
+  const getProcessingStats = (processingHistory = []) => {
+    if (processingHistory.length === 0) return null;
+    
+    const recentHistory = processingHistory.slice(-10);
+    const processingTimes = recentHistory.map(h => h.processingTime / 1000 / 60); // Convert to minutes
+    
+    if (processingTimes.length < 2) return null;
+    
+    const avgTime = mean(processingTimes);
+    const medianTime = median(processingTimes);
+    const stdDev = standardDeviation(processingTimes);
+    
+    return {
+      avgTime: avgTime.toFixed(1),
+      medianTime: medianTime.toFixed(1),
+      stdDev: stdDev.toFixed(1),
+      sampleSize: processingTimes.length
+    };
   };
 
   return (
@@ -144,8 +310,11 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
                 lastUpdated: new Date(),
                 filesTotal: 0,
                 filesProcessed: 0,
-                errorMessage: ''
+                errorMessage: '',
+                processingHistory: []
               };
+
+              const stats = getProcessingStats(currentProgress.processingHistory);
 
               return (
                 <div key={dataset.id} className="pipeline-progress-item">
@@ -173,7 +342,13 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
                       </div>
                     </div>
                     <div className="pipeline-progress-time">
-                      {getEstimatedTime(currentProgress.progress, currentProgress.status, currentProgress.filesProcessed, currentProgress.filesTotal)}
+                      {getEstimatedTime(
+                        currentProgress.progress, 
+                        currentProgress.status, 
+                        currentProgress.filesProcessed, 
+                        currentProgress.filesTotal,
+                        currentProgress.processingHistory
+                      )}
                     </div>
                   </div>
                   

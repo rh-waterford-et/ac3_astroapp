@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 // Re-enabling FileUpload component
 import FileUpload from './ProgressMonitor';
@@ -72,24 +72,11 @@ function PipelineMonitor({ selectedApp }) {
   const [loadingOutputFiles, setLoadingOutputFiles] = useState(false);
   const [outputFilesError, setOutputFilesError] = useState(null);
 
-  // Load datasets on component mount
-  useEffect(() => {
-    loadDatasets();
-  }, []);
-
-  // Load files when selected dataset changes
-  useEffect(() => {
-    if (selectedDataset) {
-      loadDatasetFiles(selectedDataset);
-      loadDatasetOutputFiles(selectedDataset);
-    } else {
-      setInputFiles([]);
-      setOutputFiles([]);
+  // Load datasets function with useCallback for stability
+  const loadDatasets = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setLoadingDatasets(true);
     }
-  }, [selectedDataset]);
-
-  const loadDatasets = async () => {
-    setLoadingDatasets(true);
     setDatasetError(null);
     try {
       const datasetNames = await getDatasets();
@@ -122,12 +109,17 @@ function PipelineMonitor({ selectedApp }) {
       console.error('Failed to load datasets:', error);
       setDatasetError(error.message || 'Failed to load datasets');
     } finally {
-      setLoadingDatasets(false);
+      if (showLoading) {
+        setLoadingDatasets(false);
+      }
     }
-  };
+  }, [selectedDataset]);
 
-  const loadDatasetFiles = async (datasetName) => {
-    setLoadingFiles(true);
+  // Load dataset files function with useCallback for stability
+  const loadDatasetFiles = useCallback(async (datasetName, showLoading = true) => {
+    if (showLoading) {
+      setLoadingFiles(true);
+    }
     setFilesError(null);
     try {
       const files = await getDatasetFiles(datasetName);
@@ -152,12 +144,17 @@ function PipelineMonitor({ selectedApp }) {
       setFilesError(error.message || 'Failed to load dataset files');
       setInputFiles([]);
     } finally {
-      setLoadingFiles(false);
+      if (showLoading) {
+        setLoadingFiles(false);
+      }
     }
-  };
+  }, []);
 
-  const loadDatasetOutputFiles = async (datasetName) => {
-    setLoadingOutputFiles(true);
+  // Load dataset output files function with useCallback for stability
+  const loadDatasetOutputFiles = useCallback(async (datasetName, showLoading = true) => {
+    if (showLoading) {
+      setLoadingOutputFiles(true);
+    }
     setOutputFilesError(null);
     try {
       const files = await getDatasetOutputFiles(datasetName);
@@ -182,9 +179,46 @@ function PipelineMonitor({ selectedApp }) {
       setOutputFilesError(error.message || 'Failed to load dataset output files');
       setOutputFiles([]);
     } finally {
-      setLoadingOutputFiles(false);
+      if (showLoading) {
+        setLoadingOutputFiles(false);
+      }
     }
-  };
+  }, []);
+
+  // Auto-refresh function (background, no loading indicators)
+  const autoRefresh = useCallback(() => {
+    console.log('Auto-refresh triggered');
+    loadDatasets(false);
+    if (selectedDataset) {
+      loadDatasetFiles(selectedDataset, false);
+      loadDatasetOutputFiles(selectedDataset, false);
+    }
+  }, [selectedDataset, loadDatasets, loadDatasetFiles, loadDatasetOutputFiles]);
+
+  // Load datasets on component mount
+  useEffect(() => {
+    loadDatasets(true);
+  }, [loadDatasets]);
+
+  // Load files when selected dataset changes
+  useEffect(() => {
+    if (selectedDataset) {
+      loadDatasetFiles(selectedDataset, true);
+      loadDatasetOutputFiles(selectedDataset, true);
+    } else {
+      setInputFiles([]);
+      setOutputFiles([]);
+    }
+  }, [selectedDataset, loadDatasetFiles, loadDatasetOutputFiles]);
+
+  // Set up auto-refresh interval
+  useEffect(() => {
+    const interval = setInterval(() => {
+      autoRefresh();
+    }, 5000); // Refresh every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
 
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
@@ -314,7 +348,7 @@ function PipelineMonitor({ selectedApp }) {
 
         {!isDatasetsCollapsed && (
           <>
-        {/* Middle Pane - Processed Input Files */}
+        {/* Middle Pane - Input Files */}
         <div className="pipeline-pane files-pane">
           <div className="pane-header">
             <h3>Input Files - {datasetName}</h3>

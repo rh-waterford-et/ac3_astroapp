@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { uploadFiles as apiUploadFiles, getDatasets, createDataset } from '../services/api';
 
@@ -15,19 +15,16 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
   const [loadingDatasets, setLoadingDatasets] = useState(false);
   const [datasetError, setDatasetError] = useState(null);
 
-  // Load datasets on component mount
-  useEffect(() => {
-    loadDatasets();
-  }, []);
-
-  const loadDatasets = async () => {
-    setLoadingDatasets(true);
+  // Load datasets with useCallback for stability
+  const loadDatasets = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setLoadingDatasets(true);
+    }
     setDatasetError(null);
     try {
       const datasets = await getDatasets();
       setAvailableDatasets(datasets);
       console.log('Loaded datasets:', datasets);
-      console.log('Available datasets state:', availableDatasets);
       
       // If no dataset is selected and we have datasets, select the first one
       if (!currentDataset && datasets.length > 0) {
@@ -37,9 +34,31 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
       console.error('Failed to load datasets:', error);
       setDatasetError(error.message || 'Failed to load datasets');
     } finally {
-      setLoadingDatasets(false);
+      if (showLoading) {
+        setLoadingDatasets(false);
+      }
     }
-  };
+  }, [currentDataset]);
+
+  // Auto-refresh function for datasets
+  const autoRefreshDatasetsFunc = useCallback(() => {
+    console.log('Auto-refreshing datasets in FileUpload');
+    loadDatasets(false);
+  }, [loadDatasets]);
+
+  // Load datasets on component mount
+  useEffect(() => {
+    loadDatasets(true);
+  }, [loadDatasets]);
+
+  // Set up auto-refresh interval for datasets
+  useEffect(() => {
+    const interval = setInterval(() => {
+      autoRefreshDatasetsFunc();
+    }, 10000); // Refresh every 10 seconds (less frequent than main monitor)
+
+    return () => clearInterval(interval);
+  }, [autoRefreshDatasetsFunc]);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -103,8 +122,6 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
   const removeFile = (fileId) => {
     setUploadQueue(prev => prev.filter(f => f.id !== fileId));
   };
-
-
 
   const uploadFiles = async () => {
     // Validate dataset selection
@@ -217,7 +234,7 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
             setNewDatasetName('');
             
             // Reload datasets to get the updated list from S3
-            await loadDatasets();
+            await loadDatasets(true);
             
             console.log('Dataset created successfully:', sanitizedName);
           } else {
@@ -263,7 +280,6 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
    * @param {KeyboardEvent} e - Keyboard event
    */
   const handleKeyDown = (e) => {
-    // Trigger file input on Enter or Space key
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       triggerFileInput();
@@ -293,7 +309,7 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
               <button 
                 className="upload-btn"
                 onClick={uploadFiles}
-                disabled={uploadQueue.every(f => f.status !== 'ready')}
+                disabled={uploadQueue.every(f => f.status !== 'ready') || !currentDataset}
               >
                 Upload All ({uploadQueue.filter(f => f.status === 'ready').length})
               </button>
@@ -330,10 +346,11 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
             {datasetError && (
               <div className="error-message">
                 ⚠️ {datasetError}
-                <button onClick={loadDatasets} className="retry-btn">Retry</button>
+                <button onClick={() => loadDatasets(true)} className="retry-btn">Retry</button>
               </div>
             )}
           </div>
+          
           <div className="dataset-selection">
             {!isCreatingNewDataset ? (
               <div className="dataset-select-wrapper">
@@ -364,25 +381,34 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
                     placeholder="Enter dataset name (e.g., NGC7025)"
                     value={newDatasetName}
                     onChange={(e) => setNewDatasetName(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleNewDatasetCreate()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleNewDatasetCreate();
+                      } else if (e.key === 'Escape') {
+                        handleNewDatasetCancel();
+                      }
+                    }}
                   />
                   <button 
                     className="create-dataset-btn"
                     onClick={handleNewDatasetCreate}
-                    disabled={!newDatasetName.trim()}
+                    disabled={!newDatasetName.trim() || loadingDatasets}
                   >
                     Create
                   </button>
                   <button 
                     className="cancel-dataset-btn"
                     onClick={handleNewDatasetCancel}
+                    disabled={loadingDatasets}
                   >
                     Cancel
                   </button>
                 </div>
-                <div className="dataset-preview">
-                  📁 starlight/input/{newDatasetName.trim().replace(/[^a-zA-Z0-9_-]/g, '')}
-                </div>
+                {newDatasetName.trim() && (
+                  <div className="dataset-preview">
+                    📁 starlight/input/{newDatasetName.trim().replace(/[^a-zA-Z0-9_-]/g, '')}
+                  </div>
+                )}
               </div>
             )}
           </div>
