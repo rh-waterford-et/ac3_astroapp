@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/app"
@@ -75,6 +76,29 @@ func (p *Producer) AddFile(file api.DataFile, appName string) {
 
 func (p *Producer) SendBatch(appName string) {
 	if len(p.Batch) > 0 {
+		// For STARLIGHT producer side, check if we have actual spectrum files, not just placeholder files
+		if appName == "STARLIGHT" && p.Side == "producer" {
+			// Count non-placeholder files in the batch
+			spectrumFileCount := 0
+			for _, file := range p.Batch {
+				if !strings.Contains(file.Name, ".batch_placeholder") &&
+					!strings.Contains(file.Name, ".dataset_placeholder") &&
+					!strings.HasSuffix(file.Name, ".in") {
+					spectrumFileCount++
+				}
+			}
+
+			// Only proceed if we have actual spectrum files
+			if spectrumFileCount == 0 {
+				log.Printf("Skipping batch with only placeholder files - no spectrum files found")
+				// Still delete the processed files (move placeholder to processed)
+				p.DeleteProcessedFiles()
+				// Clear the batch
+				p.Batch = make([]api.DataFile, 0, p.BatchSize)
+				return
+			}
+		}
+
 		// Update the .in file before sending the batch
 		if appName == "STARLIGHT" && p.Side == "producer" {
 			inFileName, content := starlight.UpdateInFile(p.Batch)

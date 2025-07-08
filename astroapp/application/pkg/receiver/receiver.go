@@ -119,6 +119,7 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 
 	// Get the app_name from headers to determine processing logic
 	appName, ok := d.Headers["app_name"].(string)
+
 	if !ok {
 		log.Printf("│ ERROR: 'app_name' header missing or invalid")
 		r.requeueWithLog(d, "unknown-app")
@@ -220,6 +221,7 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 
 	successCount := 0
 	var inFileName string
+	var inFileContent string
 	var spectrumFiles []api.DataFile
 
 	starlight := app.NewStarlight([]api.DataFile{}, r.Utils)
@@ -234,13 +236,14 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		if strings.HasSuffix(file.Name, ".in") {
 			// Store the .in file name but don't process it yet
 			inFileName = file.Name
+			inFileContent = string(file.Content)
 			log.Printf("│ ✓ Found .in file: %s", file.Name)
 			successCount++
 			continue
 		}
 
-		// Collect spectrum files for later .in file generation
-		if !strings.HasSuffix(file.Name, ".in") {
+		// Collect spectrum files for later .in file generation (exclude hidden files and .in files)
+		if !strings.HasSuffix(file.Name, ".in") && !strings.HasPrefix(filepath.Base(file.Name), ".") {
 			spectrumFiles = append(spectrumFiles, file)
 		}
 		if side == "producer" {
@@ -265,13 +268,13 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 			}
 		} else {
 			// Handle local file write for processor side
-			// For spectrum files, flatten the structure by using just the basename
+			// Store files flat using just the basename to match .in file references
 			filename := filepath.Base(file.Name)
 			filePath := filepath.Join(outputPath, filename)
 
 			err := os.WriteFile(filePath, []byte(file.Content), 0644)
 			if err != nil {
-				log.Printf("│ ✗ Error writing file %s: %v", filename, err)
+				log.Printf("│ ✗ Error writing file %s: %v", filePath, err)
 			} else {
 				log.Printf("│ ✓ Wrote file: %s to %s", file.Name, filePath)
 				successCount++
@@ -280,45 +283,33 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	}
 
 	// Generate and process .in file after all files are written (for STARLIGHT processor side)
-	if successCount == int(batchSize) && appName == "STARLIGHT" && side == "processor" && inFileName != "" && len(spectrumFiles) > 0 {
-		// Since files are now flattened, scan the output directory directly
-		entries, err := os.ReadDir(outputPath)
-		if err != nil {
-			log.Printf("│ ⚠ Could not read output directory %s: %v", outputPath, err)
-		} else {
-			var diskSpectrumFiles []api.DataFile
-			for _, entry := range entries {
-				if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".txt") {
-					// Read the spectrum file from disk
-					filePath := filepath.Join(outputPath, entry.Name())
-					content, err := os.ReadFile(filePath)
-					if err == nil {
-						// Use just the basename for STARLIGHT .in file
-						diskSpectrumFiles = append(diskSpectrumFiles, api.DataFile{
-							Name:    entry.Name(),
-							Content: string(content),
-						})
-					}
-				}
-			}
+	// Only generate .in files from spectrum files, NOT when receiving .in files from input side
+	if successCount == int(batchSize) && appName == "STARLIGHT" && side == "processor" && len(spectrumFiles) > 0 && inFileName == "" {
+		// Use only the spectrum files from the current message batch, not all files in the directory
+		// This prevents the continuous loop where .in files keep growing with previously processed files
+		if len(spectrumFiles) > 0 {
+			// Generate new .in file with only the spectrum files from this batch
+			newInFileName, newInContent := starlight.UpdateInFile(spectrumFiles)
+			if newInFileName != "" && newInContent != "" {
+				// Add the newly generated .in file to the processlist
+				starlight.UpdateToProcessList(newInFileName, []byte(newInContent))
+				log.Printf("│ ✓ Generated and added .in file to processlist: %s with %d spectrum files from current batch", newInFileName, len(spectrumFiles))
 
-			if len(diskSpectrumFiles) > 0 {
-				// Generate new .in file with the spectrum files found on disk
-				newInFileName, newInContent := starlight.UpdateInFile(diskSpectrumFiles)
-				if newInFileName != "" && newInContent != "" {
-					// Use the original filename but with regenerated content
-					starlight.UpdateToProcessList(inFileName, []byte(newInContent))
-					log.Printf("│ ✓ Regenerated and processed .in file: %s with %d spectrum files from disk", inFileName, len(diskSpectrumFiles))
-
-					// Update progress to analysis stage when .in file is processed
-					r.updateProgress(appName, batchID, api.StageAnalysis, 70.0)
-				} else {
-					log.Printf("│ ⚠ Failed to regenerate .in file content")
-				}
+				// Update progress to analysis stage when .in file is processed
+				r.updateProgress(appName, batchID, api.StageAnalysis, 70.0)
 			} else {
-				log.Printf("│ ⚠ No spectrum files found in output directory %s", outputPath)
+				log.Printf("│ ⚠ Failed to generate .in file content")
 			}
+		} else {
+			log.Printf("│ ⚠ No spectrum files found in current batch")
 		}
+	} else if successCount == int(batchSize) && appName == "STARLIGHT" && side == "processor" && inFileName != "" {
+		// If we received a .in file from input side, ADD it to processlist - this is the work to be done
+		starlight.UpdateToProcessList(inFileName, []byte(inFileContent))
+		log.Printf("│ ✓ Added .in file from input side to processlist: %s", inFileName)
+
+		// Update progress to analysis stage when .in file is processed
+		r.updateProgress(appName, batchID, api.StageAnalysis, 70.0)
 	}
 
 	if successCount == int(batchSize) {

@@ -66,7 +66,9 @@ func (s *Starlight) UpdateInFile(batch []api.DataFile) (string, string) {
 					continue
 				}
 
-				res[0] = batch[j].Name
+				// Use only the filename (basename) without directory structure
+				filename := filepath.Base(batch[j].Name)
+				res[0] = filename
 				// Get kinematic values for the current file
 				/* 				kinematicValues, err := s.GetKinematicValues(batch[j].Name)
 				   				if err != nil {
@@ -74,7 +76,7 @@ func (s *Starlight) UpdateInFile(batch []api.DataFile) (string, string) {
 				   					continue
 				   				}
 				   				res[4] = "CAL " + kinematicValues  */ // Update the 4th and 5th parameters with Velocity and Sigma
-				res[5] = "output_" + batch[j].Name
+				res[5] = "output_" + filename
 				overwrite_string := strings.Join(res, "  ")
 				// Add spectrum line - will add % terminator to the last one
 				newFile = newFile + overwrite_string + "\n"

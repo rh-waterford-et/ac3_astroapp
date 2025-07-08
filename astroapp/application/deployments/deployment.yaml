@@ -46,7 +46,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: EXPLORED_STARLIGHT
           value: "starlight/input"
         - name: EXPLORED_PPFX
@@ -91,7 +91,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: SERVER_PORT
           value: "8080"
         - name: CORS_ALLOWED_ORIGINS
@@ -149,7 +149,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: IN_FILE_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST

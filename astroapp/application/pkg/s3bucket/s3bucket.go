@@ -142,15 +142,43 @@ func (sb *S3Bucket) GetBatchDirectories(appName string) ([]string, error) {
 		log.Printf("DEBUG: Content[%d]: %s (size: %d)", i, *content.Key, *content.Size)
 	}
 
-	var batchDirs []string
+	// Use a map to collect unique batch directories
+	batchDirMap := make(map[string]bool)
+
+	// First, process CommonPrefixes (the traditional way)
 	for _, commonPrefix := range resp.CommonPrefixes {
 		// Extract batch directory name from the prefix
 		fullPrefix := *commonPrefix.Prefix
 		batchDir := strings.TrimPrefix(fullPrefix, prefix)
 		batchDir = strings.TrimSuffix(batchDir, "/")
 		if batchDir != "" {
-			batchDirs = append(batchDirs, batchDir)
+			batchDirMap[batchDir] = true
 		}
+	}
+
+	// Second, process file paths to extract directories (fallback method)
+	for _, content := range resp.Contents {
+		key := *content.Key
+		// Skip the root directory marker
+		if key == prefix {
+			continue
+		}
+
+		// Extract directory name from file path
+		relativePath := strings.TrimPrefix(key, prefix)
+		if strings.Contains(relativePath, "/") {
+			// This is a file in a subdirectory
+			batchDir := strings.Split(relativePath, "/")[0]
+			if batchDir != "" {
+				batchDirMap[batchDir] = true
+			}
+		}
+	}
+
+	// Convert map to slice
+	var batchDirs []string
+	for batchDir := range batchDirMap {
+		batchDirs = append(batchDirs, batchDir)
 	}
 
 	log.Printf("Found %d batch directories for %s: %v", len(batchDirs), appName, batchDirs)
