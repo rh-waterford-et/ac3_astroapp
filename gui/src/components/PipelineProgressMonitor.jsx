@@ -97,7 +97,7 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
     previousOutputFiles.current = outputFiles;
   }, [outputFiles, inputFiles, datasets]);
 
-  // Calculate progress data from the file counts
+  // Calculate progress data from props
   useEffect(() => {
     console.log('PipelineProgressMonitor calculating progress from props');
     console.log('Datasets:', datasets);
@@ -110,16 +110,18 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
       const processedCount = inputFiles.length;
       const outputCount = outputFiles.length;
       
-      let progress = 0;
-      let status = 'ready';
-      let stage = 'Ready';
+      // Use the dataset status that's already calculated in the parent component
+      let progress = dataset.progress || 0;
+      let status = dataset.status || 'ready';
+      let stage = dataset.stage || 'Ready';
       
-      if (processedCount > 0) {
+      // Only recalculate if we have input/output files for the selected dataset
+      if (datasets.length === 1 && processedCount > 0) {
         progress = Math.min((outputCount / processedCount) * 100, 100);
         
         console.log(`Dataset ${dataset.name}: ${processedCount} processed files, ${outputCount} output files, ${progress.toFixed(1)}% progress`);
         
-        // Determine status and stage based on progress
+        // Determine status and stage based on progress only if not already set
         if (progress >= 100) {
           status = 'completed';
           stage = 'Completed';
@@ -130,7 +132,7 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
           status = 'queued';
           stage = 'Queued for processing';
         }
-      } else if (outputCount > 0) {
+      } else if (datasets.length === 1 && outputCount > 0) {
         // Edge case: output files exist but no processed files
         progress = 100;
         status = 'completed';
@@ -357,7 +359,6 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
                       <span>
                         {currentProgress.filesProcessed} of {currentProgress.filesTotal} files processed
                       </span>
-                      <span>Last updated: {currentProgress.lastUpdated?.toLocaleTimeString()}</span>
                     </div>
                   )}
                   
@@ -366,7 +367,6 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
                       <span>
                         {currentProgress.filesTotal} files ready for processing
                       </span>
-                      <span>Last updated: {currentProgress.lastUpdated?.toLocaleTimeString()}</span>
                     </div>
                   )}
                   

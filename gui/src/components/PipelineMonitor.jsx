@@ -86,14 +86,58 @@ function PipelineMonitor({ selectedApp }) {
         a.toLowerCase().localeCompare(b.toLowerCase())
       );
       
-      // Transform sorted dataset names into dataset objects
-      const datasetObjects = sortedDatasetNames.map(name => ({
-        id: name,
-        name: name,
-        status: 'ready', // Default status - can be enhanced later
-        progress: 0,
-        stage: 'Ready for processing'
-      }));
+      // Load input and output files for each dataset to determine completion status
+      const datasetObjects = await Promise.all(
+        sortedDatasetNames.map(async (name) => {
+          let status = 'ready';
+          let progress = 0;
+          let stage = 'Ready for processing';
+          
+          try {
+            // Load input and output files for this dataset
+            const [inputFilesData, outputFilesData] = await Promise.all([
+              getDatasetFiles(name),
+              getDatasetOutputFiles(name)
+            ]);
+            
+            const inputCount = inputFilesData.length;
+            const outputCount = outputFilesData.length;
+            
+            // Determine status based on file counts
+            if (inputCount > 0 && outputCount >= inputCount) {
+              status = 'completed';
+              progress = 100;
+              stage = 'Completed';
+            } else if (inputCount > 0 && outputCount > 0) {
+              status = 'processing';
+              progress = Math.min((outputCount / inputCount) * 100, 100);
+              stage = 'Starlight analysis';
+            } else if (inputCount > 0) {
+              status = 'queued';
+              progress = 0;
+              stage = 'Queued for processing';
+            } else {
+              status = 'ready';
+              progress = 0;
+              stage = 'Ready for processing';
+            }
+            
+            console.log(`Dataset ${name}: ${inputCount} input files, ${outputCount} output files, status: ${status}`);
+            
+          } catch (error) {
+            console.warn(`Failed to load files for dataset ${name}:`, error);
+            // Keep default status on error
+          }
+          
+          return {
+            id: name,
+            name: name,
+            status: status,
+            progress: progress,
+            stage: stage
+          };
+        })
+      );
       
       setDatasets(datasetObjects);
       
@@ -282,7 +326,8 @@ function PipelineMonitor({ selectedApp }) {
   const getFileStatusColor = (status) => {
     switch (status) {
       case 'ready': return '#4FD1C5';
-      case 'processed': return '#68D391';
+      case 'processed': return '#4FD1C5';
+      case 'completed': return '#4FD1C5'; // Match pipeline progress completed color
       case 'processing': return '#F6AD55';
       case 'queued': return '#9F7AEA';
       case 'error': return '#FC8181';
@@ -560,9 +605,6 @@ function PipelineMonitor({ selectedApp }) {
                   <div className="file-item">
                     <div className="file-info">
                       <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
-                      <div className="file-details">
-                        <div className="file-size">{file.size}</div>
-                      </div>
                     </div>
                     <div className="file-status" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span className="file-size">{file.size}</span>
