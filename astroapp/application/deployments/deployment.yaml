@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ucm-producer-deployment
+  namespace: uc3-applications
   labels:
     app: ucm-producer
 spec:
@@ -20,11 +21,11 @@ spec:
         persistentVolumeClaim:
           claimName: ucm-pv-claim-producer
       containers:
-      - image: quay.io/rh-ee-kromashk/ucm-producer
+      - image: quay.io/bcapper30/uc3-backend:latest
         name: watcher-producer
         workingDir: /processing_data/
-        command: ["ucm"]
-        args: ["watcher", "producer"]
+        command: ["/uid_entrpoint.sh"]
+        args: ["/usr/bin/ucm", "watcher", "producer"]
         env:
         - name: RABBITMQ_USER
           value: "guest"
@@ -45,7 +46,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: EXPLORED_STARLIGHT
           value: "starlight/input"
         - name: EXPLORED_PPFX
@@ -75,6 +76,33 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
+      - image: quay.io/bcapper30/uc3-backend:latest
+        name: http-server
+        workingDir: /processing_data/
+        command: ["/uid_entrpoint.sh"]
+        args: ["/usr/bin/ucm", "server"]
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
+        - name: S3_ENDPOINT
+          value: "https://s3.eu-central-1.ionoscloud.com"
+        - name: S3_REGION
+          value: "de"
+        - name: S3_BUCKET_NAME
+          value: "test-provider"
+        - name: SERVER_PORT
+          value: "8080"
+        - name: CORS_ALLOWED_ORIGINS
+          value: "*"
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - mountPath: /processing_data/
+          name: ucm-pv-storage
+        securityContext:
+          privileged: true
       - image: quay.io/rh-ee-kromashk/ac3-connector-http-http-consumer:latest
         name: consumer
         env:
@@ -93,7 +121,7 @@ spec:
         - containerPort: 28181
         - containerPort: 28182
         - containerPort: 28183
-      - image: quay.io/rh-ee-kromashk/ucm-receiver
+      - image: quay.io/bcapper30/uc3-backend:latest
         name: receiver-producer
         workingDir: /processing_data/
         volumeMounts:
@@ -101,8 +129,8 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-        command: ["ucm"]
-        args: ["consumer", "producer"]
+        command: ["/uid_entrpoint.sh"]
+        args: ["/usr/bin/ucm", "consumer", "producer"]
         env:
         - name: RABBITMQ_USER
           value: "guest"
@@ -121,7 +149,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: IN_FILE_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST

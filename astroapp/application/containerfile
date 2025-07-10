@@ -1,46 +1,55 @@
 # ---------- Stage 1: Build ----------
-      FROM docker.io/library/golang:1.23 AS builder
-      WORKDIR /app
-      COPY . .
-      RUN make build
-      
-      # ---------- Stage 2: Producer Container ----------
-      FROM registry.redhat.io/ubi9-minimal@sha256:30bbd445046a3a63f5f5557a3c67dee74e3c8e7855eb0347630b020f3689823f AS ucm-producer
+FROM docker.io/library/golang:1.23 AS builder
+WORKDIR /app
+COPY . .
+RUN mkdir -p build && \
+    GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o build ./...
 
-      RUN mkdir -p /docker/starlight/config_files_starlight/ && \
-          mkdir -p /processing_data/ && \
-          chmod -R 777 /processing_data/
-      
-      WORKDIR /processing_data/
-      
-      COPY --from=builder /app/build/ucm /usr/bin/ucm
-      COPY data/. /docker/starlight/config_files_starlight/
+# ---------- Stage 2: Runtime Container ----------
+FROM ubuntu:22.04 AS uc3-backend
 
-      EXPOSE 5672
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y ca-certificates procps && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-      ENTRYPOINT ["./uid_entrypoint.sh"]
-      CMD ["producer"]
-      
-      # ---------- Stage 3: Receiver Container ----------
-      FROM registry.redhat.io/ubi9-minimal@sha256:30bbd445046a3a63f5f5557a3c67dee74e3c8e7855eb0347630b020f3689823f AS ucm-receiver
-      
+# Create application user and directories
+RUN groupadd -g 1001 ucm && \
+    useradd -u 1001 -g ucm -d /home/ucm -s /bin/bash ucm
 
-      RUN microdnf install -y shadow-utils && \
-          groupadd -g 1001 ucm && \
-          useradd -u 1001 -g ucm -d /home/ucm -s /sbin/nologin ucm
-      
-      RUN mkdir -p /processing_data && \
-          chown -R ucm:ucm /processing_data && \
-          chmod -R 775 /processing_data
-      
-      COPY --from=builder /app/build/ucm /usr/bin/ucm
+# Create necessary directories for batch processing
+RUN mkdir -p /docker/starlight/config_files_starlight/ && \
+    mkdir -p /processing_data/ && \
+    mkdir -p /home/ucm && \
+    chown -R ucm:ucm /processing_data /home/ucm && \
+    chmod -R 775 /processing_data
 
-      
-      EXPOSE 5672
-      
-      LABEL io.k8s.display-name="UCM Application" \
-            io.k8s.description="Application interface to UC." \
-            maintainer="kromashk@redhat.com"
- 
-      ENTRYPOINT ["./uid_entrypoint.sh"]
-      CMD ["receiver"]
+# Copy built binary and configuration files
+COPY --from=builder /app/build/ucm /usr/bin/ucm
+COPY data/. /docker/starlight/config_files_starlight/
+COPY uid_entrpoint.sh /uid_entrpoint.sh
+
+# Set proper permissions
+RUN chmod +x /usr/bin/ucm /uid_entrpoint.sh && \
+    chown -R ucm:ucm /docker/starlight/
+
+# Set working directory
+WORKDIR /processing_data
+
+# Expose ports for server mode and RabbitMQ
+EXPOSE 5672 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD pgrep ucm || exit 1
+
+# Labels
+LABEL io.k8s.display-name="UC3 Astronomy Backend" \
+      io.k8s.description="Astronomical data processing backend with batch support" \
+      maintainer="bcapper30@example.com" \
+      version="2.0.0"
+
+# Default entrypoint - supports watcher, consumer, server modes
+ENTRYPOINT ["/uid_entrpoint.sh"]
+CMD ["server"]

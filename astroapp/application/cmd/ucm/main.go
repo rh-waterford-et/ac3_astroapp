@@ -10,6 +10,7 @@ import (
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/receiver"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/server"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/watcher"
 )
 
@@ -17,6 +18,7 @@ const usage = `
 	usage: 
 	ucm watcher <producer|processor>  
 	ucm consumer <producer|processor> 
+	ucm server
 
 	command line examples:
 
@@ -25,27 +27,50 @@ const usage = `
 
 	# execute processor receiver
 	ucm consumer processor
+
+	# start HTTP server for file uploads
+	ucm server
 `
 
 func main() {
 
-	if len(os.Args) <= 2 {
+	if len(os.Args) < 2 {
 		fmt.Println(usage)
 		os.Exit(1)
 	}
 
 	switch os.Args[1] {
 	case "watcher":
+		if len(os.Args) < 3 {
+			fmt.Println(usage)
+			os.Exit(1)
+		}
 		err := LaunchProducer(os.Args[2])
 		if err != nil {
 			os.Exit(1)
 		}
 	case "consumer":
+		if len(os.Args) < 3 {
+			fmt.Println(usage)
+			os.Exit(1)
+		}
 		err := LaunchReceiver(os.Args[2])
 		if err != nil {
 			os.Exit(1)
 		}
+	case "server":
+		LaunchServer()
+	default:
+		fmt.Println(usage)
+		os.Exit(1)
 	}
+}
+
+func LaunchServer() {
+	log.Printf("------------------ Starting HTTP Server ---------------------")
+	
+	server := server.NewServer()
+	server.Start()
 }
 
 func LaunchReceiver(side string) error {

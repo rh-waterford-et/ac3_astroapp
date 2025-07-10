@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: starlight
+  namespace: uc3-applications
   labels:
     app: starlight
 spec:
@@ -33,7 +34,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/rh-ee-kromashk/ucm-receiver
+      - image: quay.io/bcapper30/uc3-backend:latest
         name: receiver-processor
         workingDir: /processing_data/
         volumeMounts:
@@ -41,7 +42,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-        command: ["ucm"]
+        command: ["/usr/bin/ucm"]
         args: ["consumer", "processor"]
         env:
         - name: RABBITMQ_USER
@@ -61,7 +62,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: IN_FILE_OUTPUT_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST
@@ -84,12 +85,19 @@ spec:
           value: "/processing_data/steckmap/data/output"
         - name: PROCESSED_STECKMAP
           value: "/processing_data/steckmap/data/processed"
+        - name: TEMPLATE_IN_FILE_PATH
+          value: "/docker/starlight/config_files_starlight/grid_example.in"
+        # Watcher environment variables (without _DIR_ in the name)
+        - name: EXPLORED_STARLIGHT
+          value: "/processing_data/starlight/data/output"
+        - name: OUTPUT_STARLIGHT
+          value: "/processing_data/starlight/data/output"
         ports:
         - containerPort: 5672  
-      - image: quay.io/rh-ee-kromashk/ucm-producer
+      - image: quay.io/bcapper30/uc3-backend:latest
         name: watcher-processor
         workingDir: /processing_data/
-        command: ["ucm"]
+        command: ["/usr/bin/ucm"]
         args: ["watcher", "processor"]
         env:
         - name: RABBITMQ_USER
@@ -103,7 +111,7 @@ spec:
         - name: BATCH_SIZE
           value: "5"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: EXPLORED_STARLIGHT
           value: "/processing_data/starlight/data/output"
         - name: OUTPUT_STARLIGHT

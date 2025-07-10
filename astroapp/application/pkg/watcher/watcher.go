@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
@@ -54,7 +55,21 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, 
 			return
 		}
 		length = len(files)
-		log.Printf("Found %d files in %s: %v", length, inputDir, files)
+		if length > 0 {
+			log.Printf("Found %d files in %s input directory across all batches", length, appName)
+			// Group files by batch for better logging
+			batchCounts := make(map[string]int)
+			for _, file := range files {
+				parts := strings.Split(file, "/")
+				if len(parts) >= 1 {
+					batchName := parts[0]
+					batchCounts[batchName]++
+				}
+			}
+			for batch, count := range batchCounts {
+				log.Printf("  Batch %s: %d files", batch, count)
+			}
+		}
 	case "processor":
 		fileSource = &producer.LocalFileSource{
 			InputDir:     inputDir,

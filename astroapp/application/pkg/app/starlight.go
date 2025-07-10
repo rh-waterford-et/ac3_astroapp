@@ -58,7 +58,17 @@ func (s *Starlight) UpdateInFile(batch []api.DataFile) (string, string) {
 			// Replace the input file name in the .in file
 			res := strings.Split(scanner.Text(), "  ")
 			for j := 0; j < len(batch); j++ {
-				res[0] = batch[j].Name
+				// Skip placeholder files and non-spectrum files
+				if strings.Contains(batch[j].Name, ".batch_placeholder") ||
+					strings.Contains(batch[j].Name, ".dataset_placeholder") ||
+					strings.HasSuffix(batch[j].Name, ".in") {
+					log.Printf("Skipping placeholder/config file: %s", batch[j].Name)
+					continue
+				}
+
+				// Use only the filename (basename) without directory structure
+				filename := filepath.Base(batch[j].Name)
+				res[0] = filename
 				// Get kinematic values for the current file
 				/* 				kinematicValues, err := s.GetKinematicValues(batch[j].Name)
 				   				if err != nil {
@@ -66,10 +76,13 @@ func (s *Starlight) UpdateInFile(batch []api.DataFile) (string, string) {
 				   					continue
 				   				}
 				   				res[4] = "CAL " + kinematicValues  */ // Update the 4th and 5th parameters with Velocity and Sigma
-				res[5] = "output_" + batch[j].Name
+				res[5] = "output_" + filename
 				overwrite_string := strings.Join(res, "  ")
+				// Add spectrum line - will add % terminator to the last one
 				newFile = newFile + overwrite_string + "\n"
 			}
+			// Add % terminator on its own line after all spectrum entries
+			newFile = newFile + "%\n"
 		} else {
 			newFile = newFile + scanner.Text() + "\n"
 		}
@@ -143,10 +156,13 @@ func (s *Starlight) UpdateToProcessList(inFileName string, fileContent []byte) {
 	PROCESS_LIST := os.Getenv("PROCESS_LIST")
 	InFilePath := os.Getenv("IN_FILE_OUTPUT_PATH")
 
-	if err := s.Utils.TouchFile(PROCESS_LIST); err != nil {
-		log.Printf("│ ✗ Error creating process list: %w", err)
-		return
-	}else{log.Printf("│ ✓ Creating process list")
+	// Create process list file if it doesn't exist, but don't add empty content
+	if _, err := os.Stat(PROCESS_LIST); os.IsNotExist(err) {
+		if err := s.Utils.TouchFile(PROCESS_LIST); err != nil {
+			log.Printf("│ ✗ Error creating process list: %w", err)
+			return
+		}
+		log.Printf("│ ✓ Creating process list")
 	}
 
 	specialFilePath := filepath.Join(InFilePath, inFileName)
@@ -158,6 +174,18 @@ func (s *Starlight) UpdateToProcessList(inFileName string, fileContent []byte) {
 		return
 	}
 
+	// Check if the filename is already in the process list to avoid duplicates
+	if fileExists, err := os.Open(PROCESS_LIST); err == nil {
+		defer fileExists.Close()
+		scanner := bufio.NewScanner(fileExists)
+		for scanner.Scan() {
+			if strings.TrimSpace(scanner.Text()) == inFileName {
+				log.Printf("│ ⚠ File %s already in process list, skipping", inFileName)
+				return
+			}
+		}
+	}
+
 	f, err := os.OpenFile(PROCESS_LIST, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
 	if err != nil {
 		log.Printf("│ ✗ Error opening process list: %v", err)
@@ -167,5 +195,7 @@ func (s *Starlight) UpdateToProcessList(inFileName string, fileContent []byte) {
 
 	if _, err = f.WriteString(inFileName + "\n"); err != nil {
 		log.Printf("│ ✗ Error updating process list: %v", err)
+	} else {
+		log.Printf("│ ✓ Added %s to process list", inFileName)
 	}
 }

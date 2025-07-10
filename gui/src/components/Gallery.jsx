@@ -1,6 +1,17 @@
 import React, { useEffect } from 'react';
 import PropTypes from 'prop-types';
 
+// Import NGC7025 images from assets
+import NGC7025_stellar_velocity from '../assets/NGC7025_stellar_velocity.jpg';
+import NGC7025_stellar_velocity_error from '../assets/NGC7025_stellar_velocity_error.jpg';
+import NGC7025_velocity_dispersion from '../assets/NGC7025_velocity_dispersion.jpg';
+import NGC7025_velocity_dispersion_error from '../assets/NGC7025_velocity_dispersion_error.jpg';
+import NGC7025_h3 from '../assets/NGC7025_h3.jpg';
+import NGC7025_h4 from '../assets/NGC7025_h4.jpg';
+import NGC7025_age from '../assets/NGC7025_age.jpeg';
+import NGC7025_age_mass_weighted from '../assets/NGC7025_age_mass_weighted.jpg';
+import NGC7025_metallicity from '../assets/NGC7025_metallicity.jpg';
+
 const Gallery = ({ aladinInstance }) => {
   useEffect(() => {
     if (!aladinInstance) return;
@@ -574,15 +585,14 @@ const removeInteractionListeners = (image) => {
  * @param {string} objectName - Original object name
  * @returns {Promise<number>} - Number of images loaded
  */
-const processImageLoading = async (mapTypes, normalizedName, objectName) => {
+const processImageLoading = async (mapTypes, normalizedName, objectName, imageMap) => {
   let imagesLoaded = 0;
   
   for (const mapType of mapTypes) {
     const checkbox = document.getElementById(mapType.checkboxId);
     
     if (checkbox && checkbox.checked) {
-      const imageName = `${normalizedName}_${mapType.suffix}`;
-      const imageFound = await tryLoadObjectImage(imageName, mapType, objectName);
+      const imageFound = await tryLoadObjectImage(mapType, objectName, imageMap);
       if (imageFound) {
         imagesLoaded++;
       }
@@ -653,6 +663,28 @@ const loadObjectImages = async (objectName) => {
   // Normalize object name for file naming (remove spaces, make lowercase)
   const normalizedName = objectName.replace(/\s+/g, '').toUpperCase();
   
+  // Image mapping for specific objects (can be extended for other objects)
+  // To add support for other objects, import their images at the top of the file
+  // and add them to this map with the same suffix structure
+  const imageMap = {
+    NGC7025: {
+      stellar_velocity: NGC7025_stellar_velocity,
+      stellar_velocity_error: NGC7025_stellar_velocity_error,
+      velocity_dispersion: NGC7025_velocity_dispersion,
+      velocity_dispersion_error: NGC7025_velocity_dispersion_error,
+      h3: NGC7025_h3,
+      h4: NGC7025_h4,
+      age: NGC7025_age,
+      age_mass_weighted: NGC7025_age_mass_weighted,
+      metallicity: NGC7025_metallicity
+    }
+    // Add other objects here as needed, e.g.:
+    // NGC6027: {
+    //   stellar_velocity: NGC6027_stellar_velocity,
+    //   // ... other map types
+    // }
+  };
+  
   // Map types that we expect to find images for
   const mapTypes = [
     { key: 'stellar-velocity', suffix: 'stellar_velocity', label: 'Stellar Velocity', checkboxId: 'map-stellar-velocity' },
@@ -667,7 +699,7 @@ const loadObjectImages = async (objectName) => {
   ];
   
   // Process image loading for checked map types
-  const imagesLoaded = await processImageLoading(mapTypes, normalizedName, objectName);
+  const imagesLoaded = await processImageLoading(mapTypes, normalizedName, objectName, imageMap);
   
   // Handle final status
   handleLoadingStatus(imagesLoaded, mapTypes, objectName);
@@ -675,34 +707,32 @@ const loadObjectImages = async (objectName) => {
 
 /**
  * Try to load an image for a specific object and map type
- * @param {string} imageName - The expected image name (e.g., 'NGC7025_stellar_velocity')
  * @param {Object} mapType - Map type configuration object
  * @param {string} objectName - The original object name for display
+ * @param {Object} imageMap - Mapping of object names to their image assets
  * @returns {Promise<boolean>} - True if image was found and loaded
  */
-const tryLoadObjectImage = async (imageName, mapType, objectName) => {
-  // For now, we'll check if the image exists by trying to load it
-  // In the future, this will be replaced with an API call
+const tryLoadObjectImage = async (mapType, objectName, imageMap) => {
+  // Normalize object name to match image map keys
+  const normalizedName = objectName.replace(/\s+/g, '').toUpperCase();
   
-  // Try different file extensions
-  const extensions = ['jpg', 'jpeg', 'png', 'fits'];
-  
-  for (const ext of extensions) {
-    const imagePath = `/src/assets/${imageName}.${ext}`;
-    
-    try {
-      // Check if image exists
-      const imageExists = await checkImageExists(imagePath);
-      if (imageExists) {
-        addImageToGallery(imagePath, mapType, objectName);
-        return true;
-      }
-    } catch (error) {
-      // Continue to next extension
-    }
+  // Check if we have an image map for this object
+  if (!imageMap[normalizedName]) {
+    console.log(`No image map found for object: ${normalizedName}`);
+    return false;
   }
   
-     return false;
+  // Get the image source for this map type
+  const imageSrc = imageMap[normalizedName][mapType.suffix];
+  
+  if (imageSrc) {
+    console.log(`✅ Found image for ${objectName} ${mapType.label}: ${mapType.suffix}`);
+    addImageToGallery(imageSrc, mapType, objectName);
+    return true;
+  } else {
+    console.log(`❌ No image found for ${objectName} ${mapType.label}: ${mapType.suffix}`);
+    return false;
+  }
 };
 
 /**

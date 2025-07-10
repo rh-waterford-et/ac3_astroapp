@@ -1,98 +1,316 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 // Re-enabling FileUpload component
 import FileUpload from './ProgressMonitor';
 import PipelineProgressMonitor from './PipelineProgressMonitor';
+import { getDatasets, getDatasetFiles, getDatasetOutputFiles, deleteDataset, deleteFile } from '../services/api';
 
 function PipelineMonitor({ selectedApp }) {
-  const [selectedDataset, setSelectedDataset] = useState('dataset1');
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  const [datasets] = useState([
-    {
-      id: 'dataset1',
-      name: 'NGC7025',
-      type: 'MEGARA',
-      status: 'ready',
-      progress: 0,
-      stage: 'Ready for processing'
-    },
-    {
-      id: 'dataset2', 
-      name: 'IC1683',
-      type: 'MEGARA',
-      status: 'processing',
-      progress: 67,
-      stage: 'Stellar population analysis'
-    },
-    {
-      id: 'dataset3',
-      name: 'NGC2906',
-      type: 'MUSE',
-      status: 'completed',
-      progress: 100,
-      stage: 'Analysis completed'
-    },
-    {
-      id: 'dataset4',
-      name: 'MANGA-8250',
-      type: 'MANGA',
-      status: 'queued',
-      progress: 0,
-      stage: 'Waiting in queue'
+  const [selectedDataset, setSelectedDataset] = useState('');
+  
+  // Helper functions for localStorage persistence
+  const getStoredCollapseState = (key, defaultValue = false) => {
+    try {
+      const stored = localStorage.getItem(`pipeline-${key}-collapsed`);
+      return stored !== null ? JSON.parse(stored) : defaultValue;
+    } catch (error) {
+      console.error(`Error reading ${key} collapse state:`, error);
+      return defaultValue;
     }
-  ]);
+  };
 
-  // File data for each dataset
-  const [fileData] = useState({
-    dataset1: {
-      input: [
-        { name: 'NGC7025_LR-V_final_cube.fits', size: '2.3 GB', uploaded: '2024-01-15 14:30:22', status: 'processed' },
-        { name: 'NGC7025_spectrum_xpos_00_ypos_01.txt', size: '156 KB', uploaded: '2024-01-15 14:30:45', status: 'processed' },
-        { name: 'NGC7025_spectrum_xpos_00_ypos_02.txt', size: '158 KB', uploaded: '2024-01-15 14:30:47', status: 'processed' },
-        { name: 'NGC7025_kinematic_info.txt', size: '8.2 KB', uploaded: '2024-01-15 14:30:50', status: 'ready' },
-        { name: 'NGC7025_grid_example.in', size: '1.4 KB', uploaded: '2024-01-15 14:31:02', status: 'ready' }
-      ],
-      output: [
-        { name: 'NGC7025_age_mass_weighted.fits', size: '1.8 GB', generated: '2024-01-15 15:45:12', status: 'ready' },
-        { name: 'NGC7025_metallicity_light_weighted.fits', size: '1.8 GB', generated: '2024-01-15 15:45:18', status: 'ready' },
-        { name: 'NGC7025_velocity_dispersion.fits', size: '1.7 GB', generated: '2024-01-15 15:45:22', status: 'ready' },
-        { name: 'NGC7025_stellar_velocity.fits', size: '1.7 GB', generated: '2024-01-15 15:45:25', status: 'ready' }
-      ]
-    },
-    dataset2: {
-      input: [
-        { name: 'IC1683_LR-R_final_cube.fits', size: '2.1 GB', uploaded: '2024-01-16 09:15:33', status: 'processing' },
-        { name: 'IC1683_LR-V_final_cube.fits', size: '2.2 GB', uploaded: '2024-01-16 09:16:12', status: 'processing' },
-        { name: 'IC1683_kinematic_info.txt', size: '7.8 KB', uploaded: '2024-01-16 09:16:45', status: 'queued' }
-      ],
-      output: [
-        { name: 'IC1683_age_mass_weighted.fits', size: '1.9 GB', generated: 'Processing...', status: 'processing' },
-        { name: 'IC1683_metallicity_light_weighted.fits', size: 'Processing...', generated: 'Processing...', status: 'queued' }
-      ]
-    },
-    dataset3: {
-      input: [
-        { name: 'NGC2906_cube.fits', size: '3.4 GB', uploaded: '2024-01-10 16:22:18', status: 'processed' },
-        { name: 'NGC2906_spectrum_files.tar.gz', size: '245 MB', uploaded: '2024-01-10 16:23:42', status: 'processed' },
-        { name: 'NGC2906_kinematic_info.txt', size: '12.1 KB', uploaded: '2024-01-10 16:24:15', status: 'processed' }
-      ],
-      output: [
-        { name: 'NGC2906_age_mass_weighted.fits', size: '2.8 GB', generated: '2024-01-10 18:45:33', status: 'ready' },
-        { name: 'NGC2906_metallicity_light_weighted.fits', size: '2.8 GB', generated: '2024-01-10 18:46:12', status: 'ready' },
-        { name: 'NGC2906_velocity_dispersion.fits', size: '2.7 GB', generated: '2024-01-10 18:46:45', status: 'ready' },
-        { name: 'NGC2906_stellar_velocity.fits', size: '2.7 GB', generated: '2024-01-10 18:47:18', status: 'ready' },
-        { name: 'NGC2906_starlight_summary.log', size: '67 KB', generated: '2024-01-10 18:47:55', status: 'ready' }
-      ]
-    },
-    dataset4: {
-      input: [
-        { name: 'manga-8250-1902-LINCUBE.fits', size: '1.8 GB', uploaded: '2024-01-17 11:30:45', status: 'queued' },
-        { name: 'manga-8250-1902-LOGCUBE.fits', size: '1.8 GB', uploaded: '2024-01-17 11:31:22', status: 'queued' }
-      ],
-      output: []
+  const setStoredCollapseState = (key, value) => {
+    try {
+      localStorage.setItem(`pipeline-${key}-collapsed`, JSON.stringify(value));
+    } catch (error) {
+      console.error(`Error storing ${key} collapse state:`, error);
     }
-  });
+  };
+
+  // Initialize collapsed states from localStorage, defaulting to false (not collapsed)
+  const [isUploadCollapsed, setIsUploadCollapsed] = useState(() => 
+    getStoredCollapseState('upload', false)
+  );
+  const [isDatasetsCollapsed, setIsDatasetsCollapsed] = useState(() => 
+    getStoredCollapseState('datasets', false)
+  );
+  const [isPipelineProgressCollapsed, setIsPipelineProgressCollapsed] = useState(() => 
+    getStoredCollapseState('progress', false)
+  );
+
+  // Enhanced setters that also save to localStorage
+  const toggleUploadCollapsed = () => {
+    const newState = !isUploadCollapsed;
+    setIsUploadCollapsed(newState);
+    setStoredCollapseState('upload', newState);
+  };
+
+  const toggleDatasetsCollapsed = () => {
+    const newState = !isDatasetsCollapsed;
+    setIsDatasetsCollapsed(newState);
+    setStoredCollapseState('datasets', newState);
+  };
+
+  const togglePipelineProgressCollapsed = () => {
+    const newState = !isPipelineProgressCollapsed;
+    setIsPipelineProgressCollapsed(newState);
+    setStoredCollapseState('progress', newState);
+  };
+
+  // Real datasets from S3
+  const [datasets, setDatasets] = useState([]);
+  const [loadingDatasets, setLoadingDatasets] = useState(false);
+  const [datasetError, setDatasetError] = useState(null);
+
+  // Real input files from S3
+  const [inputFiles, setInputFiles] = useState([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [filesError, setFilesError] = useState(null);
+
+  // Real output files from S3
+  const [outputFiles, setOutputFiles] = useState([]);
+  const [loadingOutputFiles, setLoadingOutputFiles] = useState(false);
+  const [outputFilesError, setOutputFilesError] = useState(null);
+
+  // Load datasets function with useCallback for stability
+  const loadDatasets = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setLoadingDatasets(true);
+    }
+    setDatasetError(null);
+    try {
+      const datasetNames = await getDatasets();
+      
+      // Sort dataset names alphabetically (case-insensitive)
+      const sortedDatasetNames = datasetNames.sort((a, b) => 
+        a.toLowerCase().localeCompare(b.toLowerCase())
+      );
+      
+      // Load input and output files for each dataset to determine completion status
+      const datasetObjects = await Promise.all(
+        sortedDatasetNames.map(async (name) => {
+          let status = 'ready';
+          let progress = 0;
+          let stage = 'Ready for processing';
+          
+          try {
+            // Load input and output files for this dataset
+            const [inputFilesData, outputFilesData] = await Promise.all([
+              getDatasetFiles(name),
+              getDatasetOutputFiles(name)
+            ]);
+            
+            const inputCount = inputFilesData.length;
+            const outputCount = outputFilesData.length;
+            
+            // Determine status based on file counts
+            if (inputCount > 0 && outputCount >= inputCount) {
+              status = 'completed';
+              progress = 100;
+              stage = 'Completed';
+            } else if (inputCount > 0 && outputCount > 0) {
+              status = 'processing';
+              progress = Math.min((outputCount / inputCount) * 100, 100);
+              stage = 'Starlight analysis';
+            } else if (inputCount > 0) {
+              status = 'queued';
+              progress = 0;
+              stage = 'Queued for processing';
+            } else {
+              status = 'ready';
+              progress = 0;
+              stage = 'Ready for processing';
+            }
+            
+            console.log(`Dataset ${name}: ${inputCount} input files, ${outputCount} output files, status: ${status}`);
+            
+          } catch (error) {
+            console.warn(`Failed to load files for dataset ${name}:`, error);
+            // Keep default status on error
+          }
+          
+          return {
+            id: name,
+            name: name,
+            status: status,
+            progress: progress,
+            stage: stage
+          };
+        })
+      );
+      
+      setDatasets(datasetObjects);
+      
+      // If no dataset is selected and we have datasets, select the first one (alphabetically)
+      if (!selectedDataset && datasetObjects.length > 0) {
+        setSelectedDataset(datasetObjects[0].id);
+      }
+      // If selectedDataset doesn't exist in the loaded datasets, select the first one (alphabetically)
+      else if (selectedDataset && !datasetObjects.find(d => d.id === selectedDataset) && datasetObjects.length > 0) {
+        setSelectedDataset(datasetObjects[0].id);
+      }
+    } catch (error) {
+      console.error('Failed to load datasets:', error);
+      setDatasetError(error.message || 'Failed to load datasets');
+    } finally {
+      if (showLoading) {
+        setLoadingDatasets(false);
+      }
+    }
+  }, [selectedDataset]);
+
+  // Load dataset files function with useCallback for stability
+  const loadDatasetFiles = useCallback(async (datasetName, showLoading = true) => {
+    if (showLoading) {
+      setLoadingFiles(true);
+    }
+    setFilesError(null);
+    try {
+      const files = await getDatasetFiles(datasetName);
+      
+      // Transform API response to match current file structure
+      const transformedFiles = files.map(file => ({
+        name: file.name,
+        size: formatFileSize(file.size),
+        uploaded: file.timestamp,
+        status: 'processed', // Default status for existing files
+        key: file.key
+      }));
+      
+      // Sort files alphabetically by name (case-insensitive)
+      const sortedFiles = transformedFiles.sort((a, b) => 
+        a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+      );
+      
+      setInputFiles(sortedFiles);
+    } catch (error) {
+      console.error('Failed to load dataset files:', error);
+      setFilesError(error.message || 'Failed to load dataset files');
+      setInputFiles([]);
+    } finally {
+      if (showLoading) {
+        setLoadingFiles(false);
+      }
+    }
+  }, []);
+
+  // Load dataset output files function with useCallback for stability
+  const loadDatasetOutputFiles = useCallback(async (datasetName, showLoading = true) => {
+    if (showLoading) {
+      setLoadingOutputFiles(true);
+    }
+    setOutputFilesError(null);
+    try {
+      const files = await getDatasetOutputFiles(datasetName);
+      
+      // Transform API response to match current file structure
+      const transformedFiles = files.map(file => ({
+        name: file.name,
+        size: formatFileSize(file.size),
+        uploaded: file.timestamp,
+        status: 'completed', // Default status for output files
+        key: file.key
+      }));
+      
+      // Sort files alphabetically by name (case-insensitive)
+      const sortedFiles = transformedFiles.sort((a, b) => 
+        a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+      );
+      
+      setOutputFiles(sortedFiles);
+    } catch (error) {
+      console.error('Failed to load dataset output files:', error);
+      setOutputFilesError(error.message || 'Failed to load dataset output files');
+      setOutputFiles([]);
+    } finally {
+      if (showLoading) {
+        setLoadingOutputFiles(false);
+      }
+    }
+  }, []);
+
+  // Auto-refresh function (background, no loading indicators)
+  const autoRefresh = useCallback(async () => {
+    // Skip auto-refresh if user is currently interacting with UI
+    if (loadingDatasets || loadingFiles || loadingOutputFiles) {
+      console.log('Skipping auto-refresh - operation in progress');
+      return;
+    }
+    
+    console.log('Auto-refresh triggered');
+    try {
+      // Refresh datasets first
+      await loadDatasets(false);
+      
+      // Only refresh files if we have a selected dataset
+      if (selectedDataset) {
+        await Promise.all([
+          loadDatasetFiles(selectedDataset, false),
+          loadDatasetOutputFiles(selectedDataset, false)
+        ]);
+      }
+    } catch (error) {
+      console.warn('Auto-refresh failed:', error);
+      // Don't show alerts for auto-refresh failures to avoid interrupting user
+    }
+  }, [selectedDataset, loadDatasets, loadDatasetFiles, loadDatasetOutputFiles, loadingDatasets, loadingFiles, loadingOutputFiles]);
+
+  // Load datasets on component mount
+  useEffect(() => {
+    loadDatasets(true);
+  }, [loadDatasets]);
+
+  // Load files when selected dataset changes
+  useEffect(() => {
+    if (selectedDataset) {
+      loadDatasetFiles(selectedDataset, true);
+      loadDatasetOutputFiles(selectedDataset, true);
+    } else {
+      setInputFiles([]);
+      setOutputFiles([]);
+    }
+  }, [selectedDataset, loadDatasetFiles, loadDatasetOutputFiles]);
+
+  // Set up auto-refresh interval
+  useEffect(() => {
+    const interval = setInterval(() => {
+      autoRefresh();
+    }, 5000); // Refresh every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
+
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const truncateFileName = (fileName, maxLength = 50) => {
+    if (fileName.length <= maxLength) return fileName;
+    
+    const lastDotIndex = fileName.lastIndexOf('.');
+    if (lastDotIndex === -1) {
+      // No extension, just truncate from the end
+      return fileName.substring(0, maxLength - 3) + '...';
+    }
+    
+    const extension = fileName.substring(lastDotIndex);
+    const nameWithoutExt = fileName.substring(0, lastDotIndex);
+    
+    const availableLength = maxLength - extension.length - 3; // 3 for "..."
+    
+    if (availableLength <= 0) {
+      // Extension is too long, just show extension
+      return '...' + extension;
+    }
+    
+    return nameWithoutExt.substring(0, availableLength) + '...' + extension;
+  };
+
+
 
   const getDatasetStatusColor = (status) => {
     switch (status) {
@@ -108,7 +326,8 @@ function PipelineMonitor({ selectedApp }) {
   const getFileStatusColor = (status) => {
     switch (status) {
       case 'ready': return '#4FD1C5';
-      case 'processed': return '#68D391';
+      case 'processed': return '#4FD1C5';
+      case 'completed': return '#4FD1C5'; // Match pipeline progress completed color
       case 'processing': return '#F6AD55';
       case 'queued': return '#9F7AEA';
       case 'error': return '#FC8181';
@@ -116,15 +335,118 @@ function PipelineMonitor({ selectedApp }) {
     }
   };
 
-  const currentFiles = fileData[selectedDataset] || { input: [], output: [] };
   const selectedDatasetInfo = datasets.find(dataset => dataset.id === selectedDataset);
   const datasetName = selectedDatasetInfo ? selectedDatasetInfo.name : 'Unknown';
 
+  // Delete dataset function
+  const handleDeleteDataset = async (datasetId, datasetName) => {
+    const confirmed = window.confirm(`Are you sure you want to delete the dataset "${datasetName}"?`);
+    
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      console.log('Deleting dataset:', datasetId);
+      
+      const result = await deleteDataset(datasetId, selectedApp || 'starlight');
+      
+      if (result.success) {
+        console.log('Dataset deleted successfully:', datasetId);
+        
+        // Handle selection logic before refreshing datasets
+        if (selectedDataset === datasetId) {
+          // Find remaining datasets (excluding the deleted one)
+          const remainingDatasets = datasets.filter(d => d.id !== datasetId);
+          
+          if (remainingDatasets.length > 0) {
+            // Select the first remaining dataset (alphabetically sorted)
+            const nextDataset = remainingDatasets[0];
+            setSelectedDataset(nextDataset.id);
+            // File loading will be handled by the useEffect when selectedDataset changes
+          } else {
+            // No datasets left, clear everything
+            setSelectedDataset('');
+            setInputFiles([]);
+            setOutputFiles([]);
+            setFilesError(null);
+            setOutputFilesError(null);
+          }
+        }
+        
+        // Refresh datasets list to get updated list
+        await loadDatasets(true);
+        
+        // Give user feedback
+        console.log(`Dataset "${datasetName}" deleted successfully`);
+      } else {
+        console.error('Failed to delete dataset:', result.message);
+      }
+    } catch (error) {
+      console.error('Error deleting dataset:', error.message);
+    }
+  };
+
+  // Delete file function
+  const handleDeleteFile = async (fileKey, fileName, isInputFile = true) => {
+    const confirmed = window.confirm(`Are you sure you want to delete the file "${fileName}"?`);
+    
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      console.log('Deleting file:', fileKey);
+      
+      // Immediately remove the file from the UI for instant feedback
+      if (isInputFile) {
+        setInputFiles(prevFiles => prevFiles.filter(file => file.key !== fileKey));
+      } else {
+        setOutputFiles(prevFiles => prevFiles.filter(file => file.key !== fileKey));
+      }
+      
+      const result = await deleteFile(fileKey, selectedApp || 'starlight');
+      
+      if (result.success) {
+        console.log('File deleted successfully');
+        // Remove the file from the UI optimistically
+        if (isInputFile) {
+          setInputFiles(prev => prev.filter(f => f.key !== fileKey));
+        } else {
+          setOutputFiles(prev => prev.filter(f => f.key !== fileKey));
+        }
+      } else {
+        console.error('Failed to delete file:', result.message);
+        
+        // Restore the file in the UI if deletion failed, then refresh
+        if (isInputFile) {
+          await loadDatasetFiles(selectedDataset, true);
+        } else {
+          await loadDatasetOutputFiles(selectedDataset, true);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      
+      // Restore the correct state if deletion failed
+      if (isInputFile) {
+        await loadDatasetFiles(selectedDataset, true);
+      } else {
+        await loadDatasetOutputFiles(selectedDataset, true);
+      }
+    }
+  };
+
   return (
     <div className="pipeline-wrapper">
-      <div className="pipeline-container">
-        {/* Three-pane layout */}
-        <div className={`pipeline-panes ${isCollapsed ? 'collapsed' : ''}`}>
+      {/* File Upload Container */}
+      <div style={{ marginBottom: '0.75rem' }}>
+        <FileUpload isCollapsed={isUploadCollapsed} onToggleCollapse={toggleUploadCollapsed} />
+      </div>
+      
+      {/* Three-pane layout Container */}
+      <div className="pipeline-container" style={{ marginBottom: '0.75rem' }}>
+        <div className={`pipeline-panes ${isDatasetsCollapsed ? 'datasets-collapsed' : ''}`}>
         
         {/* Left Pane - Dataset Selection */}
         <div className="pipeline-pane datasets-pane">
@@ -132,70 +454,124 @@ function PipelineMonitor({ selectedApp }) {
             <div className="pane-header-left">
               <button 
                 className="collapse-toggle"
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                title={isCollapsed ? "Expand Pipeline" : "Collapse Pipeline"}
+                onClick={toggleDatasetsCollapsed}
+                title={isDatasetsCollapsed ? "Expand Datasets" : "Collapse Datasets"}
               >
-                <span className={`toggle-icon ${isCollapsed ? 'collapsed' : ''}`}>
-                  {isCollapsed ? '▲' : '▼'}
+                <span className={`toggle-icon ${isDatasetsCollapsed ? 'collapsed' : ''}`}>
+                  {isDatasetsCollapsed ? '▲' : '▼'}
                 </span>
               </button>
               <h3>Datasets</h3>
             </div>
             <div className="pane-count">{datasets.length}</div>
           </div>
-          <div className="pane-content">
-            {datasets.map(dataset => (
-              <button
-                key={dataset.id}
-                className={`dataset-item ${selectedDataset === dataset.id ? 'active' : ''}`}
-                onClick={() => setSelectedDataset(dataset.id)}
-              >
-                <div className="dataset-info">
-                  <div className="dataset-name">{dataset.name}</div>
-                  <div className="dataset-type">{dataset.type}</div>
+          {!isDatasetsCollapsed && (
+            <div className="pane-content">
+            {loadingDatasets ? (
+              <div className="astro-loading-container">
+                <div className="astro-loader-galaxy"></div>
+                <div className="astro-loading-text">Loading datasets...</div>
+              </div>
+            ) : datasetError ? (
+              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading datasets...</div>
+              </div>
+            ) : datasets.length > 0 ? (
+              datasets.map(dataset => (
+                <div key={dataset.id} className={`dataset-item-container ${selectedDataset === dataset.id ? 'active' : ''}`}>
+                  <button
+                    className="dataset-item"
+                    onClick={() => setSelectedDataset(dataset.id)}
+                  >
+                    <div className="dataset-info">
+                      <div className="dataset-name">{dataset.name}</div>
+                      <div className="dataset-stage">{dataset.stage}</div>
+                    </div>
+                    <div className="dataset-status">
+                      <span 
+                        className="status-dot"
+                        style={{ backgroundColor: getDatasetStatusColor(dataset.status) }}
+                        title={dataset.status}
+                      ></span>
+                    </div>
+                  </button>
+                  <button
+                    className="dataset-delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteDataset(dataset.id, dataset.name);
+                    }}
+                    title={`Delete dataset "${dataset.name}"`}
+                  >
+                    ×
+                  </button>
                 </div>
-                <div className="dataset-status">
-                  <span 
-                    className="status-dot"
-                    style={{ backgroundColor: getDatasetStatusColor(dataset.status) }}
-                    title={dataset.status}
-                  ></span>
-                </div>
-              </button>
-            ))}
+              ))
+            ) : (
+              <div className="empty-pane">
+                <div className="empty-icon">📊</div>
+                <p>No datasets found</p>
+              </div>
+            )}
           </div>
+          )}
         </div>
 
+        {!isDatasetsCollapsed && (
+          <>
         {/* Middle Pane - Input Files */}
         <div className="pipeline-pane files-pane">
           <div className="pane-header">
             <h3>Input Files - {datasetName}</h3>
-            <div className="pane-count">{currentFiles.input.length}</div>
+            <div className="pane-count">{inputFiles.length}</div>
           </div>
           <div className="pane-content">
-            {currentFiles.input.length > 0 ? (
-              currentFiles.input.map((file, index) => (
-                <div key={index} className="file-item">
-                  <div className="file-info">
-                    <div className="file-name">{file.name}</div>
-                    <div className="file-details">
-                      <span className="file-size">{file.size}</span>
-                      <span className="file-timestamp">{file.uploaded}</span>
+            {!loadingFiles && !filesError && inputFiles.length === 0 ? (
+              <div className="empty-pane">
+                <div className="empty-icon">📁</div>
+                <p>No input files available</p>
+              </div>
+            ) : loadingFiles ? (
+              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading files...</div>
+              </div>
+            ) : filesError ? (
+              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading files...</div>
+              </div>
+            ) : inputFiles.length > 0 ? (
+              inputFiles.map((file, index) => (
+                <div key={index} className="file-item-container">
+                  <div className="file-item">
+                    <div className="file-info">
+                      <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
+                      <div className="file-details">
+                        <div className="file-size">{file.size}</div>
+                      </div>
+                    </div>
+                    <div className="file-status">
+                      <span className="status-dot" style={{ backgroundColor: getFileStatusColor(file.status) }}></span>
                     </div>
                   </div>
-                  <div className="file-status">
-                    <span 
-                      className="status-dot"
-                      style={{ backgroundColor: getFileStatusColor(file.status) }}
-                      title={file.status}
-                    ></span>
-                  </div>
+                  <button 
+                    className="file-delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteFile(file.key, file.name, true);
+                    }}
+                    title={`Delete file "${file.name}"`}
+                  >
+                    ×
+                  </button>
                 </div>
               ))
             ) : (
               <div className="empty-pane">
                 <div className="empty-icon">📁</div>
-                <p>No input files</p>
+                <p>No processed input files</p>
               </div>
             )}
           </div>
@@ -204,57 +580,77 @@ function PipelineMonitor({ selectedApp }) {
         {/* Right Pane - Output Files */}
         <div className="pipeline-pane files-pane">
           <div className="pane-header">
-            <div className="pane-header-left">
-              <h3>Output Files - {datasetName}</h3>
-            </div>
-            <div className="pane-header-right">
-              <div className="pane-count">{currentFiles.output.length}</div>
-              {currentFiles.output.some(file => file.status === 'ready') && (
-                              <button className="download-all-btn">
-                Download All
-              </button>
-              )}
-            </div>
+            <h3>Output Files - {datasetName}</h3>
+            <div className="pane-count">{outputFiles.length}</div>
           </div>
           <div className="pane-content">
-            {currentFiles.output.length > 0 ? (
-              currentFiles.output.map((file, index) => (
-                <div key={index} className="file-item">
-                  <div className="file-info">
-                    <div className="file-name">{file.name}</div>
-                    <div className="file-details">
+            {!loadingOutputFiles && !outputFilesError && outputFiles.length === 0 ? (
+              <div className="empty-pane">
+                <div className="empty-icon">📁</div>
+                <p>No output files available</p>
+              </div>
+            ) : loadingOutputFiles ? (
+              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading output files...</div>
+              </div>
+            ) : outputFilesError ? (
+              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading output files...</div>
+              </div>
+            ) : outputFiles.length > 0 ? (
+              outputFiles.map((file, index) => (
+                <div key={index} className="file-item-container">
+                  <div className="file-item">
+                    <div className="file-info">
+                      <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
+                    </div>
+                    <div className="file-status" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span className="file-size">{file.size}</span>
-                      <span className="file-timestamp">{file.generated}</span>
+                      <span 
+                        className="status-dot"
+                        style={{ backgroundColor: getFileStatusColor(file.status) }}
+                        title={file.status}
+                      ></span>
                     </div>
                   </div>
-                  <div className="file-status">
-                    <span 
-                      className="status-dot"
-                      style={{ backgroundColor: getFileStatusColor(file.status) }}
-                      title={file.status}
-                    ></span>
-                  </div>
+                  <button
+                    className="file-delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteFile(file.key, file.name, false);
+                    }}
+                    title={`Delete file "${file.name}"`}
+                  >
+                    ×
+                  </button>
                 </div>
               ))
             ) : (
               <div className="empty-pane">
-                <div className="empty-icon">📄</div>
-                <p>No output files</p>
+                <div className="empty-icon">📁</div>
+                <p>No processed output files</p>
               </div>
             )}
           </div>
         </div>
+        </>
+        )}
 
         </div>
       </div>
       
-      {/* File Upload - Re-enabled */}
-      <FileUpload selectedDataset={selectedDataset} datasetName={datasetName} />
-      
       {/* Pipeline Progress Monitor */}
-      <PipelineProgressMonitor datasets={datasets} />
+      <PipelineProgressMonitor 
+        datasets={datasets} 
+        inputFiles={inputFiles}
+        outputFiles={outputFiles}
+        isCollapsed={isPipelineProgressCollapsed}
+        onToggleCollapse={togglePipelineProgressCollapsed}
+      />
       
-            </div>
+    </div>
   );
 }
 

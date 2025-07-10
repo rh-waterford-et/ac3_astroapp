@@ -1,7 +1,12 @@
 package producer
 
 import (
+	"bytes"
+	"encoding/json"
 	"log"
+	"net/http"
+	"os"
+	"strings"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/app"
@@ -43,7 +48,7 @@ func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event
 		Side:       side,
 		EventID:    utils.GenerateUUID(),
 	}
-	
+
 }
 
 var starlight app.StarlightInterface = &app.Starlight{
@@ -71,6 +76,29 @@ func (p *Producer) AddFile(file api.DataFile, appName string) {
 
 func (p *Producer) SendBatch(appName string) {
 	if len(p.Batch) > 0 {
+		// For STARLIGHT producer side, check if we have actual spectrum files, not just placeholder files
+		if appName == "STARLIGHT" && p.Side == "producer" {
+			// Count non-placeholder files in the batch
+			spectrumFileCount := 0
+			for _, file := range p.Batch {
+				if !strings.Contains(file.Name, ".batch_placeholder") &&
+					!strings.Contains(file.Name, ".dataset_placeholder") &&
+					!strings.HasSuffix(file.Name, ".in") {
+					spectrumFileCount++
+				}
+			}
+
+			// Only proceed if we have actual spectrum files
+			if spectrumFileCount == 0 {
+				log.Printf("Skipping batch with only placeholder files - no spectrum files found")
+				// Still delete the processed files (move placeholder to processed)
+				p.DeleteProcessedFiles()
+				// Clear the batch
+				p.Batch = make([]api.DataFile, 0, p.BatchSize)
+				return
+			}
+		}
+
 		// Update the .in file before sending the batch
 		if appName == "STARLIGHT" && p.Side == "producer" {
 			inFileName, content := starlight.UpdateInFile(p.Batch)
@@ -81,8 +109,11 @@ func (p *Producer) SendBatch(appName string) {
 			}
 		}
 
+		// Update progress to queued stage
+		p.updateProgress(appName, api.StageQueued, 10.0)
+
 		event := api.Event{
-			ID : p.EventID,
+			ID:    p.EventID,
 			Files: p.Batch,
 		}
 		p.EventQueue <- event
@@ -125,4 +156,51 @@ func (p *Producer) ProcessFiles(appName string) {
 	}
 
 	p.SendBatch(appName)
+}
+
+// updateProgress sends a progress update to the API server
+func (p *Producer) updateProgress(appName string, stage api.PipelineStage, progress float64) {
+	// Extract dataset name from the first file in the batch
+	if len(p.Batch) == 0 {
+		return
+	}
+
+	// For producer side, we use the app name as dataset ID
+	datasetID := appName
+	if p.Side == "producer" {
+		datasetID = appName + "_" + p.EventID
+	}
+
+	request := api.ProgressUpdateRequest{
+		DatasetID:   datasetID,
+		DatasetName: appName,
+		Stage:       stage,
+		Progress:    progress,
+		FilesTotal:  len(p.Batch),
+	}
+
+	// Send progress update to local API server
+	go func() {
+		jsonData, err := json.Marshal(request)
+		if err != nil {
+			log.Printf("Error marshaling progress update: %v", err)
+			return
+		}
+
+		apiURL := "http://localhost:8080/api/progress/update"
+		if serverURL := os.Getenv("API_SERVER_URL"); serverURL != "" {
+			apiURL = serverURL + "/api/progress/update"
+		}
+
+		resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Printf("Error sending progress update: %v", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("Progress update returned non-200 status: %d", resp.StatusCode)
+		}
+	}()
 }
