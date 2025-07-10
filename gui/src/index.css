@@ -1170,6 +1170,79 @@ body {
   text-align: center;
 }
 
+/* Section header with inline checkbox */
+.section-header-with-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.section-header-with-checkbox h4 {
+  margin: 0;
+  flex: 1;
+}
+
+.select-all-checkbox {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 0;
+  background: none;
+  border: none;
+  margin-left: 0.35rem;
+}
+
+.select-all-checkbox input[type="checkbox"] {
+  display: none;
+}
+
+.select-all-checkbox .checkmark {
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, rgba(31, 41, 55, 0.9) 0%, rgba(17, 24, 39, 0.9) 100%);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  border-radius: 0.25rem;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
+  box-shadow: 
+    0 1px 2px 0 rgba(0, 0, 0, 0.05),
+    0 0 0 1px rgba(79, 209, 197, 0.05);
+}
+
+.select-all-checkbox:hover .checkmark {
+  border-color: rgba(79, 209, 197, 0.4);
+  box-shadow: 
+    0 4px 12px -2px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(79, 209, 197, 0.1),
+    0 0 20px -4px rgba(79, 209, 197, 0.2);
+  transform: scale(1.05);
+}
+
+.select-all-checkbox input[type="checkbox"]:checked + .checkmark {
+  background: linear-gradient(135deg, var(--blue-primary) 0%, rgba(56, 178, 172, 0.9) 100%);
+  border-color: var(--blue-primary);
+  box-shadow: 
+    0 4px 20px -4px rgba(0, 0, 0, 0.25),
+    0 0 0 3px rgba(79, 209, 197, 0.15),
+    0 0 0 1px rgba(79, 209, 197, 0.3),
+    0 0 30px -8px rgba(79, 209, 197, 0.4);
+}
+
+.select-all-checkbox input[type="checkbox"]:checked + .checkmark::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
 .subsection {
   margin-bottom: 1rem;
 }
@@ -1190,11 +1263,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
-}
-
-/* Add extra spacing for the Select All Maps checkbox */
-.control-section > .checkbox-list {
-  margin-bottom: 1.25rem;
 }
 
 .checkbox-item {

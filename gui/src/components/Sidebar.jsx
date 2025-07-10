@@ -1,6 +1,72 @@
 import React, { useEffect } from 'react';
 import PropTypes from 'prop-types';
 
+/**
+ * Check if all map checkboxes are selected
+ * @param {Object} checkboxStates - Current checkbox states
+ * @returns {boolean} - True if all map checkboxes are selected
+ */
+const areAllMapsSelected = (checkboxStates) => {
+  const mapCheckboxIds = [
+    'map-stellar-velocity',
+    'map-stellar-velocity-error',
+    'map-velocity-dispersion',
+    'map-velocity-dispersion-error',
+    'map-h3',
+    'map-h4',
+    'map-age-weighted',
+    'map-age-mass-weighted',
+    'map-metallicity'
+  ];
+  
+  return mapCheckboxIds.every(id => checkboxStates[id]);
+};
+
+/**
+ * Handle select all maps functionality
+ * @param {Object} checkboxStates - Current checkbox states
+ * @param {Function} onCheckboxChange - Callback for checkbox changes
+ */
+const handleSelectAllMaps = (checkboxStates, onCheckboxChange) => {
+  // Define all map checkbox IDs
+  const mapCheckboxIds = [
+    'map-stellar-velocity',
+    'map-stellar-velocity-error',
+    'map-velocity-dispersion',
+    'map-velocity-dispersion-error',
+    'map-h3',
+    'map-h4',
+    'map-age-weighted',
+    'map-age-mass-weighted',
+    'map-metallicity'
+  ];
+  
+  // Check if all map checkboxes are currently selected
+  const allSelected = mapCheckboxIds.every(id => checkboxStates[id]);
+  
+  // If all are selected, unselect all; otherwise, select all
+  const newState = !allSelected;
+  
+  // Update all map checkboxes
+  mapCheckboxIds.forEach(id => {
+    onCheckboxChange(id, newState);
+  });
+  
+  // Add a small delay to ensure gallery refreshes properly after all checkboxes are updated
+  setTimeout(() => {
+    const currentObject = window.currentLoadedObject;
+    if (currentObject) {
+      // If an object is loaded, reload its images based on current selections
+      console.log(`🔄 Refreshing gallery for ${currentObject} after select all/deselect all`);
+      if (window.loadObjectImages) {
+        window.loadObjectImages(currentObject);
+      }
+    }
+  }, 100);
+  
+  console.log(`${newState ? 'Selected' : 'Unselected'} all map options`);
+};
+
 const Sidebar = ({ aladinInstance, checkboxStates, onCheckboxChange }) => {
   useEffect(() => {
     if (!aladinInstance) return;
@@ -15,7 +81,18 @@ const Sidebar = ({ aladinInstance, checkboxStates, onCheckboxChange }) => {
       <div className="sidebar-content">
         {/* Available Maps/Kinematics */}
         <div className="control-section">
-          <h4>Available Maps</h4>
+          <div className="section-header-with-checkbox">
+            <label className="select-all-checkbox">
+              <input 
+                type="checkbox" 
+                id="select-all-maps" 
+                checked={areAllMapsSelected(checkboxStates)}
+                onChange={() => handleSelectAllMaps(checkboxStates, onCheckboxChange)}
+              />
+              <span className="checkmark"></span>
+            </label>
+            <h4>Available Maps</h4>
+          </div>
           <div className="subsection">
             <h5>Kinematics</h5>
             <div className="checkbox-list">
