@@ -1,9 +1,11 @@
 package producer
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // LocalFileSource handles local filesystem operations
@@ -40,7 +42,54 @@ func (l *LocalFileSource) ReadFile(filename string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(l.InputDir, filename))
 }
 
+// isPPXFFile checks if this is a pPXF input directory
+func (l *LocalFileSource) isPPXFFile() bool {
+	return strings.Contains(l.InputDir, "/ppxf/data/input")
+}
+
+// isFileInProcessList checks if a file is still in the pPXF processlist
+func (l *LocalFileSource) isFileInProcessList(filename string) bool {
+	processListPath := os.Getenv("PPXF_PROCESS_LIST")
+	if processListPath == "" {
+		processListPath = "/processing_data/ppxf/runtime/processlist.txt"
+	}
+
+	// Check if processlist file exists
+	if _, err := os.Stat(processListPath); os.IsNotExist(err) {
+		return false
+	}
+
+	// Read processlist file
+	file, err := os.Open(processListPath)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	// Check if filename is in the processlist
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == filename {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (l *LocalFileSource) DeleteFile(filename string) error {
+	// Special handling for pPXF files
+	if l.isPPXFFile() && strings.HasSuffix(filename, ".fits") {
+		// For pPXF files, only move to processed if they're NOT in the processlist anymore
+		// (meaning pPXF has finished processing them)
+		if l.isFileInProcessList(filename) {
+			fmt.Printf("pPXF file %s still in processlist, skipping move to processed\n", filename)
+			return nil
+		}
+		fmt.Printf("pPXF file %s no longer in processlist, moving to processed\n", filename)
+	}
+
 	sourcePath := filepath.Join(l.InputDir, filename)
 	destPath := filepath.Join(l.ProcessedDir, filename)
 	//log.Print(sourcePath, destPath)

@@ -1,0 +1,169 @@
+#!/bin/bash
+
+set -x
+
+# Configuration
+PPXF_INPUT_DIR="/processing_data/ppxf/data/input"
+PPXF_OUTPUT_DIR="/processing_data/ppxf/data/output"
+PROCESS_FILE="/processing_data/ppxf/runtime/processlist.txt"
+PPXF_SCRIPT="/home/ppxf/run_ppxf/ppxf_individual.py"
+MASK_FILE="/processing_data/ppxf/data/input/mask.txt"
+
+# API server URL for progress updates
+API_URL="http://uc3-backend-service:8080/api/progress/update"
+
+# Default parameters (can be overridden via environment variables)
+REDSHIFT=${PPXF_REDSHIFT:-0.0}
+VELOCITY_DISPERSION=${PPXF_VEL_DISP:-100.0}
+WAVE_RANGE_START=${PPXF_WAVE_START:-4000}
+WAVE_RANGE_END=${PPXF_WAVE_END:-7000}
+SPS_NAME=${PPXF_SPS_NAME:-emiles}
+
+# Function to remove first line from process list
+removeFileFromList(){
+    echo "before"
+    cat $PROCESS_FILE
+    sed -i '1d' $PROCESS_FILE
+    echo "after"
+    cat $PROCESS_FILE
+}
+
+# Function to send progress update
+send_progress_update() {
+    local dataset_id="$1"
+    local stage="$2"
+    local progress="$3"
+    
+    curl -s -X POST "$API_URL" \
+        -H "Content-Type: application/json" \
+        -d "{\"dataset_id\":\"$dataset_id\",\"stage\":\"$stage\",\"progress\":$progress}" \
+        || echo "Failed to send progress update"
+}
+
+# Create default mask file if it doesn't exist
+create_default_mask() {
+    if [ ! -f "$MASK_FILE" ]; then
+        mkdir -p "$(dirname "$MASK_FILE")"
+        cat > "$MASK_FILE" << EOF
+5245 5280 False
+5572 5582 False
+5650 5665 False
+5885 5900 False
+5875 5910 True
+EOF
+        echo "Created default mask file: $MASK_FILE"
+    fi
+}
+
+# Main processing loop
+main() {
+    echo "Starting pPXF processing script..."
+    echo "Input directory: $PPXF_INPUT_DIR"
+    echo "Output directory: $PPXF_OUTPUT_DIR"
+    echo "Process file: $PROCESS_FILE"
+    echo "Parameters: redshift=$REDSHIFT, vel_disp=$VELOCITY_DISPERSION, wave_range=$WAVE_RANGE_START-$WAVE_RANGE_END"
+    
+    # Create default mask file
+    create_default_mask
+    
+    while true; do
+        # Check if process file exists and has content
+        if [ ! -f "$PROCESS_FILE" ] || [ ! -s "$PROCESS_FILE" ]; then
+            echo "No process file or empty process file. Waiting..."
+            sleep 5
+            continue
+        fi
+        
+        # Read the first line (next file to process)
+        filename=$(head -n 1 "$PROCESS_FILE" 2>/dev/null)
+        
+        if [ -z "$filename" ]; then
+            echo "Empty filename in process list. Waiting..."
+            sleep 5
+            continue
+        fi
+        
+        # Check if input file exists
+        input_file="$PPXF_INPUT_DIR/$filename"
+        if [ ! -f "$input_file" ]; then
+            echo "Input file not found: $input_file"
+            removeFileFromList
+            continue
+        fi
+        
+        echo "Processing file: $filename"
+        
+        # Extract dataset ID from filename for progress tracking
+        dataset_id=$(echo "$filename" | sed 's/\.[^.]*$//')
+        
+        # Run pPXF analysis directly on the input file
+        echo "Running pPXF analysis for: $filename"
+        
+        # Send progress update - processing started
+        send_progress_update "$dataset_id" "processing" 30.0
+        
+        # Execute pPXF with configurable parameters directly on processing_data
+        python3 "$PPXF_SCRIPT" \
+            --filenames "$input_file" \
+            --mask-file "$MASK_FILE" \
+            --redshift "$REDSHIFT" \
+            --velocity-dispersion "$VELOCITY_DISPERSION" \
+            --wave-range "$WAVE_RANGE_START" "$WAVE_RANGE_END" \
+            --sps-name "$SPS_NAME" \
+            --output-dir "$PPXF_OUTPUT_DIR"
+        
+        ppxf_exit_code=$?
+        
+        if [ $ppxf_exit_code -eq 0 ]; then
+            echo "pPXF analysis completed successfully for: $filename"
+            
+            # Verify output files were created
+            base_name=$(basename "$filename" .fits)
+            
+            # Expected output files
+            expected_files=(
+                "${base_name}_kinematics_and_stellar_pops_info.txt"
+                "${base_name}_pPXF_fitting.pdf"
+                "${base_name}_residuals.fits"
+                "${base_name}_bestfit.fits"
+                "${base_name}_galaxy.fits"
+            )
+            
+            # Check each output file
+            for output_file in "${expected_files[@]}"; do
+                if [ -f "$PPXF_OUTPUT_DIR/$output_file" ]; then
+                    echo "Created output file: $output_file"
+                else
+                    echo "Warning: Expected output file not found: $output_file"
+                fi
+            done
+            
+            # Send progress update - processing completed
+            send_progress_update "$dataset_id" "complete" 100.0
+            
+            echo "Successfully processed: $filename"
+        else
+            echo "pPXF analysis failed for: $filename (exit code: $ppxf_exit_code)"
+            
+            # Send progress update - error
+            send_progress_update "$dataset_id" "error" 0.0
+            
+            # For failed files, we could implement retry logic here
+            echo "File processing failed: $filename"
+        fi
+        
+        # No cleanup needed since we work directly with processing_data
+        
+        # Remove processed file from the list
+        removeFileFromList
+        
+        echo "Completed processing: $filename"
+        echo "----------------------------------------"
+        
+        # Small delay to prevent overwhelming the system
+        sleep 2
+    done
+}
+
+# Run the main function
+main 

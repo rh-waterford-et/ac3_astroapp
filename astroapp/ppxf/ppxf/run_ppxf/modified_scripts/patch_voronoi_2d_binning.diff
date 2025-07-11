@@ -1,0 +1,159 @@
+--- /usr/local/lib/python3.8/dist-packages/vorbin/voronoi_2d_binning.py	2025-03-18 12:22:10.725430011 +0000
++++ shared_directory/voronoi_2d_binning.py	2025-03-18 12:44:51.338817905 +0000
+@@ -26,6 +26,8 @@
+ import matplotlib.pyplot as plt
+ from scipy import spatial, ndimage
+ 
++from matplotlib import patheffects
++
+ #----------------------------------------------------------------------------
+ 
+ def _sn_func(index, signal=None, noise=None):
+@@ -270,10 +272,9 @@
+         #
+         good = np.unique(classe)
+         if wvt:
+-            xnode = ndimage.mean(x, labels=classe, index=good)
+-            ynode = ndimage.mean(y, labels=classe, index=good)
+             for k in good:
+                 index = np.flatnonzero(classe == k)   # Find subscripts of pixels in bin k.
++                xnode[k], ynode[k] = np.mean(x[index]), np.mean(y[index])
+                 sn = sn_func(index, signal, noise)
+                 scale[k] = np.sqrt(index.size/sn)  # Eq. (4) of Diehl & Statler (2006)
+         else:
+@@ -330,10 +331,10 @@
+ 
+ #-----------------------------------------------------------------------
+ 
+-def _display_pixels(x, y, counts, pixelsize):
++def _display_pixels(x, y, classe, pixelsize):
+     """
+-    Display pixels at coordinates (x, y) coloured with "counts".
+-    This routine is fast but not fully general as it assumes the spaxels
++    Display pixels at coordinates (x, y) colored with "classe".
++    This routine is fast but not fully general as it assumes the pixels
+     are on a regular grid. This needs not be the case for Voronoi binning.
+ 
+     """
+@@ -344,12 +345,17 @@
+     img = np.full((nx, ny), np.nan)  # use nan for missing data
+     j = np.round((x - xmin)/pixelsize).astype(int)
+     k = np.round((y - ymin)/pixelsize).astype(int)
+-    img[j, k] = counts
++    img[j, k] = classe
++
++    # Define a colormap with a unique color for each classe value
++    n_classes = len(np.unique(classe))
++    cmap = plt.cm.get_cmap('prism', n_classes)
+ 
+-    plt.imshow(np.rot90(img), interpolation='nearest', cmap='prism',
++    plt.imshow(np.rot90(img), interpolation='nearest', cmap=cmap,
+                extent=[xmin - pixelsize/2, xmax + pixelsize/2,
+                        ymin - pixelsize/2, ymax + pixelsize/2])
+ 
++
+ #----------------------------------------------------------------------
+ 
+ def voronoi_2d_binning(x, y, signal, noise, target_sn, cvt=True, pixelsize=None,
+@@ -368,8 +374,6 @@
+ 
+     .. code-block:: python
+ 
+-        from vorbin.voronoi_2d_binning import voronoi_2d_binning
+-
+         bin_number, x_gen, y_gen, x_bar, y_bar, sn, nPixels, scale = voronoi_2d_binning(
+             x, y, signal, noise, target_sn, cvt=True, pixelsize=None, plot=True,
+             quiet=True, sn_func=None, wvt=True)
+@@ -405,12 +409,9 @@
+         Vector containing the corresponding noise (1 sigma error) associated 
+         with each pixel.
+         
+-        Generally the ``signal`` and ``noise`` are used to compute the
++        Generally the ``signal`` and ``noise`` are used to comnpute the 
+         binning but one may also compute the ``S/N`` on-the-fly using the 
+         ``sn_func`` keyword.
+-
+-        One often wants to produce bins enclosing approximately equal ``signal``.
+-        This can be achieved by *assuming* Poissonian ``noise = np.sqrt(signal)``.
+     target_sn: float
+         The desired signal-to-noise ratio in the final 2D-binned data. 
+         E.g. a ``S/N~50`` per spectral pixel may be a reasonable value to 
+@@ -431,7 +432,7 @@
+         Set ``plot=True`` to produce a plot of the two-dimensional
+         bins and of the corresponding S/N at the end of the computation.
+     pixsize: float, optional
+-        Pixel scale of the input data.
++        Optional pixel scale of the input data.
+         This can be the size of a pixel of an image or the size
+         of a spaxel or lenslet in an integral-field spectrograph.
+ 
+@@ -451,7 +452,7 @@
+ 
+         The S/N returned by sn_func() does not need to be an analytic
+         function of S and N. There is also no need for sn_func() to 
+-        return the actual S/N. Instead, sn_func() could return any
++        return the actual S/N. Instead sn_func() could return any 
+         quantity the user needs to equalize.
+     
+         For example ``sn_func()`` could be a procedure which uses ``ppxf`` 
+@@ -488,7 +489,7 @@
+         The index goes from zero to ``nbin - 1``.
+ 
+         IMPORTANT: This vector alone is all one needs to make any subsequent
+-        computation on the binned data. Everything else is optional and can
++        computation on the binned data. everything else is optional and can
+         be ignored!
+     x_gen: array_like with shape (nbin,)
+         Vector of the X coordinates of the bin generators.
+@@ -556,8 +557,7 @@
+     4. Now apply Voronoi 2D-binning only to the connected regions of
+        full-resolution pixels;
+     5. Merge the set of lower resolution bins with the higher resolution ones.
+-    
+-    ###########################################################################
++
+     """
+     assert x.size == y.size == signal.size == noise.size, \
+         'Input vectors (x, y, signal, noise) must have the same size'
+@@ -608,13 +608,38 @@
+         print('Fractional S/N scatter (%):', np.std(sn[~single] - target_sn, ddof=1)/target_sn*100)
+         print('Elapsed time accretion: %.2f seconds' % (t2 - t1))
+         print('Elapsed time optimization: %.2f seconds' % (t3 - t2))
++    
++    # Create an empty array to store corresponding classe values (Mario)
++    corresponding_classe = np.empty_like(xnode)
++
++    # Iterate over each point (xnode, ynode)
++    for i, (xn, yn) in enumerate(zip(xnode, ynode)):
++        # Calculate the distance between each point (xn, yn) and all points (x, y)
++        distances = np.sqrt((x - xn)**2 + (y - yn)**2)
++        
++        # Find the index of the minimum distance, which corresponds to the closest point (x, y)
++        index_min = np.argmin(distances)
++        
++        # Assign the corresponding classe value to the current (xnode, ynode) point
++        corresponding_classe[i] = classe[index_min]
++
++    # Now corresponding_classe will have a unique classe value for each (xnode, ynode) point
+ 
+     if plot:
+         plt.clf()
+         plt.subplot(211)
+-        rnd = np.argsort(np.random.random(xnode.size))  # Randomize bin colors
+-        _display_pixels(x, y, rnd[classe], pixelsize)
+-        plt.plot(xnode, ynode, '+w', scalex=False, scaley=False) # do not rescale after imshow()
++#        rnd = np.argsort(np.random.random(xnode.size))  # Randomize bin colors
++        _display_pixels(x, y, classe, pixelsize)
++#        plt.plot(xnode, ynode, '+w', scalex=False, scaley=False) # do not rescale after imshow()
++
++        for i, (xn, yn) in enumerate(zip(xnode, ynode)):
++            # We obtain the corresponding classe value.
++            current_classe = int(corresponding_classe[i])
++            
++            # Annotate the class value at the center of the point (xnode, ynode).
++            text = plt.annotate(str(current_classe), (xn, yn), ha='center', va='center', color="white")
++            text.set_path_effects([patheffects.withStroke(linewidth=1, foreground='black')])
++        # (Mario)
+         plt.xlabel('R (arcsec)')
+         plt.ylabel('R (arcsec)')
+         plt.title('Map of Voronoi bins')
