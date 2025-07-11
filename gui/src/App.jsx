@@ -6,7 +6,7 @@ import Sidebar from './components/Sidebar';
 import Gallery from './components/Gallery';
 import StatusBar from './components/StatusBar';
 import AladinInteractions from './components/AladinInteractions';
-import PipelineMonitor from './components/PipelineMonitor';
+import DatasetsList from './components/DatasetsList';
 import logoImage from './assets/AC3-LogoConFrase.jpg';
 
 function App() {
@@ -624,7 +624,7 @@ function App() {
           {activeTab === 'pipeline' && (
             <div className="pipeline-full-view">
               {/* Pipeline Monitor with full space */}
-              <PipelineMonitor selectedApp={selectedApp} />
+                                <DatasetsList />
             </div>
           )}
         </div>
