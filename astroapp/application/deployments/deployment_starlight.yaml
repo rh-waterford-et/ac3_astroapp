@@ -73,12 +73,12 @@ spec:
           value: "/processing_data/starlight/data/output"
         - name: PROCESSED_STARLIGHT
           value: "/processing_data/starlight/data/processed"
-        - name: EXPLORED_DIR_PPFX
-          value: "/processing_data/ppfx/data/input"
-        - name: OUTPUT_DIR_PPFX
-          value: "/processing_data/ppfx/data/output"
-        - name: PROCESSED_PPFX
-          value: "/processing_data/ppfx/data/processed"
+        - name: EXPLORED_DIR_PPXF
+          value: "/processing_data/ppxf/data/input"
+        - name: OUTPUT_DIR_PPXF
+          value: "/processing_data/ppxf/data/output"
+        - name: PROCESSED_PPXF
+          value: "/processing_data/ppxf/data/processed"
         - name: EXPLORED_DIR_STECKMAP
           value: "/processing_data/steckmap/data/input"
         - name: OUTPUT_DIR_STECKMAP
@@ -116,18 +116,18 @@ spec:
           value: "/processing_data/starlight/data/output"
         - name: OUTPUT_STARLIGHT
           value: "/processing_data/starlight/data/output"
-        - name: EXPLORED_PPFX
-          value: "/processing_data/ppfx/data/input"
-        - name: OUTPUT_PPFX
-          value: "/processing_data/ppfx/data/output"
+        - name: EXPLORED_PPXF
+          value: "/processing_data/ppxf/data/input"
+        - name: OUTPUT_PPXF
+          value: "/processing_data/ppxf/data/output"
         - name: EXPLORED_STECKMAP
           value: "/processing_data/steckmap/data/input"
         - name: OUTPUT_STECKMAP
           value: "/processing_data/steckmap/data/output"
         - name: PROCESSED_STARLIGHT
           value: "/processing_data/starlight/data/processed"
-        - name: PROCESSED_PPFX
-          value: "/processing_data/ppfx/data/processed"
+        - name: PROCESSED_PPXF
+          value: "/processing_data/ppxf/data/processed"
         - name: PROCESSED_STECKMAP
           value: "/processing_data/steckmap/data/processed"
         - name: TEMPLATE_IN_FILE_PATH

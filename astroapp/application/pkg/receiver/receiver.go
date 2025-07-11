@@ -175,8 +175,8 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		switch appName {
 		case "STARLIGHT":
 			outputPath = os.Getenv("OUTPUT_BUCKET_STARLIGHT")
-		case "PPFX":
-			outputPath = os.Getenv("OUTPUT_BUCKET_PPFX")
+		case "PPXF":
+			outputPath = os.Getenv("OUTPUT_BUCKET_PPXF")
 		case "STECKMAP":
 			outputPath = os.Getenv("OUTPUT_BUCKET_STECKMAP")
 		default:
@@ -188,8 +188,8 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		switch appName {
 		case "STARLIGHT":
 			outputPath = os.Getenv("INPUT_DIR_STARLIGHT")
-		case "PPFX":
-			outputPath = os.Getenv("EXPLORED_DIR_PPFX")
+		case "PPXF":
+			outputPath = os.Getenv("EXPLORED_DIR_PPXF")
 		case "STECKMAP":
 			outputPath = os.Getenv("EXPLORED_DIR_STECKMAP")
 		default:

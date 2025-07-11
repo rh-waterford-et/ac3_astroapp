@@ -125,7 +125,7 @@ func (h *FileUploadHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppfx", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -245,7 +245,7 @@ func (h *FileUploadHandler) ListDatasets(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppfx", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -334,7 +334,7 @@ func (h *FileUploadHandler) CreateDataset(w http.ResponseWriter, r *http.Request
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppfx", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -454,7 +454,7 @@ func (h *FileUploadHandler) DeleteDataset(w http.ResponseWriter, r *http.Request
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppfx", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -557,7 +557,7 @@ func (h *FileUploadHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppfx", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -638,7 +638,7 @@ func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppfx", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -767,7 +767,7 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppfx", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {

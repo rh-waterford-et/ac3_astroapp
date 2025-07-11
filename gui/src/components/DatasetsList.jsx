@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 // Re-enabling FileUpload component
 import FileUpload from './FileUpload';
 import PipelineProgress from './PipelineProgress';
 import { getDatasets, getDatasetFiles, getDatasetOutputFiles, deleteDataset, deleteFile } from '../services/api';
+import { getProcessorConfig } from '../config/processorConfig';
 
-function DatasetsList() {
+function DatasetsList({ processorType = 'starlight' }) {
   const [selectedDataset, setSelectedDataset] = useState('');
+  const lastRefreshTime = useRef(0);
+  const currentProcessorType = useRef(processorType);
   
   // Helper functions for localStorage persistence
   const getStoredCollapseState = (key, defaultValue = false) => {
@@ -79,7 +82,7 @@ function DatasetsList() {
     }
     setDatasetError(null);
     try {
-      const datasetNames = await getDatasets();
+      const datasetNames = await getDatasets(processorType);
       
       // Sort dataset names alphabetically (case-insensitive)
       const sortedDatasetNames = datasetNames.sort((a, b) => 
@@ -96,8 +99,8 @@ function DatasetsList() {
           try {
             // Load input and output files for this dataset
             const [inputFilesData, outputFilesData] = await Promise.all([
-              getDatasetFiles(name),
-              getDatasetOutputFiles(name)
+              getDatasetFiles(name, processorType),
+              getDatasetOutputFiles(name, processorType)
             ]);
             
             const inputCount = inputFilesData.length;
@@ -111,7 +114,7 @@ function DatasetsList() {
             } else if (inputCount > 0 && outputCount > 0) {
               status = 'processing';
               progress = Math.min((outputCount / inputCount) * 100, 100);
-              stage = 'Starlight analysis';
+              stage = getProcessorConfig(processorType).statusLabels.processing;
             } else if (inputCount > 0) {
               status = 'queued';
               progress = 0;
@@ -157,7 +160,7 @@ function DatasetsList() {
         setLoadingDatasets(false);
       }
     }
-  }, []);
+  }, [processorType]);
 
   // Load dataset files function with useCallback for stability
   const loadDatasetFiles = useCallback(async (datasetName, showLoading = true) => {
@@ -166,7 +169,7 @@ function DatasetsList() {
     }
     setFilesError(null);
     try {
-      const files = await getDatasetFiles(datasetName);
+      const files = await getDatasetFiles(datasetName, processorType);
       
       // Transform API response to match current file structure
       const transformedFiles = files.map(file => ({
@@ -192,7 +195,7 @@ function DatasetsList() {
         setLoadingFiles(false);
       }
     }
-  }, []);
+  }, [processorType]);
 
   // Load dataset output files function with useCallback for stability
   const loadDatasetOutputFiles = useCallback(async (datasetName, showLoading = true) => {
@@ -201,7 +204,7 @@ function DatasetsList() {
     }
     setOutputFilesError(null);
     try {
-      const files = await getDatasetOutputFiles(datasetName);
+      const files = await getDatasetOutputFiles(datasetName, processorType);
       
       // Transform API response to match current file structure
       const transformedFiles = files.map(file => ({
@@ -227,17 +230,27 @@ function DatasetsList() {
         setLoadingOutputFiles(false);
       }
     }
-  }, []);
+  }, [processorType]);
 
   // Auto-refresh function (background, no loading indicators)
   const autoRefresh = useCallback(async () => {
-    // Skip auto-refresh if user is currently interacting with UI
-    if (loadingDatasets || loadingFiles || loadingOutputFiles) {
-      console.log('Skipping auto-refresh - operation in progress');
+    const now = Date.now();
+    
+    // Throttle refreshes to prevent excessive API calls (minimum 2 seconds between refreshes)
+    if (now - lastRefreshTime.current < 2000) {
+      console.log('Auto-refresh throttled');
       return;
     }
     
-    console.log('Auto-refresh triggered');
+    // Skip if processor type changed (component will handle this separately)
+    if (currentProcessorType.current !== processorType) {
+      console.log('Processor type changed, skipping auto-refresh');
+      return;
+    }
+    
+    lastRefreshTime.current = now;
+    console.log('Auto-refresh triggered for processorType:', processorType);
+    
     try {
       // Refresh datasets first
       await loadDatasets(false);
@@ -253,14 +266,33 @@ function DatasetsList() {
       console.warn('Auto-refresh failed:', error);
       // Don't show alerts for auto-refresh failures to avoid interrupting user
     }
-  }, [selectedDataset, loadDatasets, loadDatasetFiles, loadDatasetOutputFiles, loadingDatasets, loadingFiles, loadingOutputFiles]);
+  }, [selectedDataset, loadDatasets, loadDatasetFiles, loadDatasetOutputFiles, processorType]);
 
   // Load datasets on component mount
   useEffect(() => {
     loadDatasets(true);
   }, [loadDatasets]);
 
-
+  // Handle processor type changes
+  useEffect(() => {
+    if (currentProcessorType.current !== processorType) {
+      console.log('Processor type changed from', currentProcessorType.current, 'to', processorType);
+      currentProcessorType.current = processorType;
+      
+      // Clear current state
+      setSelectedDataset('');
+      setInputFiles([]);
+      setOutputFiles([]);
+      setFilesError(null);
+      setOutputFilesError(null);
+      
+      // Reset throttle timer
+      lastRefreshTime.current = 0;
+      
+      // Reload datasets for the new processor type
+      loadDatasets(true);
+    }
+  }, [processorType, loadDatasets]);
 
   // Load files when selected dataset changes
   useEffect(() => {
@@ -351,7 +383,7 @@ function DatasetsList() {
     try {
       console.log('Deleting dataset:', datasetId);
       
-      const result = await deleteDataset(datasetId);
+      const result = await deleteDataset(datasetId, processorType);
       
       if (result.success) {
         console.log('Dataset deleted successfully:', datasetId);
@@ -407,7 +439,7 @@ function DatasetsList() {
         setOutputFiles(prevFiles => prevFiles.filter(file => file.key !== fileKey));
       }
       
-      const result = await deleteFile(fileKey);
+      const result = await deleteFile(fileKey, processorType);
       
       if (result.success) {
         console.log('File deleted successfully');
@@ -443,7 +475,7 @@ function DatasetsList() {
     <div className="pipeline-wrapper">
       {/* File Upload Container */}
       <div style={{ marginBottom: '0.75rem' }}>
-        <FileUpload isCollapsed={isUploadCollapsed} onToggleCollapse={toggleUploadCollapsed} />
+        <FileUpload isCollapsed={isUploadCollapsed} onToggleCollapse={toggleUploadCollapsed} processorType={processorType} />
       </div>
       
       {/* Three-pane layout Container */}
@@ -657,7 +689,7 @@ function DatasetsList() {
 }
 
 DatasetsList.propTypes = {
-  selectedApp: PropTypes.string.isRequired,
+  processorType: PropTypes.string,
 };
 
 export default DatasetsList; 

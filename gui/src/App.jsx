@@ -442,9 +442,8 @@ function App() {
                 Starlight
               </button>
               <button 
-                className={`app-btn ${selectedApp === 'ppxf' ? 'active' : ''} disabled`}
+                className={`app-btn ${selectedApp === 'ppxf' ? 'active' : ''}`}
                 onClick={() => setSelectedApp('ppxf')}
-                disabled
               >
                 PPXF
               </button>
@@ -624,7 +623,7 @@ function App() {
           {activeTab === 'pipeline' && (
             <div className="pipeline-full-view">
               {/* Pipeline Monitor with full space */}
-                                <DatasetsList />
+                                <DatasetsList processorType={selectedApp} />
             </div>
           )}
         </div>

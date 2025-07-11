@@ -49,20 +49,20 @@ spec:
           value: "test-provider"
         - name: EXPLORED_STARLIGHT
           value: "starlight/input"
-        - name: EXPLORED_PPFX
-          value: "ppfx/input"
+        - name: EXPLORED_PPXF
+          value: "ppxf/input"
         - name: EXPLORED_STECKMAP
           value: "steckmap/input"
         - name: PROCESSED_STARLIGHT
           value: "starlight/processed"
-        - name: PROCESSED_PPFX
-          value: "ppfx/processed"
+        - name: PROCESSED_PPXF
+          value: "ppxf/processed"
         - name: PROCESSED_STECKMAP
           value: "steckmap/processed"
         - name: OUTPUT_STARLIGHT
           value: "starlight/output"
-        - name: OUTPUT_PPFX
-          value: "ppfx/output"
+        - name: OUTPUT_PPXF
+          value: "ppxf/output"
         - name: OUTPUT_STECKMAP
           value: "steckmap/output"
         - name: TEMPLATE_IN_FILE_PATH
@@ -156,7 +156,7 @@ spec:
           value: "/processing_data/starlight/runtime/processlist.txt" 
         - name: OUTPUT_BUCKET_STARLIGHT
           value: "starlight/output"
-        - name: OUTPUT_BUCKET_PPFX
-          value: "ppfx/output"
+        - name: OUTPUT_BUCKET_PPXF
+          value: "ppxf/output"
         - name: OUTPUT_BUCKET_STECKMAP
           value: "steckmap/output"
