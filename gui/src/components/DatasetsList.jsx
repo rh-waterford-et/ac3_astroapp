@@ -77,12 +77,20 @@ function DatasetsList({ processorType = 'starlight' }) {
 
   // Load datasets function with useCallback for stability
   const loadDatasets = useCallback(async (showLoading = true) => {
+    const currentProcessor = processorType; // Capture current processor type
+    
     if (showLoading) {
       setLoadingDatasets(true);
     }
     setDatasetError(null);
     try {
-      const datasetNames = await getDatasets(processorType);
+      const datasetNames = await getDatasets(currentProcessor);
+      
+      // Check if processor type changed while we were loading
+      if (currentProcessor !== processorType) {
+        console.log('Processor type changed during datasets loading, discarding results');
+        return;
+      }
       
       // Sort dataset names alphabetically (case-insensitive)
       const sortedDatasetNames = datasetNames.sort((a, b) => 
@@ -99,8 +107,8 @@ function DatasetsList({ processorType = 'starlight' }) {
           try {
             // Load input and output files for this dataset
             const [inputFilesData, outputFilesData] = await Promise.all([
-              getDatasetFiles(name, processorType),
-              getDatasetOutputFiles(name, processorType)
+              getDatasetFiles(name, currentProcessor),
+              getDatasetOutputFiles(name, currentProcessor)
             ]);
             
             const inputCount = inputFilesData.length;
@@ -114,7 +122,7 @@ function DatasetsList({ processorType = 'starlight' }) {
             } else if (inputCount > 0 && outputCount > 0) {
               status = 'processing';
               progress = Math.min((outputCount / inputCount) * 100, 100);
-              stage = getProcessorConfig(processorType).statusLabels.processing;
+              stage = getProcessorConfig(currentProcessor).statusLabels.processing;
             } else if (inputCount > 0) {
               status = 'queued';
               progress = 0;
@@ -142,21 +150,44 @@ function DatasetsList({ processorType = 'starlight' }) {
         })
       );
       
+      // Final check before setting state
+      if (currentProcessor !== processorType) {
+        console.log('Processor type changed during dataset processing, discarding results');
+        return;
+      }
+      
       setDatasets(datasetObjects);
       
-      // If no dataset is selected and we have datasets, select the first one (alphabetically)
-      if (!selectedDataset && datasetObjects.length > 0) {
-        setSelectedDataset(datasetObjects[0].id);
-      }
-      // If selectedDataset doesn't exist in the loaded datasets, select the first one (alphabetically)
-      else if (selectedDataset && !datasetObjects.find(d => d.id === selectedDataset) && datasetObjects.length > 0) {
-        setSelectedDataset(datasetObjects[0].id);
+      // Auto-select logic: only when selection is invalid or missing
+      console.log('Dataset auto-selection logic: found', datasetObjects.length, 'datasets, current selection:', selectedDataset, 'for processor:', currentProcessor);
+      
+      if (datasetObjects.length > 0) {
+        // Check if current selectedDataset is valid for this processor type
+        const currentDatasetExists = datasetObjects.find(d => d.id === selectedDataset);
+        console.log('Current dataset exists in new list:', !!currentDatasetExists);
+        
+        // Only auto-select if there's no valid selection (don't override user choices)
+        if (!selectedDataset || !currentDatasetExists) {
+          const firstDataset = datasetObjects[0];
+          console.log('Auto-selecting first dataset:', firstDataset.id, 'from processor type:', currentProcessor);
+          setSelectedDataset(firstDataset.id);
+        } else {
+          console.log('Keeping valid user selection:', selectedDataset);
+        }
+      } else {
+        // No datasets available, clear selection
+        console.log('No datasets available for processor type:', currentProcessor, ', clearing selection');
+        setSelectedDataset('');
       }
     } catch (error) {
       console.error('Failed to load datasets:', error);
-      setDatasetError(error.message || 'Failed to load datasets');
+      
+      // Only set error if processor type hasn't changed
+      if (currentProcessor === processorType) {
+        setDatasetError(error.message || 'Failed to load datasets');
+      }
     } finally {
-      if (showLoading) {
+      if (showLoading && currentProcessor === processorType) {
         setLoadingDatasets(false);
       }
     }
@@ -164,12 +195,20 @@ function DatasetsList({ processorType = 'starlight' }) {
 
   // Load dataset files function with useCallback for stability
   const loadDatasetFiles = useCallback(async (datasetName, showLoading = true) => {
+    const currentProcessor = processorType; // Capture current processor type
+    
     if (showLoading) {
       setLoadingFiles(true);
     }
     setFilesError(null);
     try {
-      const files = await getDatasetFiles(datasetName, processorType);
+      const files = await getDatasetFiles(datasetName, currentProcessor);
+      
+      // Check if processor type changed while we were loading
+      if (currentProcessor !== processorType) {
+        console.log('Processor type changed during file loading, discarding results');
+        return;
+      }
       
       // Transform API response to match current file structure
       const transformedFiles = files.map(file => ({
@@ -188,10 +227,14 @@ function DatasetsList({ processorType = 'starlight' }) {
       setInputFiles(sortedFiles);
     } catch (error) {
       console.error('Failed to load dataset files:', error);
-      setFilesError(error.message || 'Failed to load dataset files');
-      setInputFiles([]);
+      
+      // Only set error if processor type hasn't changed
+      if (currentProcessor === processorType) {
+        setFilesError(error.message || 'Failed to load dataset files');
+        setInputFiles([]);
+      }
     } finally {
-      if (showLoading) {
+      if (showLoading && currentProcessor === processorType) {
         setLoadingFiles(false);
       }
     }
@@ -199,12 +242,20 @@ function DatasetsList({ processorType = 'starlight' }) {
 
   // Load dataset output files function with useCallback for stability
   const loadDatasetOutputFiles = useCallback(async (datasetName, showLoading = true) => {
+    const currentProcessor = processorType; // Capture current processor type
+    
     if (showLoading) {
       setLoadingOutputFiles(true);
     }
     setOutputFilesError(null);
     try {
-      const files = await getDatasetOutputFiles(datasetName, processorType);
+      const files = await getDatasetOutputFiles(datasetName, currentProcessor);
+      
+      // Check if processor type changed while we were loading
+      if (currentProcessor !== processorType) {
+        console.log('Processor type changed during output file loading, discarding results');
+        return;
+      }
       
       // Transform API response to match current file structure
       const transformedFiles = files.map(file => ({
@@ -223,10 +274,14 @@ function DatasetsList({ processorType = 'starlight' }) {
       setOutputFiles(sortedFiles);
     } catch (error) {
       console.error('Failed to load dataset output files:', error);
-      setOutputFilesError(error.message || 'Failed to load dataset output files');
-      setOutputFiles([]);
+      
+      // Only set error if processor type hasn't changed
+      if (currentProcessor === processorType) {
+        setOutputFilesError(error.message || 'Failed to load dataset output files');
+        setOutputFiles([]);
+      }
     } finally {
-      if (showLoading) {
+      if (showLoading && currentProcessor === processorType) {
         setLoadingOutputFiles(false);
       }
     }
@@ -236,42 +291,62 @@ function DatasetsList({ processorType = 'starlight' }) {
   const autoRefresh = useCallback(async () => {
     const now = Date.now();
     
-    // Throttle refreshes to prevent excessive API calls (minimum 2 seconds between refreshes)
-    if (now - lastRefreshTime.current < 2000) {
-      console.log('Auto-refresh throttled');
+    // Much longer throttle to prevent interference (minimum 10 seconds between refreshes)
+    if (now - lastRefreshTime.current < 10000) {
       return;
     }
     
     // Skip if processor type changed (component will handle this separately)
     if (currentProcessorType.current !== processorType) {
-      console.log('Processor type changed, skipping auto-refresh');
+      return;
+    }
+    
+    // Skip if any loading is in progress to avoid conflicts
+    if (loadingDatasets || loadingFiles || loadingOutputFiles) {
+      return;
+    }
+    
+    // Skip if user recently interacted (don't interfere with user activity)
+    const recentInteraction = now - lastRefreshTime.current < 30000; // 30 seconds
+    if (recentInteraction && selectedDataset) {
       return;
     }
     
     lastRefreshTime.current = now;
-    console.log('Auto-refresh triggered for processorType:', processorType);
+    console.log('Auto-refresh triggered (background, non-intrusive) for processorType:', processorType);
     
     try {
-      // Refresh datasets first
-      await loadDatasets(false);
+      // Very conservative refresh - only check for new datasets, don't reload files
+      const currentDatasetNames = await getDatasets(processorType);
+      const currentNames = datasets.map(d => d.name).sort();
+      const newNames = currentDatasetNames.sort();
       
-      // Only refresh files if we have a selected dataset
-      if (selectedDataset) {
-        await Promise.all([
-          loadDatasetFiles(selectedDataset, false),
-          loadDatasetOutputFiles(selectedDataset, false)
-        ]);
+      // Only refresh if the dataset list actually changed
+      if (JSON.stringify(currentNames) !== JSON.stringify(newNames)) {
+        console.log('Dataset list changed, refreshing...');
+        await loadDatasets(false);
       }
     } catch (error) {
       console.warn('Auto-refresh failed:', error);
-      // Don't show alerts for auto-refresh failures to avoid interrupting user
     }
-  }, [selectedDataset, loadDatasets, loadDatasetFiles, loadDatasetOutputFiles, processorType]);
+  }, [processorType, loadingDatasets, loadingFiles, loadingOutputFiles, datasets, selectedDataset, loadDatasets]);
 
   // Load datasets on component mount
   useEffect(() => {
+    console.log('Component mounted, loading datasets for processor type:', processorType);
     loadDatasets(true);
   }, [loadDatasets]);
+
+  // Fallback auto-selection: ONLY when there's no selection at all (not when user makes manual selection)
+  useEffect(() => {
+    // Only auto-select if we have datasets, no current selection, not loading, and this is the initial load
+    if (datasets.length > 0 && !selectedDataset && !loadingDatasets) {
+      // Check if this is truly a fresh state (no previous selection)
+      const firstDataset = datasets[0];
+      console.log('Initial auto-selection: selecting first dataset:', firstDataset.id, 'for processor:', processorType);
+      setSelectedDataset(firstDataset.id);
+    }
+  }, [datasets.length, loadingDatasets]); // Remove selectedDataset and processorType from dependencies to prevent conflicts
 
   // Handle processor type changes
   useEffect(() => {
@@ -279,37 +354,85 @@ function DatasetsList({ processorType = 'starlight' }) {
       console.log('Processor type changed from', currentProcessorType.current, 'to', processorType);
       currentProcessorType.current = processorType;
       
-      // Clear current state
+      // Clear current state immediately and synchronously
+      console.log('Clearing all state for processor type change');
       setSelectedDataset('');
       setInputFiles([]);
       setOutputFiles([]);
       setFilesError(null);
       setOutputFilesError(null);
+      setDatasets([]);
+      setDatasetError(null);
+      setLoadingFiles(false);
+      setLoadingOutputFiles(false);
       
       // Reset throttle timer
       lastRefreshTime.current = 0;
       
-      // Reload datasets for the new processor type
+      // Reload datasets for the new processor type immediately
+      console.log('Loading datasets for new processor type:', processorType);
       loadDatasets(true);
     }
   }, [processorType, loadDatasets]);
 
-  // Load files when selected dataset changes
+  // Load files when selected dataset changes (only if datasets have been loaded)
   useEffect(() => {
-    if (selectedDataset) {
-      loadDatasetFiles(selectedDataset, true);
-      loadDatasetOutputFiles(selectedDataset, true);
-    } else {
+    console.log('File loading effect triggered - selectedDataset:', selectedDataset, 'loadingDatasets:', loadingDatasets, 'datasets.length:', datasets.length, 'currentProcessor:', currentProcessorType.current, 'processorType:', processorType);
+    
+    // Primary guard: don't load files if no datasets are loaded for current processor
+    if (datasets.length === 0) {
+      console.log('No datasets loaded, clearing files');
       setInputFiles([]);
       setOutputFiles([]);
+      setFilesError(null);
+      setOutputFilesError(null);
+      return;
     }
-  }, [selectedDataset]);
+    
+    // Additional check: ensure processor type hasn't changed since datasets were loaded
+    if (currentProcessorType.current !== processorType) {
+      console.log('Processor type mismatch during file loading, skipping');
+      return;
+    }
+    
+    // Extra safety: don't load files if datasets are still loading
+    if (loadingDatasets) {
+      console.log('Datasets still loading, clearing files and waiting');
+      setInputFiles([]);
+      setOutputFiles([]);
+      setFilesError(null);
+      setOutputFilesError(null);
+      return;
+    }
+    
+    if (selectedDataset) {
+      // Verify the selected dataset actually exists in the current dataset list
+      const datasetExists = datasets.find(d => d.id === selectedDataset);
+      if (datasetExists) {
+        console.log('Loading files for selected dataset:', selectedDataset, 'processor:', processorType);
+        loadDatasetFiles(selectedDataset, true);
+        loadDatasetOutputFiles(selectedDataset, true);
+      } else {
+        console.log('Selected dataset', selectedDataset, 'not found in current dataset list, clearing files');
+        setInputFiles([]);
+        setOutputFiles([]);
+        setFilesError(null);
+        setOutputFilesError(null);
+      }
+    } else {
+      console.log('Clearing files - no dataset selected');
+      setInputFiles([]);
+      setOutputFiles([]);
+      setFilesError(null);
+      setOutputFilesError(null);
+    }
+  }, [selectedDataset, loadingDatasets, datasets, loadDatasetFiles, loadDatasetOutputFiles]);
 
   // Set up auto-refresh interval
   useEffect(() => {
     const interval = setInterval(() => {
       autoRefresh();
-    }, 5000); // Refresh every 5 seconds
+    }, 30000); // Refresh every 30 seconds (much less frequent)
 
     return () => clearInterval(interval);
   }, [autoRefresh]);
