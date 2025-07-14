@@ -58,7 +58,7 @@ function FileUpload({ isCollapsed = false, onToggleCollapse, processorType = 'st
   useEffect(() => {
     const interval = setInterval(() => {
       autoRefreshDatasetsFunc();
-    }, 10000); // Refresh every 10 seconds (less frequent than main monitor)
+    }, 5000); // Refresh every 5 seconds for dynamic updates
 
     return () => clearInterval(interval);
   }, [autoRefreshDatasetsFunc]);

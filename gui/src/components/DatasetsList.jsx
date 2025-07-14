@@ -9,7 +9,13 @@ import { getProcessorConfig } from '../config/processorConfig';
 function DatasetsList({ processorType = 'starlight' }) {
   const [selectedDataset, setSelectedDataset] = useState('');
   const lastRefreshTime = useRef(0);
-  const currentProcessorType = useRef(processorType);
+  const currentProcessorType = useRef(null);
+  
+  // Add request tracking to prevent race conditions
+  const currentRequestId = useRef(0);
+  const currentInputFilesRequestId = useRef(0);
+  const currentOutputFilesRequestId = useRef(0);
+  const activeRequests = useRef(new Set());
   
   // Helper functions for localStorage persistence
   const getStoredCollapseState = (key, defaultValue = false) => {
@@ -75,20 +81,48 @@ function DatasetsList({ processorType = 'starlight' }) {
   const [loadingOutputFiles, setLoadingOutputFiles] = useState(false);
   const [outputFilesError, setOutputFilesError] = useState(null);
 
-  // Load datasets function with useCallback for stability
+  // State to track when files are waiting for datasets to load
+  const [waitingForDatasets, setWaitingForDatasets] = useState(false);
+
+  // Helper function to check if request is still valid
+  const isRequestValid = useCallback((requestId, requestProcessorType, requestType = 'general') => {
+    const currentId = requestType === 'inputFiles' ? currentInputFilesRequestId.current :
+                     requestType === 'outputFiles' ? currentOutputFilesRequestId.current :
+                     currentRequestId.current;
+    return requestId === currentId && 
+           requestProcessorType === processorType &&
+           activeRequests.current.has(requestId);
+  }, [processorType]);
+
+  // Helper function to cancel all active requests
+  const cancelAllRequests = useCallback(() => {
+    console.log('Cancelling all active requests');
+    activeRequests.current.clear();
+    currentRequestId.current++;
+    currentInputFilesRequestId.current++;
+    currentOutputFilesRequestId.current++;
+  }, []);
+
+  // Load datasets function with improved race condition handling
   const loadDatasets = useCallback(async (showLoading = true) => {
-    const currentProcessor = processorType; // Capture current processor type
+    const requestId = ++currentRequestId.current;
+    const requestProcessorType = processorType;
+    activeRequests.current.add(requestId);
+    
+    console.log(`[${requestId}] Starting dataset load for processor: ${requestProcessorType}`);
     
     if (showLoading) {
+      console.log(`[${requestId}] Setting loadingDatasets to true`);
       setLoadingDatasets(true);
     }
     setDatasetError(null);
+    
     try {
-      const datasetNames = await getDatasets(currentProcessor);
+      const datasetNames = await getDatasets(requestProcessorType);
       
-      // Check if processor type changed while we were loading
-      if (currentProcessor !== processorType) {
-        console.log('Processor type changed during datasets loading, discarding results');
+      // Check if request is still valid
+      if (!isRequestValid(requestId, requestProcessorType)) {
+        console.log(`[${requestId}] Dataset request cancelled - processor changed`);
         return;
       }
       
@@ -97,116 +131,90 @@ function DatasetsList({ processorType = 'starlight' }) {
         a.toLowerCase().localeCompare(b.toLowerCase())
       );
       
-      // Load input and output files for each dataset to determine completion status
-      const datasetObjects = await Promise.all(
-        sortedDatasetNames.map(async (name) => {
-          let status = 'ready';
-          let progress = 0;
-          let stage = 'Ready for processing';
-          
-          try {
-            // Load input and output files for this dataset
-            const [inputFilesData, outputFilesData] = await Promise.all([
-              getDatasetFiles(name, currentProcessor),
-              getDatasetOutputFiles(name, currentProcessor)
-            ]);
-            
-            const inputCount = inputFilesData.length;
-            const outputCount = outputFilesData.length;
-            
-            // Determine status based on file counts
-            if (inputCount > 0 && outputCount >= inputCount) {
-              status = 'completed';
-              progress = 100;
-              stage = 'Completed';
-            } else if (inputCount > 0 && outputCount > 0) {
-              status = 'processing';
-              progress = Math.min((outputCount / inputCount) * 100, 100);
-              stage = getProcessorConfig(currentProcessor).statusLabels.processing;
-            } else if (inputCount > 0) {
-              status = 'queued';
-              progress = 0;
-              stage = 'Queued for processing';
-            } else {
-              status = 'ready';
-              progress = 0;
-              stage = 'Ready for processing';
-            }
-            
-            console.log(`Dataset ${name}: ${inputCount} input files, ${outputCount} output files, status: ${status}`);
-            
-          } catch (error) {
-            console.warn(`Failed to load files for dataset ${name}:`, error);
-            // Keep default status on error
-          }
-          
-          return {
-            id: name,
-            name: name,
-            status: status,
-            progress: progress,
-            stage: stage
-          };
-        })
-      );
+      // Create basic dataset objects without status information
+      // Status will be determined later when files are loaded for the selected dataset
+      const datasetObjects = sortedDatasetNames.map((name) => ({
+        id: name,
+        name: name,
+        status: 'ready',
+        progress: 0,
+        stage: 'Ready for processing'
+      }));
       
       // Final check before setting state
-      if (currentProcessor !== processorType) {
-        console.log('Processor type changed during dataset processing, discarding results');
+      if (!isRequestValid(requestId, requestProcessorType)) {
+        console.log(`[${requestId}] Dataset processing cancelled - processor changed`);
         return;
       }
       
       setDatasets(datasetObjects);
       
       // Auto-select logic: only when selection is invalid or missing
-      console.log('Dataset auto-selection logic: found', datasetObjects.length, 'datasets, current selection:', selectedDataset, 'for processor:', currentProcessor);
+      console.log(`[${requestId}] Dataset auto-selection logic: found`, datasetObjects.length, 'datasets, current selection:', selectedDataset, 'for processor:', requestProcessorType);
       
       if (datasetObjects.length > 0) {
         // Check if current selectedDataset is valid for this processor type
         const currentDatasetExists = datasetObjects.find(d => d.id === selectedDataset);
-        console.log('Current dataset exists in new list:', !!currentDatasetExists);
+        console.log(`[${requestId}] Current dataset exists in new list:`, !!currentDatasetExists);
         
         // Only auto-select if there's no valid selection (don't override user choices)
         if (!selectedDataset || !currentDatasetExists) {
           const firstDataset = datasetObjects[0];
-          console.log('Auto-selecting first dataset:', firstDataset.id, 'from processor type:', currentProcessor);
+          console.log(`[${requestId}] Auto-selecting first dataset:`, firstDataset.id, 'from processor type:', requestProcessorType);
           setSelectedDataset(firstDataset.id);
         } else {
-          console.log('Keeping valid user selection:', selectedDataset);
+          console.log(`[${requestId}] Keeping valid user selection:`, selectedDataset);
         }
       } else {
-        // No datasets available, clear selection
-        console.log('No datasets available for processor type:', currentProcessor, ', clearing selection');
+        // No datasets available, clear selection and files
+        console.log(`[${requestId}] No datasets available for processor type:`, requestProcessorType, ', clearing selection');
         setSelectedDataset('');
+        setInputFiles([]);
+        setOutputFiles([]);
       }
-    } catch (error) {
-      console.error('Failed to load datasets:', error);
       
-      // Only set error if processor type hasn't changed
-      if (currentProcessor === processorType) {
-        setDatasetError(error.message || 'Failed to load datasets');
+    } catch (error) {
+      if (error.message === 'Request cancelled') {
+        console.log(`[${requestId}] Dataset load cancelled`);
+        return;
       }
+      console.error(`[${requestId}] Failed to load datasets:`, error);
+      
+      // Set error state to help with debugging
+      setDatasetError(error.message || 'Failed to load datasets');
+      // Clear datasets on error
+      setDatasets([]);
+      setSelectedDataset('');
     } finally {
-      if (showLoading && currentProcessor === processorType) {
+      activeRequests.current.delete(requestId);
+      // Always set loading to false if this was a loading request, 
+      // regardless of validity to prevent stuck loading states
+      if (showLoading) {
+        console.log(`[${requestId}] Setting loadingDatasets to false`);
         setLoadingDatasets(false);
       }
     }
-  }, [processorType]);
+  }, [processorType, isRequestValid, selectedDataset]);
 
-  // Load dataset files function with useCallback for stability
+  // Load dataset files function with improved race condition handling
   const loadDatasetFiles = useCallback(async (datasetName, showLoading = true) => {
-    const currentProcessor = processorType; // Capture current processor type
+    const requestId = ++currentInputFilesRequestId.current;
+    const requestProcessorType = processorType;
+    activeRequests.current.add(requestId);
+    
+    console.log(`[INPUT-${requestId}] Starting input files load for dataset: ${datasetName}, processor: ${requestProcessorType}`);
     
     if (showLoading) {
       setLoadingFiles(true);
     }
     setFilesError(null);
+    
     try {
-      const files = await getDatasetFiles(datasetName, currentProcessor);
+      const files = await getDatasetFiles(datasetName, requestProcessorType);
       
-      // Check if processor type changed while we were loading
-      if (currentProcessor !== processorType) {
-        console.log('Processor type changed during file loading, discarding results');
+      // Check if request is still valid
+      if (!isRequestValid(requestId, requestProcessorType, 'inputFiles')) {
+        console.log(`[INPUT-${requestId}] Input files request cancelled`);
         return;
       }
       
@@ -225,35 +233,42 @@ function DatasetsList({ processorType = 'starlight' }) {
       );
       
       setInputFiles(sortedFiles);
-    } catch (error) {
-      console.error('Failed to load dataset files:', error);
+      console.log(`[INPUT-${requestId}] Loaded ${sortedFiles.length} input files for dataset: ${datasetName}`);
       
-      // Only set error if processor type hasn't changed
-      if (currentProcessor === processorType) {
+    } catch (error) {
+      console.error(`[INPUT-${requestId}] Failed to load dataset files:`, error);
+      
+      // Only set error if request is still valid
+      if (isRequestValid(requestId, requestProcessorType, 'inputFiles')) {
         setFilesError(error.message || 'Failed to load dataset files');
         setInputFiles([]);
       }
     } finally {
-      if (showLoading && currentProcessor === processorType) {
-        setLoadingFiles(false);
-      }
+      activeRequests.current.delete(requestId);
+      // Always clear loading state regardless of request validity
+      setLoadingFiles(false);
     }
-  }, [processorType]);
+  }, [processorType, isRequestValid]);
 
-  // Load dataset output files function with useCallback for stability
+  // Load dataset output files function with improved race condition handling
   const loadDatasetOutputFiles = useCallback(async (datasetName, showLoading = true) => {
-    const currentProcessor = processorType; // Capture current processor type
+    const requestId = ++currentOutputFilesRequestId.current;
+    const requestProcessorType = processorType;
+    activeRequests.current.add(requestId);
+    
+    console.log(`[OUTPUT-${requestId}] Starting output files load for dataset: ${datasetName}, processor: ${requestProcessorType}`);
     
     if (showLoading) {
       setLoadingOutputFiles(true);
     }
     setOutputFilesError(null);
+    
     try {
-      const files = await getDatasetOutputFiles(datasetName, currentProcessor);
+      const files = await getDatasetOutputFiles(datasetName, requestProcessorType);
       
-      // Check if processor type changed while we were loading
-      if (currentProcessor !== processorType) {
-        console.log('Processor type changed during output file loading, discarding results');
+      // Check if request is still valid
+      if (!isRequestValid(requestId, requestProcessorType, 'outputFiles')) {
+        console.log(`[OUTPUT-${requestId}] Output files request cancelled`);
         return;
       }
       
@@ -272,22 +287,24 @@ function DatasetsList({ processorType = 'starlight' }) {
       );
       
       setOutputFiles(sortedFiles);
-    } catch (error) {
-      console.error('Failed to load dataset output files:', error);
+      console.log(`[OUTPUT-${requestId}] Loaded ${sortedFiles.length} output files for dataset: ${datasetName}`);
       
-      // Only set error if processor type hasn't changed
-      if (currentProcessor === processorType) {
+    } catch (error) {
+      console.error(`[OUTPUT-${requestId}] Failed to load dataset output files:`, error);
+      
+      // Only set error if request is still valid
+      if (isRequestValid(requestId, requestProcessorType, 'outputFiles')) {
         setOutputFilesError(error.message || 'Failed to load dataset output files');
         setOutputFiles([]);
       }
     } finally {
-      if (showLoading && currentProcessor === processorType) {
-        setLoadingOutputFiles(false);
-      }
+      activeRequests.current.delete(requestId);
+      // Always clear loading state regardless of request validity
+      setLoadingOutputFiles(false);
     }
-  }, [processorType]);
+  }, [processorType, isRequestValid]);
 
-  // Auto-refresh function (background, no loading indicators)
+  // Improved auto-refresh function with better coordination
   const autoRefresh = useCallback(async () => {
     const now = Date.now();
     
@@ -303,6 +320,11 @@ function DatasetsList({ processorType = 'starlight' }) {
     
     // Skip if any loading is in progress to avoid conflicts
     if (loadingDatasets || loadingFiles || loadingOutputFiles) {
+      return;
+    }
+    
+    // Skip if there are active requests
+    if (activeRequests.current.size > 0) {
       return;
     }
     
@@ -331,31 +353,38 @@ function DatasetsList({ processorType = 'starlight' }) {
     }
   }, [processorType, loadingDatasets, loadingFiles, loadingOutputFiles, datasets, selectedDataset, loadDatasets]);
 
-  // Load datasets on component mount
-  useEffect(() => {
-    console.log('Component mounted, loading datasets for processor type:', processorType);
-    loadDatasets(true);
-  }, [loadDatasets]);
-
   // Fallback auto-selection: ONLY when there's no selection at all (not when user makes manual selection)
   useEffect(() => {
+    console.log('Auto-selection check:', {
+      datasetsLength: datasets.length,
+      selectedDataset: selectedDataset,
+      loadingDatasets: loadingDatasets,
+      shouldAutoSelect: datasets.length > 0 && !selectedDataset && !loadingDatasets
+    });
+    
     // Only auto-select if we have datasets, no current selection, not loading, and this is the initial load
     if (datasets.length > 0 && !selectedDataset && !loadingDatasets) {
       // Check if this is truly a fresh state (no previous selection)
       const firstDataset = datasets[0];
-      console.log('Initial auto-selection: selecting first dataset:', firstDataset.id, 'for processor:', processorType);
+      console.log('Auto-selecting first dataset:', firstDataset.id, 'for processor:', processorType);
       setSelectedDataset(firstDataset.id);
     }
   }, [datasets.length, loadingDatasets]); // Remove selectedDataset and processorType from dependencies to prevent conflicts
 
-  // Handle processor type changes
+  // Handle processor type changes and initial mount with improved coordination
   useEffect(() => {
-    if (currentProcessorType.current !== processorType) {
-      console.log('Processor type changed from', currentProcessorType.current, 'to', processorType);
+    const isInitialMount = currentProcessorType.current === null;
+    const isProcessorTypeChange = currentProcessorType.current !== processorType;
+    
+    if (isInitialMount || isProcessorTypeChange) {
+      console.log(isInitialMount ? 'Initial mount' : 'Processor type changed from', currentProcessorType.current, 'to', processorType);
       currentProcessorType.current = processorType;
       
+      // Cancel all active requests immediately
+      cancelAllRequests();
+      
       // Clear current state immediately and synchronously
-      console.log('Clearing all state for processor type change');
+      console.log('Clearing all state for', isInitialMount ? 'initial mount' : 'processor type change');
       setSelectedDataset('');
       setInputFiles([]);
       setOutputFiles([]);
@@ -365,74 +394,54 @@ function DatasetsList({ processorType = 'starlight' }) {
       setDatasetError(null);
       setLoadingFiles(false);
       setLoadingOutputFiles(false);
+      setWaitingForDatasets(false);
       
       // Reset throttle timer
       lastRefreshTime.current = 0;
       
-      // Reload datasets for the new processor type immediately
-      console.log('Loading datasets for new processor type:', processorType);
-      loadDatasets(true);
+      // Small delay to ensure state is cleared, then reload datasets
+      setTimeout(() => {
+        console.log('Loading datasets for processor type:', processorType);
+        loadDatasets(true);
+      }, 50);
     }
-  }, [processorType, loadDatasets]);
+  }, [processorType, loadDatasets, cancelAllRequests]);
 
-  // Load files when selected dataset changes (only if datasets have been loaded)
+  // File loading effect
   useEffect(() => {
-    console.log('File loading effect triggered - selectedDataset:', selectedDataset, 'loadingDatasets:', loadingDatasets, 'datasets.length:', datasets.length, 'currentProcessor:', currentProcessorType.current, 'processorType:', processorType);
+    console.log(`File loading effect triggered - selectedDataset: ${selectedDataset} loadingDatasets: ${loadingDatasets} datasets.length: ${datasets.length} currentProcessor: ${currentProcessorType.current} processorType: ${processorType} activeRequests: ${activeRequests.current}`);
     
-    // Primary guard: don't load files if no datasets are loaded for current processor
-    if (datasets.length === 0) {
+    if (!selectedDataset || loadingDatasets || datasets.length === 0) {
       console.log('No datasets loaded, clearing files');
       setInputFiles([]);
       setOutputFiles([]);
       setFilesError(null);
       setOutputFilesError(null);
+      setLoadingFiles(false);
+      setLoadingOutputFiles(false);
       return;
     }
-    
-    // Additional check: ensure processor type hasn't changed since datasets were loaded
-    if (currentProcessorType.current !== processorType) {
-      console.log('Processor type mismatch during file loading, skipping');
-      return;
-    }
-    
-    // Extra safety: don't load files if datasets are still loading
-    if (loadingDatasets) {
-      console.log('Datasets still loading, clearing files and waiting');
-      setInputFiles([]);
-      setOutputFiles([]);
-      setFilesError(null);
-      setOutputFilesError(null);
-      return;
-    }
-    
-    if (selectedDataset) {
-      // Verify the selected dataset actually exists in the current dataset list
-      const datasetExists = datasets.find(d => d.id === selectedDataset);
-      if (datasetExists) {
-        console.log('Loading files for selected dataset:', selectedDataset, 'processor:', processorType);
-        loadDatasetFiles(selectedDataset, true);
-        loadDatasetOutputFiles(selectedDataset, true);
-      } else {
-        console.log('Selected dataset', selectedDataset, 'not found in current dataset list, clearing files');
-        setInputFiles([]);
-        setOutputFiles([]);
-        setFilesError(null);
-        setOutputFilesError(null);
-      }
-    } else {
-      console.log('Clearing files - no dataset selected');
-      setInputFiles([]);
-      setOutputFiles([]);
-      setFilesError(null);
-      setOutputFilesError(null);
-    }
-  }, [selectedDataset, loadingDatasets, datasets, loadDatasetFiles, loadDatasetOutputFiles]);
 
-  // Set up auto-refresh interval
+    // Load files for the selected dataset
+    console.log(`Loading files for selected dataset: ${selectedDataset} processor: ${processorType}`);
+    loadDatasetFiles(selectedDataset, true);
+    // Tiny delay to prevent timing conflict
+    setTimeout(() => loadDatasetOutputFiles(selectedDataset, true), 50);
+  }, [selectedDataset, loadingDatasets, datasets, processorType]);
+
+  // Simple fix: Clear waitingForDatasets when datasets are loaded
+  useEffect(() => {
+    if (datasets.length > 0 && !loadingDatasets) {
+      console.log('Datasets loaded, clearing waitingForDatasets state');
+      setWaitingForDatasets(false);
+    }
+  }, [datasets, loadingDatasets]);
+
+  // Set up auto-refresh interval with better coordination
   useEffect(() => {
     const interval = setInterval(() => {
       autoRefresh();
-    }, 30000); // Refresh every 30 seconds (much less frequent)
+    }, 5000); // Refresh every 5 seconds for dynamic updates
 
     return () => clearInterval(interval);
   }, [autoRefresh]);
@@ -466,8 +475,6 @@ function DatasetsList({ processorType = 'starlight' }) {
     
     return nameWithoutExt.substring(0, availableLength) + '...' + extension;
   };
-
-
 
   const getDatasetStatusColor = (status) => {
     switch (status) {
@@ -630,9 +637,10 @@ function DatasetsList({ processorType = 'starlight' }) {
                 <div className="astro-loading-text">Loading datasets...</div>
               </div>
             ) : datasetError ? (
-              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
-                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
-                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading datasets...</div>
+              <div className="empty-pane">
+                <div className="empty-icon">❌</div>
+                <p>Error loading datasets</p>
+                <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{datasetError}</p>
               </div>
             ) : datasets.length > 0 ? (
               datasets.map(dataset => (
@@ -684,6 +692,18 @@ function DatasetsList({ processorType = 'starlight' }) {
             <div className="pane-count">{inputFiles.length}</div>
           </div>
           <div className="pane-content">
+            {(() => {
+              console.log('Input files render check:', {
+                loadingFiles,
+                filesError,
+                inputFilesLength: inputFiles.length,
+                renderCondition: !loadingFiles && !filesError && inputFiles.length === 0 ? 'empty' : 
+                                 loadingFiles ? 'loading' : 
+                                 filesError ? 'error' : 
+                                 inputFiles.length > 0 ? 'show-files' : 'fallback-empty'
+              });
+              return null;
+            })()}
             {!loadingFiles && !filesError && inputFiles.length === 0 ? (
               <div className="empty-pane">
                 <div className="empty-icon">📁</div>
@@ -695,9 +715,10 @@ function DatasetsList({ processorType = 'starlight' }) {
                 <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading files...</div>
               </div>
             ) : filesError ? (
-              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
-                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
-                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading files...</div>
+              <div className="empty-pane">
+                <div className="empty-icon">❌</div>
+                <p>Error loading input files</p>
+                <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{filesError}</p>
               </div>
             ) : inputFiles.length > 0 ? (
               inputFiles.map((file, index) => (
@@ -741,6 +762,18 @@ function DatasetsList({ processorType = 'starlight' }) {
             <div className="pane-count">{outputFiles.length}</div>
           </div>
           <div className="pane-content">
+            {(() => {
+              console.log('Output files render check:', {
+                loadingOutputFiles,
+                outputFilesError,
+                outputFilesLength: outputFiles.length,
+                renderCondition: !loadingOutputFiles && !outputFilesError && outputFiles.length === 0 ? 'empty' : 
+                                 loadingOutputFiles ? 'loading' : 
+                                 outputFilesError ? 'error' : 
+                                 outputFiles.length > 0 ? 'show-files' : 'fallback-empty'
+              });
+              return null;
+            })()}
             {!loadingOutputFiles && !outputFilesError && outputFiles.length === 0 ? (
               <div className="empty-pane">
                 <div className="empty-icon">📁</div>
@@ -749,12 +782,13 @@ function DatasetsList({ processorType = 'starlight' }) {
             ) : loadingOutputFiles ? (
               <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
                 <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
-                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading output files...</div>
+                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading files...</div>
               </div>
             ) : outputFilesError ? (
-              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
-                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
-                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading output files...</div>
+              <div className="empty-pane">
+                <div className="empty-icon">❌</div>
+                <p>Error loading output files</p>
+                <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{outputFilesError}</p>
               </div>
             ) : outputFiles.length > 0 ? (
               outputFiles.map((file, index) => (

@@ -162,7 +162,7 @@ function PipelineProgress({ datasets, inputFiles, outputFiles, isCollapsed = fal
     const interval = setInterval(() => {
       setRefreshing(true);
       setTimeout(() => setRefreshing(false), 500);
-    }, 3000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, []);

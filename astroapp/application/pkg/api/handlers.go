@@ -671,6 +671,7 @@ func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Requ
 
 	// List objects in the specific batch's processed folder
 	folderPath := fmt.Sprintf("%s/processed/%s", appType, batchName)
+	log.Printf("DEBUG: Listing objects in processed folder: %s", folderPath)
 	objects, err := h.S3Bucket.GetS3Objects(folderPath)
 	if err != nil {
 		log.Printf("Error listing S3 objects for batch %s processed in app %s: %v", batchName, appType, err)
@@ -682,6 +683,7 @@ func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Requ
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	log.Printf("DEBUG: Found %d objects in processed folder %s", len(objects), folderPath)
 
 	// Convert objects to DatasetFile structs
 	files := make([]DatasetFile, 0)

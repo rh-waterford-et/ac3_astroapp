@@ -110,6 +110,14 @@ spec:
           value: "5672"
         - name: BATCH_SIZE
           value: "5"
+        - name: AWS_ACCESS_KEY_ID
+          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
+        - name: S3_ENDPOINT
+          value: "https://s3.eu-central-1.ionoscloud.com"
+        - name: S3_REGION
+          value: "de"
         - name: S3_BUCKET_NAME
           value: "test-provider"
         - name: EXPLORED_STARLIGHT
@@ -130,6 +138,12 @@ spec:
           value: "/processing_data/ppxf/data/processed"
         - name: PROCESSED_STECKMAP
           value: "/processing_data/steckmap/data/processed"
+        - name: OUTPUT_BUCKET_STARLIGHT
+          value: "starlight/output"
+        - name: OUTPUT_BUCKET_PPXF
+          value: "ppxf/output"
+        - name: OUTPUT_BUCKET_STECKMAP
+          value: "steckmap/output"
         - name: TEMPLATE_IN_FILE_PATH
           value: "/processing_data/starlight/config_files_starlight/grid_example.in"
         - name: "IN_FILE_OUTPUT_PATH"

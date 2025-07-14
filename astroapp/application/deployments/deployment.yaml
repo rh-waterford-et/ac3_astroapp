@@ -96,6 +96,24 @@ spec:
           value: "8080"
         - name: CORS_ALLOWED_ORIGINS
           value: "*"
+        - name: PROCESSED_STARLIGHT
+          value: "starlight/processed"
+        - name: PROCESSED_PPXF
+          value: "ppxf/processed"
+        - name: PROCESSED_STECKMAP
+          value: "steckmap/processed"
+        - name: OUTPUT_STARLIGHT
+          value: "starlight/output"
+        - name: OUTPUT_PPXF
+          value: "ppxf/output"
+        - name: OUTPUT_STECKMAP
+          value: "steckmap/output"
+        - name: EXPLORED_STARLIGHT
+          value: "starlight/input"
+        - name: EXPLORED_PPXF
+          value: "ppxf/input"
+        - name: EXPLORED_STECKMAP
+          value: "steckmap/input"
         ports:
         - containerPort: 8080
         volumeMounts:
