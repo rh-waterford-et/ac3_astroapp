@@ -68,7 +68,7 @@ func main() {
 
 func LaunchServer() {
 	log.Printf("------------------ Starting HTTP Server ---------------------")
-	
+
 	server := server.NewServer()
 	server.Start()
 }
@@ -99,7 +99,7 @@ func LaunchProducer(side string) error {
 	utils := &common.Utils{}
 
 	log.Printf("------------------ Starting Watcher() ---------------------")
-	
+
 	queue, err := queue.NewRabbitMQConnection()
 	if err != nil {
 		log.Fatalf("Failed to create RabbitMQ connection: %v", err)
@@ -113,7 +113,7 @@ func LaunchProducer(side string) error {
 		}
 	}
 
-	apps := []string{"PPFX", "STARLIGHT", "STECKMAP"}
+	apps := []string{"PPXF", "STARLIGHT", "STECKMAP"}
 
 	appRunner := &watcher.Watcher{}
 	for {

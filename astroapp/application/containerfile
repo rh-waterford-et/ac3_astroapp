@@ -44,11 +44,6 @@ EXPOSE 5672 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD pgrep ucm || exit 1
 
-# Labels
-LABEL io.k8s.display-name="UC3 Astronomy Backend" \
-      io.k8s.description="Astronomical data processing backend with batch support" \
-      maintainer="bcapper30@example.com" \
-      version="2.0.0"
 
 # Default entrypoint - supports watcher, consumer, server modes
 ENTRYPOINT ["/uid_entrpoint.sh"]

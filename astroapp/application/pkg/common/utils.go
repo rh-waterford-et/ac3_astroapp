@@ -58,14 +58,14 @@ func (u *Utils) EnsureDirectoriesExist() error {
 	requiredDirs := []string{
 		os.Getenv("EXPLORED_DIR_STARLIGHT"),
 		os.Getenv("INPUT_DIR_STARLIGHT"),
-		os.Getenv("EXPLORED_DIR_PPFX"),
-		os.Getenv("OUTPUT_DIR_PPFX"),
+		os.Getenv("EXPLORED_DIR_PPXF"),
+		os.Getenv("OUTPUT_DIR_PPXF"),
 		os.Getenv("EXPLORED_DIR_STECKMAP"),
 		os.Getenv("OUTPUT_DIR_STECKMAP"),
 		os.Getenv("IN_FILE_OUTPUT_PATH"),
 		os.Getenv("PROCESSED_STECKMAP"),
 		os.Getenv("PROCESSED_STARLIGHT"),
-		os.Getenv("PROCESSED_PPFX"),
+		os.Getenv("PROCESSED_PPXF"),
 	}
 
 	for _, dir := range requiredDirs {
@@ -84,13 +84,13 @@ func (u *Utils) EnsureDirectoriesExist() error {
 func (u *Utils) EnsureBucketDirectoriesExist(bucket s3bucket.S3BucketInterface) error {
 	requiredDirs := []string{
 		os.Getenv("EXPLORED_STARLIGHT"),
-		os.Getenv("EXPLORED_PPFX"),
+		os.Getenv("EXPLORED_PPXF"),
 		os.Getenv("EXPLORED_STECKMAP"),
 		os.Getenv("PROCESSED_STARLIGHT"),
-		os.Getenv("PROCESSED_PPFX"),
+		os.Getenv("PROCESSED_PPXF"),
 		os.Getenv("PROCESSED_STECKMAP"),
 		os.Getenv("OUTPUT_STARLIGHT"),
-		os.Getenv("OUTPUT_PPFX"),
+		os.Getenv("OUTPUT_PPXF"),
 		os.Getenv("OUTPUT_STECKMAP"),
 	}
 
@@ -104,30 +104,29 @@ func (u *Utils) EnsureBucketDirectoriesExist(bucket s3bucket.S3BucketInterface) 
 		}
 
 		_, err := bucket.GetS3Client().HeadObject(&s3.HeadObjectInput{
-            Bucket: aws.String(bucket.GetBucketName()),
-            Key:    aws.String(dir),
-        })
+			Bucket: aws.String(bucket.GetBucketName()),
+			Key:    aws.String(dir),
+		})
 
-		   if err == nil {
-            log.Printf("Directory already exists in bucket: %s", dir)
-            continue
-        }
+		if err == nil {
+			log.Printf("Directory already exists in bucket: %s", dir)
+			continue
+		}
 
+		if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != "NotFound" {
+			return fmt.Errorf("failed to check directory %s in bucket: %w", dir, err)
+		}
 
-        if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != "NotFound" {
-            return fmt.Errorf("failed to check directory %s in bucket: %w", dir, err)
-        }
+		_, err = bucket.GetS3Client().PutObject(&s3.PutObjectInput{
+			Bucket: aws.String(bucket.GetBucketName()),
+			Key:    aws.String(dir),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create directory %s in bucket: %w", dir, err)
+		}
+		log.Printf("Created directory in bucket: %s", dir)
+	}
 
-        _, err = bucket.GetS3Client().PutObject(&s3.PutObjectInput{
-            Bucket: aws.String(bucket.GetBucketName()),
-            Key:    aws.String(dir),
-        })
-        if err != nil {
-            return fmt.Errorf("failed to create directory %s in bucket: %w", dir, err)
-        }
-        log.Printf("Created directory in bucket: %s", dir)
-    }
-	
 	checkInFile := os.Getenv("IN_FILE_OUTPUT_PATH")
 	if err := os.MkdirAll(checkInFile, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", checkInFile, err)

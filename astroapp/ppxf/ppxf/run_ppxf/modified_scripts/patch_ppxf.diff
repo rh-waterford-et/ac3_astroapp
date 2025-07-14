@@ -1,0 +1,728 @@
+--- /usr/local/lib/python3.8/dist-packages/ppxf/ppxf.py	2025-03-18 12:36:32.604729006 +0000
++++ shared_directory/ppxf.py	2025-03-18 12:30:06.490842595 +0000
+@@ -1,5 +1,5 @@
+ """
+-    Copyright (C) 2001-2024, Michele Cappellari
++    Copyright (C) 2001-2023, Michele Cappellari
+ 
+     E-mail: michele.cappellari_at_physics.ox.ac.uk
+ 
+@@ -29,8 +29,18 @@
+ from scipy import optimize, linalg, special
+ import matplotlib.pyplot as plt
+ from matplotlib import ticker
++from matplotlib import rcParams
++from matplotlib.ticker import MultipleLocator, FormatStrFormatter, AutoMinorLocator
+ 
+-from capfit.capfit import capfit, lsq_lin, lsq_box, cov_err, lsq_lin_cvxopt
++# pPXF does not need to import cvxopt directly.
++# This test is done just to provide a more helpful error message when needed.
++try:
++    import cvxopt
++    cvxopt_installed = True
++except ImportError:
++    cvxopt_installed = False
++
++from .capfit import capfit, lsq_lin, lsq_box, cov_err, lsq_lin_cvxopt
+ 
+ ###############################################################################
+ 
+@@ -331,31 +341,26 @@
+                   constr_kinem=None, degree=4, dust=None, fixed=None,
+                   fraction=None, ftol=1e-4, gas_component=None, gas_names=None,
+                   gas_reddening=None, gas_reddening_func=None,
+-                  global_search=False, goodpixels=None, lam=None,
+-                  lam_temp=None, linear=False, linear_method='lsq_box',
+-                  mask=None, method='capfit', mdegree=0, moments=2, phot=None,
+-                  plot=False, quiet=False, reddening=None, reddening_func=None,
+-                  reg_dim=None, reg_ord=2, reg_step=None, regul=0,
+-                  sigma_diff=0, sky=None, templates_rfft=None, tied=None,
+-                  trig=False, velscale_ratio=1, vsyst=0, x0=None)
++                  global_search=False, goodpixels=None, lam=None, lam_temp=None,
++                  linear=False, linear_method='lsq_box', mask=None,
++                  method='capfit', mdegree=0, moments=2, phot=None, plot=False,
++                  quiet=False, reddening=None, reddening_func=None,
++                  reg_dim=None, reg_ord=2, regul=0, sigma_diff=0, sky=None,
++                  templates_rfft=None, tied=None, trig=False, velscale_ratio=1,
++                  vsyst=0, x0=None)
+ 
+         print(pp.sol)  # print best-fitting kinematics (V, sigma, h3, h4)
+         pp.plot()      # Plot best fit with gas lines and photometry
+ 
+-    Example programs are located in the ``ppxf/examples`` subdirectory,
+-    accessible within the primary ``ppxf`` package directory found in
+-    ``site-packages``. For guidance on locating the installation folder, refer
+-    to this `Stack Overflow post <https://stackoverflow.com/a/46071447>`_.
+-
+-    These Python examples are structured using the ``py:percent`` format, and
+-    can be opened as Jupyter Notebooks in most Python IDEs.
+-
+-    Additionally, one can view the Jupyter Notebook formatted examples complete
+-    with their outputs on my `GitHub repository <https://github.com/micappe/ppxf_examples>`_.
+-
+-    
+-    Parameters
+-    ----------
++    Example programs are in the ``ppxf/examples`` directory.
++    It can be found within the main ``ppxf`` package installation folder
++    inside `site-packages <https://stackoverflow.com/a/46071447>`_.
++
++    Examples as Jupyter Notebooks are also available on my `GitHub repository 
++    <https://github.com/micappe/ppxf_examples>`_.
++
++    Input Parameters
++    ----------------
+ 
+     templates: array_like with shape (n_pixels_temp, n_templates)
+         Vector containing a single log-rebinned spectral template, or an array
+@@ -466,7 +471,7 @@
+         ``velscale = c*np.diff(np.log(lambda))``, which is approximately
+         ``velscale ~ c*np.diff(lambda)/lambda``.
+         See Section 2.3 of `Cappellari (2017)`_ for details.
+-    start :
++    start:
+         Vector, or list/array of vectors ``[start1, start2, ...]``, with the
+         initial estimate for the LOSVD parameters.
+ 
+@@ -509,8 +514,8 @@
+             moments = [4, 2]
+             start = [[V1, sigma1], [V2, sigma2]]
+ 
+-    Other Parameters
+-    ----------------
++    Optional Keywords
++    -----------------
+ 
+     bias: float, optional
+         When ``moments > 2``, this parameter biases the ``(h3, h4, ...)``
+@@ -528,7 +533,7 @@
+         residuals, so it is insensitive to proper scaling of the ``noise``
+         vector. A nonzero ``bias`` can be safely used even without a reliable
+         ``noise`` spectrum, or with equal weighting for all pixels.
+-    bounds :
++    bounds:
+         Lower and upper bounds for every kinematic parameter. This is an array,
+         or list of arrays, with the same dimensions as ``start``, except for
+         the last dimension, which is 2. In practice, for every element of
+@@ -550,7 +555,7 @@
+             bounds_gas = [[V2_lo, V2_up], [sigma2_lo, sigma2_up]]
+             bounds = [bounds_stars, bounds_gas]
+ 
+-    component: optional
++    component:
+         When fitting more than one kinematic component, this keyword should
+         contain the component number of each input template. In principle,
+         every template can belong to a different kinematic component.
+@@ -827,7 +832,7 @@
+     ftol: float, optional
+         Fractional tolerance for stopping the non-linear minimization (default
+         1e-4).
+-    gas_component: optional
++    gas_component:
+         Boolean vector, of the same size as ``component``, set to ``True``
+         where the given ``component`` describes a gas emission line. If given,
+         ``pPXF`` provides the ``pp.gas_flux`` and ``pp.gas_flux_error`` in
+@@ -839,7 +844,7 @@
+             gas_component = component > 0
+ 
+         This keyword is also used to plot the gas lines with a different color.
+-    gas_names: optional
++    gas_names:
+         String array specifying the names of the emission lines (e.g.
+         ``gas_names=["Hbeta", "[OIII]",...]``, one per gas line. The length of
+         this vector must match the number of nonzero elements in
+@@ -957,7 +962,7 @@
+ 
+         The use of linear constraints with ``constr_kinem`` is only supported
+         with the default ``method='capfit'``.
+-    moments: optional
++    moments:
+         Order of the Gauss-Hermite moments to fit. Set this keyword to 4 to
+         fit ``[h3, h4]`` and to 6 to fit ``[h3, h4, h5, h6]``. Note that in all
+         cases the G-H moments are fitted (non-linearly) *together* with
+@@ -1149,6 +1154,47 @@
+         consistent with the observations and the derived star formation history
+         will be the smoothest (minimum curvature or minimum variation) that is
+         still consistent with the observations.
++    reg_dim: tuple, optional
++        When using regularization with more than one kinematic component (using
++        the ``component`` keyword), the regularization is only applied to the
++        first one (``component=0``). This is useful to fit the stellar
++        population and gas emissions together.
++
++        In this situation, one has to use the ``reg_dim`` keyword, to give
++        ``pPXF`` the dimensions of the population parameters (e.g. ``n_age``,
++        ``n_metal``, ``n_alpha``). One should create the initial array of
++        population templates like e.g.
++        ``templates[n_pixels, n_age, n_metal, n_alpha]`` and define::
++
++            reg_dim = templates.shape[1:]   # = [n_age, n_metal, n_alpha]
++
++        The array of stellar templates is then reshaped into a 2-dim array as::
++
++            templates = templates.reshape(templates.shape[0], -1)
++
++        and the gas emission templates are appended as extra columns at the
++        end. An usage example is given in
++        ``ppxf_example_population_gas_sdss.py``.
++
++        When using regularization with a single component (the ``component``
++        keyword is not used, or contains identical values), the number of
++        population templates along different dimensions (e.g. ``n_age``,
++        ``n_metal``, ``n_alpha``) is inferred from the dimensions of the
++        ``templates`` array and this keyword is not necessary.
++    reg_ord: int, optional
++        Order of the derivative that is minimized by the regularization.
++        The following two rotationally-symmetric estimators are supported:
++
++        * ``reg_ord=1``: minimizes the integral over the weights of the squared
++          gradient::
++
++            Grad[w] @ Grad[w].
++
++        * ``reg_ord=2``: minimizes the integral over the weights of the squared
++          curvature::
++
++            Laplacian[w]**2.
++
+     sigma_diff: float, optional
+         Quadratic difference in km/s defined as::
+ 
+@@ -1162,7 +1208,7 @@
+         dispersion of the galaxy spectrum. In this situation, the convolution
+         is done by ``pPXF`` with increased accuracy, using an analytic Fourier
+         Transform.
+-    sky: optional
++    sky:
+         vector containing the spectrum of the sky to be included in the fit, or
+         array of dimensions ``sky[n_pixels, nSky]`` containing different sky
+         spectra to add to the model of the observed ``galaxy`` spectrum. The
+@@ -1174,7 +1220,7 @@
+         where a very accurate sky subtraction is critical, it may be useful
+         *not* to subtract the sky from the spectrum, but to include it in the
+         fit using this keyword.
+-    templates_rfft: optional
++    templates_rfft:
+         When calling ``pPXF`` many times with an identical set of templates,
+         one can use this keyword to pass the real FFT of the templates,
+         computed in a previous ``pPXF`` call, stored in the
+@@ -1182,7 +1228,7 @@
+         that there is no need for it...
+ 
+         IMPORTANT: Use this keyword only if you understand what you are doing!
+-    tied: optional
++    tied:
+         A list of string expressions. Each expression "ties" the parameter to
+         other free or fixed parameters.  Any expression involving constants and
+         the parameter array ``p[j]`` are permitted. Since they are totally
+@@ -1223,7 +1269,7 @@
+         the LOSVD of two kinematic components. However, this same effect is
+         more efficient achieved by assigning them to the same kinematic
+         component using the ``component`` keyword.
+-    trig: optional
++    trig:
+         Set ``trig=True`` to use trigonometric series as an alternative to
+         Legendre polynomials, for both the additive and multiplicative
+         polynomials. When ``trig=True`` the fitted series below has
+@@ -1269,32 +1315,32 @@
+         IMPORTANT: this value is generally *different* from the systemic
+         velocity one can get from the literature. Do not try to use that!
+ 
+-    Returns
+-    -------
++    Output Parameters
++    -----------------
+ 
+     Stored as attributes of the ``pPXF`` class:
+ 
+-    .apoly :
++    .apoly:
+         Vector with the best fitting additive polynomial.
+-    .bestfit :
++    .bestfit:
+         Vector with the best fitting model for the galaxy spectrum.
+         This is a linear combination of the templates, convolved with the best
+         fitting LOSVD, multiplied by the multiplicative polynomials and
+         with subsequently added polynomial continuum terms or sky components.
+-    .chi2 :
++    .chi2:
+         The reduced ``chi^2`` (namely ``chi^2/DOF``) of the fit, where
+         ``DOF = pp.dof``  (approximately ``DOF ~ pp.goodpixels.size``).
+ 
+         IMPORTANT: if ``Chi^2/DOF`` is not ~1 it means that the errors are not
+         properly estimated, or that the template is bad and it is *not* safe to
+         set the ``clean`` keyword.
+-    .dust :
++    .dust:
+         List of dictionaries, one for each fitted j-th dust component. For
+         each dictionary, ``dust_j["sol"]`` contains the best-fitting
+         parameter of the attenuation curve of that dust component. The other
+         field of the dictionary are copied from the input to the keyword
+         ``dust``.
+-    .error :
++    .error:
+         This variable contains a vector of *formal* uncertainty (``1*sigma``)
+         for the fitted parameters in the output vector ``sol``.
+         They are computed from the estimated covariance matrix of the standard
+@@ -1314,16 +1360,16 @@
+         the penalty (``bias``) should be set to zero, or better to a very small
+         value. See Section 3.4 of `Cappellari & Emsellem (2004)`_ for an
+         explanation.
+-    .gas_bestfit :
++    .gas_bestfit:
+         If ``gas_component is not None``, this attribute returns the
+         best-fitting gas emission-lines spectrum alone.
+         The best-fitting stellar spectrum alone can be computed as
+         ``stars_bestfit = pp.bestfit - pp.gas_bestfit``
+-    .gas_bestfit_templates :
++    .gas_bestfit_templates:
+         If ``gas_component is not None``, this attribute returns the individual
+         best-fitting gas emission-lines templates as columns of an array.
+         Note that ``pp.gas_bestfit = pp.gas_bestfit_templates.sum(1)``
+-    .gas_flux :
++    .gas_flux:
+         Vector with the integrated flux (in counts) of all lines set as
+         ``True`` in the input ``gas_component`` keyword. This is the flux of
+         individual gas templates, which may include multiple lines.
+@@ -1359,7 +1405,7 @@
+         outside the fitted wavelength range or within a masked spectral region.
+         These ``np.nan`` do *not* indicate numerical issues with the actual
+         ``pPXF`` calculation and the rest of the ``pPXF`` output is reliable.
+-    .gas_flux_error :
++    .gas_flux_error:
+         *Formal* uncertainty (``1*sigma``) for the quantity ``pp.gas_flux``, in
+         the same units as the gas fluxes.
+ 
+@@ -1373,26 +1419,26 @@
+             gas_flux_error_corr = gas_flux_error*sqrt(chi^2/DOF)
+                                 = pp.gas_flux_error*sqrt(pp.chi2).
+ 
+-    .gas_mpoly :
++    .gas_mpoly:
+         vector with the best-fitting gas reddening curve.
+-    .gas_reddening :
++    .gas_reddening:
+         Best fitting ``A_V`` value if the ``gas_reddening`` keyword is set.
+         This is especially useful when the Balmer series is input as a single
+         template with an assumed theoretically predicted decrement e.g. using
+         ``emission_lines(..., tie_balmer=True)`` in ``ppxf.ppxf_util`` to
+         compute the gas templates.
+-    .gas_zero_template :
++    .gas_zero_template:
+         vector of size ``gas_component.sum()`` set to ``True`` where
+         the gas template was identically zero within the fitted region.
+         For those gas components ``pp.gas_flux = pp.gas_flux_error = np.nan``.
+         These flags generally indicate that some of the gas templates passed to
+         ``pPXF`` consist of gas emission lines that fall outside the fitted
+         wavelength range or within a masked spectral region.
+-    .goodpixels :
++    .goodpixels:
+         Integer vector containing the indices of the good pixels in the fit.
+         This vector is a copy of the input ``goodpixels`` if ``clean = False``
+         otherwise it will be updated by removing the detected outliers.
+-    .matrix :
++    .matrix:
+         Prediction ``matrix[n_pixels, degree + n_templates + n_sky]`` of the
+         linear system.
+ 
+@@ -1402,10 +1448,10 @@
+         ``pp.matrix[n_pixels, degree : degree + n_templates]`` contains the
+         stellar/gas templates convolved by the LOSVD, and multiplied by the
+         multiplicative polynomials if ``mdegree > 0``.
+-    .mpoly :
++    .mpoly:
+         Best fitting multiplicative polynomial (or reddening curve when
+         ``reddening`` is set).
+-    .mpolyweights :
++    .mpolyweights:
+         This is largely superseded by the ``.mpoly`` attribute above.
+ 
+         When ``mdegree > 0`` this contains in output the coefficients of the
+@@ -1441,7 +1487,7 @@
+         to plot the photometry alone and ``pp.plot(phot=False, spec=True)``
+         to plot the spectrum alone. By default both the spectrum and photometry
+         are included in a single plot.
+-    .polyweights :
++    .polyweights:
+         This is largely superseded by the ``.apoly`` attribute above.
+ 
+         When ``degree >= 0`` contains the weights of the additive Legendre
+@@ -1461,9 +1507,9 @@
+         spectrum. In that case, the output weights of the additive polynomials
+         alternate between the first (left) spectrum and the second (right)
+         spectrum.
+-    .reddening :
++    .reddening:
+         Best fitting ``A_V`` value if the ``reddening`` keyword is set.
+-    .sol :
++    .sol:
+         Vector containing in output the parameters of the kinematics.
+ 
+         * If ``moments=2`` this contains ``[Vel, Sigma]``
+@@ -1494,11 +1540,11 @@
+         construction kinematics parameters ``[-Vel, Sigma, -h3, h4, -h5, h6]``.
+         If ``vsyst`` is nonzero (as required for two-sided fitting), then the
+         output velocity is measured with respect to ``vsyst``.
+-    .status :
++    .status:
+         Contains the output status of the optimization. Positive values
+         generally represent success (the meaning of ``status`` is defined as in
+         `scipy.optimize.least_squares`_).
+-    .weights :
++    .weights:
+         Receives the value of the weights by which each template was
+         multiplied to best fit the galaxy spectrum. The optimal template can be
+         computed with an array-vector multiplication::
+@@ -1600,9 +1646,9 @@
+                  linear=False, linear_method='lsq_box', mask=None,
+                  method='capfit', mdegree=0, moments=2, phot=None, plot=False,
+                  quiet=False, reddening=None, reddening_func=None, reg_dim=None,
+-                 reg_ord=2, reg_step=None, regul=0, sigma_diff=0, sky=None,
++                 reg_ord=2, regul=0, sigma_diff=0, sky=None,
+                  templates_rfft=None, tied=None, trig=False, velscale_ratio=1,
+-                 vsyst=0, x0=None):
++                 vsyst=0, x0=None, plot_title="pPXF fitting"):
+ 
+         self.galaxy = galaxy
+         self.nspec = galaxy.ndim     # nspec=2 for reflection-symmetric LOSVD
+@@ -1619,13 +1665,12 @@
+         self.quiet = quiet
+         self.sky = sky
+         self.vsyst = vsyst/velscale
++        self.regul = regul
+         self.lam = lam
+         self.lam_temp = lam_temp
+         self.nfev = 0
+         self.reg_dim = np.asarray(reg_dim)
+         self.reg_ord = reg_ord
+-        self.reg_step = reg_step
+-        self.regul = regul
+         self.templates = templates.reshape(templates.shape[0], -1)
+         self.npix_temp, self.ntemp = self.templates.shape
+         self.sigma_diff = sigma_diff/velscale
+@@ -1637,7 +1682,7 @@
+         self.linear_method = linear_method
+         self.x0 = x0  # Initialization for linear solution
+         self.phot_npix = 0
+-
++        self.plot_title = plot_title
+         ####### Do extensive checking of possible input errors #######
+ 
+         if method != 'capfit':
+@@ -1651,6 +1696,10 @@
+         assert linear_method in ['nnls', 'lsq_box', 'lsq_lin', 'cvxopt'], \
+             "`linear_method` must be 'nnls', 'lsq_box', 'lsq_lin' or 'cvxopt'"
+ 
++        if linear_method == 'cvxopt':
++            assert cvxopt_installed, \
++                "To use `linear_method`='cvxopt' the cvxopt package must be installed"
++
+         if trig:
+             assert degree < 0 or degree % 2 == 0, \
+                 "`degree` must be even with trig=True"
+@@ -1685,19 +1734,9 @@
+             assert 0 < fraction < 1, "Must be `0 < fraction < 1`"
+             assert self.ncomp >= 2, "At least 2 COMPONENTs are needed with FRACTION keyword"
+ 
+-        if regul > 0:
+-            if reg_dim is None:
+-                assert self.ncomp == 1, "REG_DIM must be specified with more than one kinematic component"
+-                self.reg_dim = np.asarray(templates.shape[1:])
+-            if reg_step is None:
+-                self.reg_step = [np.ones(rd - 1) for rd in self.reg_dim]
+-            else:
+-                assert hasattr(reg_step, "__len__") and len(reg_step) == len(self.reg_dim), \
+-                    "Must be `len(reg_step) == len(reg_dim)`"
+-                assert np.all([hasattr(a, "__len__") and len(a) == b - 1 
+-                               for (a, b) in zip(reg_step, self.reg_dim)]), \
+-                                "Must be `len(reg_step[j]) == reg_dim[j] - 1` for all j"
+-                self.reg_step = reg_step
++        if regul > 0 and reg_dim is None:
++            assert self.ncomp == 1, "REG_DIM must be specified with more than one component"
++            self.reg_dim = np.asarray(templates.shape[1:])
+ 
+         assert reg_ord in [1, 2], "`reg_ord` must be 1 or 2"
+ 
+@@ -1805,8 +1844,7 @@
+             assert vsyst != 0, "VSYST must be defined for two-sided fitting"
+             self.goodpixels = np.append(self.goodpixels, self.npix + self.goodpixels)
+ 
+-        nmin = max(self.templates.shape[0], self.npix)
+-        self.npad = 2**int(np.ceil(np.log2(nmin)))
++        self.npad = 2**int(np.ceil(np.log2(self.templates.shape[0])))
+         if templates_rfft is None:
+             # Pre-compute FFT of real input of all templates
+             self.templates_rfft = np.fft.rfft(self.templates, self.npad, axis=0)
+@@ -1891,8 +1929,8 @@
+                 self.gas_names = gas_names
+             self.gas_any = True
+ 
+-        # The following lines handle cases where the input gas templates
+-        # may be entirely zero within the region being fitted
++        # The lines below deal with the possibility for the input
++        # gas templates to be identically zero in the fitted region
+         self.gas_any_zero = False
+         if self.gas_any:
+             vmed = np.median([a[0] for a in start1])/self.velscale
+@@ -1948,8 +1986,7 @@
+             assert (self.lam_temp[0] <= lam_range[0]) and (self.lam_temp[-1] >= lam_range[1]), \
+                 "The `templates` must cover the full wavelength range of the " \
+                 "`galaxy[goodpixels]` spectrum for the adopted velocity starting guess"
+-            lam_range = self.lam[[0, -1]]/np.exp(vlim/c)   # Use eq.(5c) of Cappellari (2023)
+-            ok = (self.lam_temp >= lam_range[0]) & (self.lam_temp <= lam_range[1])
++            ok = (self.lam_temp > lam_range[0]) & (self.lam_temp < lam_range[1])
+             self.templates = self.templates[ok, :]
+             self.lam_temp = self.lam_temp[ok]
+             self.npix_temp = self.templates.shape[0]
+@@ -1957,7 +1994,7 @@
+             self.vsyst = c*np.log(lam_temp_min/self.lam[0])/self.velscale
+         elif self.templates.shape[0]/self.velscale_ratio > 2*self.galaxy.shape[0]:
+             print("WARNING: The template is > 2x longer than the galaxy. You may "
+-                  "be able to save some computation time by either truncating it or by "
++                  "be able to save some computation time by truncating it or by "
+                   "providing both `lam` and `lam_temp` for an automatic truncation")
+ 
+ ################################################################################
+@@ -2163,7 +2200,7 @@
+                 bounds[p] = [-1, 1]  # Force <100% corrections
+                 p += 1
+ 
+-        # Dust parameter dictionaries are structured as follow:
++        # The dust dictionaries have the form
+         # {'start':..., 'bounds':..., 'fixed':..., 'component':..., 'func':...}
+         if self.dust is not None:
+             for d in self.dust:
+@@ -2178,7 +2215,7 @@
+         if self.global_search:
+             glob_options = {'tol': 0.1, 'disp': 1}  # default
+             if isinstance(self.global_search, dict):
+-                glob_options |= self.global_search
++                glob_options.update(self.global_search)  # |= in Python 3.9
+             lnc = ()
+             free = (fixed == 0) & (tied == '')
+             if self.A_ineq_kinem is not None:
+@@ -2344,7 +2381,7 @@
+             b = self.galaxy/self.noise
+ 
+         if self.regul > 0:
+-            regularization(a, npoly, nrows_temp, self.reg_dim, self.reg_ord, self.reg_step, self.regul)
++            regularization(a, npoly, nrows_temp, self.reg_dim, self.reg_ord, self.regul)
+ 
+         # Select the spectral region to fit and solve the over-conditioned system
+         # using SVD/BVLS. Use unweighted array for estimating bestfit predictions.
+@@ -2470,7 +2507,6 @@
+                 if gas_clip:
+                     bestfit_shown = stars_bestfit
+             sig3 = np.percentile(abs(resid[self.goodpixels]), 99.73)
+-            bestfit_shown = bestfit_shown[self.goodpixels[0] : self.goodpixels[-1] + 1]
+             ref = np.min(bestfit_shown) - 2*sig3
+             mx = np.max(bestfit_shown) + sig3
+             resid += ref                           # Offset residuals to avoid overlap
+@@ -2550,6 +2586,207 @@
+ 
+ ################################################################################
+ 
++    def plot_mine(self, gas_clip=False, spec=True, phot=None, lam_flam=False):
++        """
++        Produces a plot of the pPXF best fit.
++        One can independently call ``pp.plot()`` after pPXF terminates.
++
++        Use the command ``pp.plot(gas_clip=True)`` to scale the plot based on
++        the stellar continuum alone, while allowing for the gas emission lines
++        to go outside the plotting region. This is useful to inspect the fit
++        to the stellar continuum, in the presence of strong gas emission lines.
++
++        Use ``spec=True`` to plot the fit to the spectrum and ``phot=True`` to
++        plot the fit to the photometry.
++
++        Use ``lam_flam=True`` to plot ``lam*f(lam) = nu*f(nu)`` (e.g.
++        ``erg/cm^2/s``) instead of ``f(lam)``(e.g. ``erg/cm^2/s/A``).
++
++        """
++        
++        rcParams['font.family'] = 'serif'
++        rcParams['axes.linewidth'] = 1
++        
++        if phot is None:
++            phot = True if self.phot_npix else False  # Plot photometry by default, if given
++        
++        title = self.plot_title
++        
++        plt.rc('xtick', direction = 'in')
++        fig = plt.figure(figsize=(8,3.7))
++        plt.clf()
++        frame1=fig.add_axes((.15,.3,.8,.63))
++        plt.title(title)
++        ax = plt.gca()
++        ax.xaxis.set_tick_params(length = 5, width=1,labelsize=0)
++        ax.xaxis.set_minor_locator(AutoMinorLocator())
++        ax.yaxis.set_tick_params(length = 5, width=1,labelsize=12)
++        ax.yaxis.set_minor_locator(AutoMinorLocator())
++
++        scale = 1e4  # divide by 'scale' to convert Angstrom to micron
++        if self.lam is None:
++            plt.xlabel("Pixels")
++            x = np.arange(self.galaxy.size)
++        else:
++            plt.xlabel("Observed wavelength [$\mathregular{\AA}$]", fontsize = 12)
++            #x = self.lam/scale
++            x = self.lam
++            if phot:
++                phot_x = self.phot_lam_mean/scale
++                if self.lam_temp is not None:
++                    x_full = self.lam_temp_full/scale
++        plt.setp(ax.spines.values(), linewidth=1,zorder=100)
++        
++        if lam_flam and (self.lam is not None):
++            plt.ylabel(r"Relative Flux ($\lambda\,f_\lambda$)")
++            galaxy = self.galaxy*x
++            bestfit = self.bestfit*x
++            if self.gas_any:
++                gas_bestfit = self.gas_bestfit*x
++                gas_bestfit_templates = self.gas_bestfit_templates*x[:, None]
++            if phot:
++                phot_galaxy = self.phot_galaxy*phot_x
++                phot_bestfit = self.phot_bestfit*phot_x
++                phot_noise = self.phot_noise*phot_x
++                if self.lam_temp is not None:
++                    bestfit_full = self.bestfit_full*x_full
++                    if self.gas_any:
++                        gas_bestfit_full = self.gas_bestfit_full*x_full
++        else:
++            plt.ylabel((str("F$_{\lambda}$ [10$^{-20}$ erg s$^{-1}$ cm$^{-2}$ $\AA^{-1}$]")), fontsize = 11)
++            galaxy = self.galaxy
++            bestfit = self.bestfit
++            if self.gas_any:
++                gas_bestfit = self.gas_bestfit
++                gas_bestfit_templates= self.gas_bestfit_templates
++            if phot:
++                phot_galaxy = self.phot_galaxy
++                phot_bestfit = self.phot_bestfit
++                phot_noise = self.phot_noise
++                if self.lam_temp is not None:
++                    bestfit_full = self.bestfit_full
++                    if self.gas_any:
++                        gas_bestfit_full = self.gas_bestfit_full
++
++        # Plot observed spectrum
++        if spec:
++            ll, rr = np.min(x), np.max(x)
++            resid = galaxy - bestfit
++            stars_bestfit = bestfit
++            bestfit_shown = bestfit
++            if self.gas_any:
++                stars_bestfit = bestfit - gas_bestfit
++                if gas_clip:
++                    bestfit_shown = stars_bestfit
++            sig3 = np.percentile(abs(resid[self.goodpixels]), 99.73)
++            ref = np.min(bestfit_shown) - 2*sig3
++            mx = np.max(bestfit_shown) + sig3
++            mx_res = np.max(resid) + sig3
++#            resid += ref                           # Offset residuals to avoid overlap
++            mn = np.min(galaxy) - sig3   # Plot all fitted residuals without clipping
++            mn_res = np.min(resid)
++            plt.plot(x, galaxy, 'k', label='Input spectrum', linewidth=0.25)
++            plt.plot(x, stars_bestfit, 'r', label='pPXF fit', linewidth=0.5)
++            plt.legend(frameon = False)
++            w = np.flatnonzero(np.diff(self.goodpixels) > 1)
++            for wj in w:
++                a, b = self.goodpixels[wj : wj + 2]
++                plt.axvspan(x[a], x[b], facecolor='lightskyblue', alpha = 0.7)
++            
++            plt.ylim([mn, mx] + np.array([-0.05, 0.05])*(mx - mn))
++            plt.xlim([ll, rr] + np.array([-0.02, 0.02])*(rr - ll))
++            
++            
++            frame2=fig.add_axes((.15,.15,.8,.14))
++            
++            plt.axhline(y=0, color='k', linestyle='--', linewidth=0.5)
++            plt.plot(x, resid,'g', label='Residuals', linewidth=0.25)
++            
++            resid_plot_lim = resid
++#            plt.plot(x[self.goodpixels], resid[self.goodpixels],'g', label='Residuals', linewidth=0.25)
++#            w = np.flatnonzero(np.diff(self.goodpixels) > 1)
++            for wj in w:
++                a, b = self.goodpixels[wj : wj + 2]
++                plt.axvspan(x[a], x[b], facecolor='lightskyblue', alpha = 0.7)
++                plt.plot(x[a : b + 1], resid[a : b + 1], 'k', linewidth=0.25)
++                resid_plot_lim[a : b + 1] = resid[a : b + 1] - resid[a : b + 1]
++#            for k in self.goodpixels[[0, -1]]:
++#                plt.plot(x[[k, k]], [ref, bestfit[k]], 'lightgray', linewidth=0.25)
++            plt.ylim(np.min(resid_plot_lim) - sig3, np.max(resid_plot_lim) + sig3)
++            if self.gas_any:
++                plt.plot(x, gas_bestfit_templates + ref, 'blue', linewidth=1)
++                plt.plot(x, gas_bestfit + ref, 'magenta', linewidth=2)
++                plt.plot(x, bestfit, 'orange', linewidth=2)
++#            else:
++#                plt.plot(x[self.goodpixels], self.goodpixels*0 + ref, '.k', ms=1)
++
++        plt.xlabel("Observed wavelength [$\mathregular{\AA}$]", fontsize = 12)
++        plt.rc('axes',linewidth=1.5)
++        ax = plt.gca()
++        ax.xaxis.set_tick_params(length = 5, width=1,labelsize=12)
++        ax.yaxis.set_tick_params(length = 5, width=1,labelsize=12)
++        ax.xaxis.set_ticks_position('both')
++        plt.rc('xtick', direction = 'in')
++        plt.setp(ax.spines.values(), linewidth=1,zorder=100)
++        plt.subplots_adjust(left =0.1, bottom =0.2, right =0.9, top =0.99)
++        ax.xaxis.set_minor_locator(AutoMinorLocator())
++        ax.yaxis.set_minor_locator(AutoMinorLocator())
++        # plt.ylim([mn_res, mx_res] + np.array([-0.05, 0.05])*(mx_res - mn_res))
++        
++        # Plot observed photometry
++        if phot:
++            assert self.phot_npix, \
++                "To plot photometric data pPXF needs the keyword `phot` with the photometry"
++            assert self.lam is not None, \
++                "To plot photometric data pPXF needs the keyword `lam` with the galaxy wavelength"
++            plt.plot(phot_x, phot_bestfit, 'D', c='limegreen', ms=10)
++            plt.errorbar(phot_x, phot_galaxy, yerr=phot_noise,
++                         fmt='ob', capthick=3, capsize=5, elinewidth=3)
++
++            x1 = np.min(phot_x)
++            x2 = np.max(phot_x)
++
++            # Plot the best fitting template over photometry
++            if self.lam_temp is not None:
++                if self.gas_any and gas_clip:
++                    bestfit_shown = bestfit_full - gas_bestfit_full
++                else:
++                    bestfit_shown = bestfit_full
++                plt.plot(x_full, bestfit_full, 'gold', linewidth=2, zorder=1)
++                w = (x1 <= x_full) & (x_full <= x2)
++                y1 = np.min(bestfit_shown[w])
++                y2 = np.max(bestfit_shown[w])
++            else:
++                y1 = np.min(phot_bestfit)
++                y2 = np.max(phot_bestfit)
++
++            if spec:
++                ll = min(ll, x1)
++                rr = max(rr, x2)
++                mn = min(mn, y1)
++                mx = max(mx, y2)
++            else:
++                plt.axvspan(*x[[0, -1]], facecolor='lightgray', zorder=0)
++                ll, rr, mn, mx = x1, x2, y1, y2
++
++        # Use log for wide wavelength ranges
++        if self.lam is not None and rr/ll > 3:
++            plt.xlim([ll/1.1, rr*1.1])
++            plt.xscale('log')
++            class my_formatter(ticker.LogFormatter):
++                def _num_to_string(self, x, vmin, vmax):
++                    return f'{x:.3g}'
++            fmt = my_formatter(minor_thresholds=(2, 0.5))
++            ax = plt.gca()
++            ax.xaxis.set_major_formatter(fmt)
++            ax.xaxis.set_minor_formatter(fmt)
++        else:
++            plt.xlim([ll, rr] + np.array([-0.02, 0.02])*(rr - ll))
++
++#        plt.ylim([mn, mx] + np.array([-0.05, 0.05])*(mx - mn))
++
++################################################################################
++
+     def format_output(self, params, perror):
+         """
+         Store the best fitting parameters in the output solution

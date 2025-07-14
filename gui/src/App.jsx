@@ -6,7 +6,7 @@ import Sidebar from './components/Sidebar';
 import Gallery from './components/Gallery';
 import StatusBar from './components/StatusBar';
 import AladinInteractions from './components/AladinInteractions';
-import PipelineMonitor from './components/PipelineMonitor';
+import DatasetsList from './components/DatasetsList';
 import logoImage from './assets/AC3-LogoConFrase.jpg';
 
 function App() {
@@ -442,9 +442,8 @@ function App() {
                 Starlight
               </button>
               <button 
-                className={`app-btn ${selectedApp === 'ppxf' ? 'active' : ''} disabled`}
+                className={`app-btn ${selectedApp === 'ppxf' ? 'active' : ''}`}
                 onClick={() => setSelectedApp('ppxf')}
-                disabled
               >
                 PPXF
               </button>
@@ -624,7 +623,7 @@ function App() {
           {activeTab === 'pipeline' && (
             <div className="pipeline-full-view">
               {/* Pipeline Monitor with full space */}
-              <PipelineMonitor selectedApp={selectedApp} />
+                                <DatasetsList processorType={selectedApp} />
             </div>
           )}
         </div>

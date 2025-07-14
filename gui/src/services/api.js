@@ -9,10 +9,11 @@ const API_BASE_URL = '/api';
  * @param {function} onProgress - Progress callback function
  * @returns {Promise<Object>} - Upload response
  */
-export const uploadFile = async (file, dataset, onProgress = null) => {
+export const uploadFile = async (file, dataset, onProgress = null, processorType = 'starlight') => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('dataset', dataset);
+  formData.append('app', processorType);
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -80,7 +81,7 @@ export const checkHealth = async () => {
  * @param {function} onOverallProgress - Progress callback for overall upload
  * @returns {Promise<Array>} - Array of upload responses
  */
-export const uploadFiles = async (files, dataset, onFileProgress = null, onOverallProgress = null) => {
+export const uploadFiles = async (files, dataset, onFileProgress = null, onOverallProgress = null, processorType = 'starlight') => {
   const results = [];
   const totalFiles = files.length;
   
@@ -92,7 +93,7 @@ export const uploadFiles = async (files, dataset, onFileProgress = null, onOvera
         if (onFileProgress) {
           onFileProgress(file, progress);
         }
-      });
+      }, processorType);
       
       results.push({
         file: file,
@@ -124,9 +125,9 @@ export const uploadFiles = async (files, dataset, onFileProgress = null, onOvera
  * Get list of existing datasets
  * @returns {Promise<Array>} - Array of dataset names
  */
-export const getDatasets = async () => {
-  console.log('Fetching datasets from:', `${API_BASE_URL}/datasets`);
-  const response = await fetch(`${API_BASE_URL}/datasets`, {
+export const getDatasets = async (processorType = 'starlight') => {
+  console.log('Fetching datasets from:', `${API_BASE_URL}/datasets?app=${processorType}`);
+  const response = await fetch(`${API_BASE_URL}/datasets?app=${encodeURIComponent(processorType)}`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -156,17 +157,18 @@ export const getDatasets = async () => {
  * @param {string} datasetName - The name of the dataset to create
  * @returns {Promise<Object>} - Creation response
  */
-export const createDataset = async (datasetName) => {
+export const createDataset = async (datasetName, processorType = 'starlight') => {
   try {
-    console.log('Creating dataset:', datasetName);
+    console.log('Creating dataset:', datasetName, 'for processor:', processorType);
     const response = await fetch(`${API_BASE_URL}/datasets/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        datasetName: datasetName
-      }),
+              body: JSON.stringify({
+          datasetName: datasetName,
+          appType: processorType
+        }),
     });
 
     console.log('Create dataset response status:', response.status);
@@ -196,10 +198,10 @@ export const createDataset = async (datasetName) => {
  * @param {string} appType - The application type (default: 'starlight')
  * @returns {Promise<Object>} - Delete response
  */
-export const deleteDataset = async (datasetName, appType = 'starlight') => {
+export const deleteDataset = async (datasetName, processorType = 'starlight') => {
   try {
-    console.log('Deleting dataset:', datasetName, 'for app:', appType);
-    const response = await fetch(`${API_BASE_URL}/datasets/delete?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(appType)}`, {
+    console.log('Deleting dataset:', datasetName, 'for processor:', processorType);
+    const response = await fetch(`${API_BASE_URL}/datasets/delete?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -233,10 +235,10 @@ export const deleteDataset = async (datasetName, appType = 'starlight') => {
  * @param {string} appType - The application type (default: 'starlight')
  * @returns {Promise<Object>} - Delete response
  */
-export const deleteFile = async (fileKey, appType = 'starlight') => {
+export const deleteFile = async (fileKey, processorType = 'starlight') => {
   try {
-    console.log('Deleting file:', fileKey, 'for app:', appType);
-    const response = await fetch(`${API_BASE_URL}/files/delete?key=${encodeURIComponent(fileKey)}&app=${encodeURIComponent(appType)}`, {
+    console.log('Deleting file:', fileKey, 'for processor:', processorType);
+    const response = await fetch(`${API_BASE_URL}/files/delete?key=${encodeURIComponent(fileKey)}&app=${encodeURIComponent(processorType)}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -269,9 +271,9 @@ export const deleteFile = async (fileKey, appType = 'starlight') => {
  * @param {string} datasetName - The name of the dataset
  * @returns {Promise<Array>} - Array of file objects
  */
-export const getDatasetFiles = async (datasetName) => {
-  console.log('Fetching files for dataset:', datasetName);
-  const response = await fetch(`${API_BASE_URL}/datasets/files?dataset=${encodeURIComponent(datasetName)}`, {
+export const getDatasetFiles = async (datasetName, processorType = 'starlight') => {
+  console.log('Fetching files for dataset:', datasetName, 'processor:', processorType);
+  const response = await fetch(`${API_BASE_URL}/datasets/files?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -301,9 +303,9 @@ export const getDatasetFiles = async (datasetName) => {
  * @param {string} datasetName - The name of the dataset
  * @returns {Promise<Array>} - Array of output file objects
  */
-export const getDatasetOutputFiles = async (datasetName) => {
-  console.log('Fetching output files for dataset:', datasetName);
-  const response = await fetch(`${API_BASE_URL}/datasets/output-files?dataset=${encodeURIComponent(datasetName)}`, {
+export const getDatasetOutputFiles = async (datasetName, processorType = 'starlight') => {
+  console.log('Fetching output files for dataset:', datasetName, 'processor:', processorType);
+  const response = await fetch(`${API_BASE_URL}/datasets/output-files?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',

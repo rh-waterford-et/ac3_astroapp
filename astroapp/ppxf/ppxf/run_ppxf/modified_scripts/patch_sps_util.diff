@@ -1,0 +1,197 @@
+--- /usr/local/lib/python3.8/dist-packages/ppxf/sps_util.py	2025-03-18 12:22:10.681430101 +0000
++++ shared_directory/sps_util.py	2025-03-18 12:44:26.307889707 +0000
+@@ -14,6 +14,8 @@
+ from pathlib import Path
+ import numpy as np
+ 
++from astropy import constants, units
++
+ from ppxf import ppxf_util as util
+ 
+ ###############################################################################
+@@ -24,11 +26,12 @@
+     to deal with other spectral templates libraries, different IMFs or
+     different chemical abundances.
+ 
+-    Parameters
+-    ----------
+-    filename : string
++    Input Parameters
++    ----------------
++
++    filename:
+         Name of a Numpy np.savez() file containing the following arrays for a
+-        given SPS models library, like FSPS, Miles, GALEXEV, BPASS, XSL,...
++        given SPS models library, like FSPS, Miles, GALEXEV, BPASS,...
+ 
+         1. templates[npixels, n_ages, n_metals] SPS spectra in units of L_Sun/A
+            (solar luminosities per Angstrom)
+@@ -47,28 +50,29 @@
+             np.savez_compressed(filename, templates=templates, masses=masses, 
+                                 lam=lam, ages=ages, metals=metals, fwhm=fwhm)
+ 
+-    velscale : float
++    velscale:
+         desired velocity scale for the output templates library in km/s 
+         (e.g. 60). This is generally the same or an integer fraction of the 
+         ``velscale`` of the galaxy spectrum used as input to ``ppxf``.
+-    FWHM_gal : float or dictionary
++    FWHM_gal: 
+         scalar with the constant resolution of the galaxy in Angstroms, or
+         dictionary with the wavelength and instrumental resolution of every
+         pixel of the galaxy spectrum in Angstroms ``{"lam":lam, "fwhm":fwhm}``.
+         
+         If ``FWHM_gal=None`` (default), no convolution is performed.
+ 
+-    Other Parameters
+-    ----------------
+-    age_range : array_like with shape (2,), optional
++    Optional Keywords
++    -----------------
++
++    age_range: array_like with shape (2,)
+         ``[age_min, age_max]`` optional age range (inclusive) in Gyr for the 
+         SPS models. This can be useful e.g. to limit the age of the templates 
+         to be younger than the age of the Universe at a given redshift.
+-    metal_range : array_like with shape (2,), optional
++    metal_range: array_like with shape (2,)
+         ``[metal_min, metal_max]`` optional metallicity [M/H] range (inclusive) 
+         for the SPS models (e.g.`` metal_range = [0, np.inf]`` to select only
+         the spectra with Solar metallicity and above).
+-    norm_range : array_like with shape (2,), optional
++    norm_range: array_like with shape (2,)
+         A two-elements vector specifying the wavelength range in Angstroms 
+         within which to compute the templates normalization
+         (e.g. ``norm_range=[5070, 5950]`` for the FWHM of the V-band). In this
+@@ -79,7 +83,7 @@
+         by the median of all templates. In this case, the output weights will
+         represent mass weights.
+ 
+-    norm_type : {'mean', 'max', 'lbol'}, optional
++    norm_type: {'mean', 'max', 'lbol'} optional
+         * 'mean': the templates are normalized to ``np.mean(template[band]) = 1``
+           in the given ``norm_range`` wavelength range. When this keyword is
+           used, ``ppxf`` will output light weights, and ``mean_age_metal()``
+@@ -96,19 +100,20 @@
+         However, when using regularization in ``ppxf`` the results will not
+         be identical. In fact, enforcing smoothness to the light-weights is
+         not quite the same as enforcing it to the mass-weights.
+-    lam_range : array_like with shape (2,), optional
++    wave_range: array_like with shape (2,)
+         A two-elements vector specifying the wavelength range in Angstroms for
+         which to extract the stellar templates. Restricting the wavelength
+         range of the templates to the range of the galaxy data is useful to
+-        save some computational time. By default ``lam_range=None``
++        save some computational time. By default ``wave_range=None``
++
++    Output Parameters
++    -----------------
+ 
+-    Returns
+-    -------
+     Stored as attributes of the ``sps_lib`` class:
+ 
+-    .ages_grid : array_like with shape (n_ages, n_metals)
++    .ages_grid: array_like with shape (n_ages, n_metals)
+         Age in Gyr of every template.
+-    .flux : array_like with shape (n_ages, n_metals)
++    .flux: array_like with shape (n_ages, n_metals)
+         If ``norm_range is not None`` then ``.flux`` contains the mean flux
+         in each template spectrum within ``norm_range`` before normalization.
+ 
+@@ -127,23 +132,23 @@
+             mass_weights = light_weights/sps.flux           # Divide by .flux attribute
+             mass_weights /= mass_weights.sum()              # Normalize to sum=1
+ 
+-    .templates : array_like with shape (npixels, n_ages, n_metals)
++    .templates: array_like with shape (npixels, n_ages, n_metals)
+         Logarithmically sampled array with the spectral templates in Lsun/A.
+-    .lam_temp : array_like with shape (npixels,)
++    .lam_temp: array_like with shape (npixels,)
+         Wavelength in Angstroms of every pixel of the output templates.
+-    .ln_lam_temp : array_like with shape (npixels,)
++    .ln_lam_temp: array_like with shape (npixels,)
+         Natural logarithm of `.lam_temp`.
+-    .metals_grid : array_like with shape (n_ages, n_metals)
++    .metals_grid: array_like with shape (n_ages, n_metals)
+         Metallicity [M/H] of every template.
+-    .n_ages : 
++    .n_ages: 
+         Number of different ages.
+-    .n_metal : 
++    .n_metal: 
+         Number of different metallicities.
+ 
+     """
+ 
+-    def __init__(self, filename, velscale, fwhm_gal=None, age_range=None, lam_range=None,
+-                 metal_range=None, norm_range=None, norm_type='mean'):
++    def __init__(self, filename, velscale, fwhm_gal=None, age_range=None,
++                 metal_range=None, norm_range=None, norm_type='mean', wave_range=None):
+ 
+         assert norm_type in ['max', 'lbol', 'mean'], "`norm_type` must be in ['max', 'lbol', 'mean']"
+ 
+@@ -163,10 +168,12 @@
+             if isinstance(fwhm_gal, dict):
+                 # Computes the spectral resolution of the galaxy at each pixel of
+                 # the templates. The resolution is interpolated from the galaxy
+-                # spectrum within its range, and constant outside its range.
++                # spectrum within its range, and constant beyond its range.
+                 fwhm_gal = np.interp(lam, fwhm_gal["lam"], fwhm_gal["fwhm"])
+ 
+-            fwhm_diff2 = (fwhm_gal**2 - fwhm_tem**2).clip(0)  # NB: clip if fwhm_tem too large!
++            fwhm_diff2 = (fwhm_gal**2 - fwhm_tem**2).clip(0)
++            if np.any(fwhm_diff2 == 0):
++                print("WARNING: the template's resolution dlam is larger than the galaxy's")
+             sigma = np.sqrt(fwhm_diff2)/np.sqrt(4*np.log(4))
+             spectra = util.varsmooth(lam, spectra, sigma)
+ 
+@@ -207,8 +214,8 @@
+         self.templates_full = templates
+         self.ln_lam_temp_full = ln_lam_temp
+         self.lam_temp_full = lam_temp
+-        if lam_range is not None:
+-            good_lam = (lam_temp >= lam_range[0]) & (lam_temp <= lam_range[1])
++        if wave_range is not None:
++            good_lam = (lam_temp >= wave_range[0]) & (lam_temp <= wave_range[1])
+             lam_temp = lam_temp[good_lam]
+             ln_lam_temp = ln_lam_temp[good_lam]
+             templates = templates[good_lam]
+@@ -221,7 +228,7 @@
+         self.n_ages, self.n_metals = age_grid.shape
+         self.flux = flux            # factor by which each template was divided
+         self.mass_no_gas_grid = masses
+-
++        self.fwhm_tem = fwhm_tem
+ 
+ ###############################################################################
+ 
+@@ -283,16 +290,16 @@
+         """
+         assert self.templates_full.shape[1:] == weights.shape, "Input weight dimensions do not match"
+ 
+-        p1 = util.synthetic_photometry(self.lam_temp_full, self.templates_full, band, 
++        p1 = util.synthetic_photometry(self.templates_full, self.lam_temp_full, band, 
+                                        redshift=redshift, quiet=True)
+-        dist = 3.085677581491367e+19    # 10pc in cm by definition
+-        p1.flux /= 4*np.pi*dist**2      # convert luminosity to observed flux/cm^2 at 10pc
+-        p1.flux *= 3.828e+33            # spectra are in units of Lsun (erg/s IAU 2015)
++        dist = (10*units.pc).to('cm').value        
++        p1.flux /= 4*np.pi*dist**2            # convert luminosity to observed flux/cm^2 at 10pc
++        p1.flux *= constants.L_sun.to('erg/s').value  # spectra are in units of Lsun
+ 
+         ppxf_dir = Path(__file__).parent  # path of current file
+         filename = ppxf_dir / 'sps_models' / 'spectra_sun_vega.npz'
+-        a = np.load(filename)           # Spectrum in cgs/A at 10pc
+-        p2 = util.synthetic_photometry(a["lam"], a["flux_sun"], band, 
++        a = np.load(filename)   # Spectrum in cgs/A at 10pc
++        p2 = util.synthetic_photometry(a["flux_sun"], a["lam"], band, 
+                                        redshift=redshift, quiet=True) 
+ 
+         mass_weights = weights/self.flux    # Revert possible templates normalization
+@@ -304,5 +311,4 @@
+ 
+         return mlpop
+ 
+-
+ ###############################################################################

@@ -2641,6 +2641,7 @@ body {
   flex-direction: column;
   gap: 0.25rem;
   max-height: 30vh;
+  min-height: 20vh;
 }
 
 /* Dataset items */

@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { uploadFiles as apiUploadFiles, getDatasets, createDataset } from '../services/api';
+import { getProcessorConfig } from '../config/processorConfig';
 
-function FileUpload({ isCollapsed = false, onToggleCollapse }) {
+function FileUpload({ isCollapsed = false, onToggleCollapse, processorType = 'starlight' }) {
   const [dragActive, setDragActive] = useState(false);
   const [uploadQueue, setUploadQueue] = useState([]);
   const fileInputRef = useRef(null);
@@ -22,7 +23,7 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
     }
     setDatasetError(null);
     try {
-      const datasets = await getDatasets();
+      const datasets = await getDatasets(processorType);
       setAvailableDatasets(datasets);
       console.log('Loaded datasets:', datasets);
       
@@ -38,7 +39,7 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
         setLoadingDatasets(false);
       }
     }
-  }, [currentDataset]);
+  }, [currentDataset, processorType]);
 
   // Auto-refresh function for datasets
   const autoRefreshDatasetsFunc = useCallback(() => {
@@ -51,11 +52,13 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
     loadDatasets(true);
   }, [loadDatasets]);
 
+
+
   // Set up auto-refresh interval for datasets
   useEffect(() => {
     const interval = setInterval(() => {
       autoRefreshDatasetsFunc();
-    }, 10000); // Refresh every 10 seconds (less frequent than main monitor)
+    }, 5000); // Refresh every 5 seconds for dynamic updates
 
     return () => clearInterval(interval);
   }, [autoRefreshDatasetsFunc]);
@@ -163,7 +166,8 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
         // Overall progress callback
         (overallProgress) => {
           console.log(`Overall upload progress: ${overallProgress}%`);
-        }
+        },
+        processorType
       );
 
       // Update file statuses based on results
@@ -215,7 +219,7 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
         
         try {
           // Create the dataset in S3
-          const result = await createDataset(sanitizedName);
+          const result = await createDataset(sanitizedName, processorType);
           
           if (result.success) {
             setCurrentDataset(sanitizedName);
@@ -353,7 +357,7 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
               </select>
               {currentDataset && (
                 <div className="dataset-info">
-                  <span className="dataset-path">📁 starlight/input/{currentDataset}</span>
+                  <span className="dataset-path">📁 {getProcessorConfig(processorType).paths.input}/{currentDataset}</span>
                 </div>
               )}
             </div>
@@ -394,7 +398,7 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
                   </div>
                   {newDatasetName.trim() && (
                     <div className="dataset-preview">
-                      📁 starlight/input/{newDatasetName.trim().replace(/[^a-zA-Z0-9_-]/g, '')}
+                      📁 {getProcessorConfig(processorType).paths.input}/{newDatasetName.trim().replace(/[^a-zA-Z0-9_-]/g, '')}
                     </div>
                   )}
                   
@@ -525,6 +529,7 @@ function FileUpload({ isCollapsed = false, onToggleCollapse }) {
 FileUpload.propTypes = {
   isCollapsed: PropTypes.bool,
   onToggleCollapse: PropTypes.func,
+  processorType: PropTypes.string,
 };
 
 export default FileUpload; 

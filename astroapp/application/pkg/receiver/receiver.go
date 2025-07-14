@@ -175,8 +175,8 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		switch appName {
 		case "STARLIGHT":
 			outputPath = os.Getenv("OUTPUT_BUCKET_STARLIGHT")
-		case "PPFX":
-			outputPath = os.Getenv("OUTPUT_BUCKET_PPFX")
+		case "PPXF":
+			outputPath = os.Getenv("OUTPUT_BUCKET_PPXF")
 		case "STECKMAP":
 			outputPath = os.Getenv("OUTPUT_BUCKET_STECKMAP")
 		default:
@@ -188,8 +188,8 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		switch appName {
 		case "STARLIGHT":
 			outputPath = os.Getenv("INPUT_DIR_STARLIGHT")
-		case "PPFX":
-			outputPath = os.Getenv("EXPLORED_DIR_PPFX")
+		case "PPXF":
+			outputPath = os.Getenv("EXPLORED_DIR_PPXF")
 		case "STECKMAP":
 			outputPath = os.Getenv("EXPLORED_DIR_STECKMAP")
 		default:
@@ -225,6 +225,7 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	var spectrumFiles []api.DataFile
 
 	starlight := app.NewStarlight([]api.DataFile{}, r.Utils)
+	ppxf := app.NewPPXF(r.Utils)
 	for _, file := range msgBody.Files {
 		// Skip hidden files (files starting with .)
 		if strings.HasPrefix(filepath.Base(file.Name), ".") {
@@ -259,7 +260,18 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 				uploadPath = filepath.Join(outputPath, file.Name)
 			}
 
-			err := r.Bucket.UploadFileToBucket("", uploadPath, []byte(file.Content))
+			// Split uploadPath into folder and filename for S3 upload
+			folderPath := filepath.Dir(uploadPath)
+			fileName := filepath.Base(uploadPath)
+
+			// Handle root path case
+			if folderPath == "." {
+				folderPath = ""
+			}
+
+			log.Printf("│ DEBUG: S3 upload - folderPath: '%s', fileName: '%s'", folderPath, fileName)
+
+			err := r.Bucket.UploadFileToBucket(folderPath, fileName, []byte(file.Content))
 			if err != nil {
 				log.Printf("│ ✗ Error uploading file %s to bucket: %v", uploadPath, err)
 			} else {
@@ -278,6 +290,12 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 			} else {
 				log.Printf("│ ✓ Wrote file: %s to %s", file.Name, filePath)
 				successCount++
+
+				// For pPXF, add each .fits file to the process list immediately
+				if appName == "PPXF" && strings.HasSuffix(file.Name, ".fits") {
+					ppxf.AddToProcessList(filename)
+					log.Printf("│ ✓ Added pPXF file to process list: %s", filename)
+				}
 			}
 		}
 	}
@@ -309,6 +327,13 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		log.Printf("│ ✓ Added .in file from input side to processlist: %s", inFileName)
 
 		// Update progress to analysis stage when .in file is processed
+		r.updateProgress(appName, batchID, api.StageAnalysis, 70.0)
+	}
+
+	// Handle pPXF processing (individual files, no .in file generation needed)
+	if successCount == int(batchSize) && appName == "PPXF" && side == "processor" {
+		log.Printf("│ ✓ All pPXF files processed and added to process list")
+		// Update progress to analysis stage for pPXF
 		r.updateProgress(appName, batchID, api.StageAnalysis, 70.0)
 	}
 
@@ -344,11 +369,14 @@ func (r *Receiver) requeueWithLog(d amqp.Delivery, batchID string) {
 	log.Printf("■■■ BATCH ERROR [%s] - Message requeued ■■■", batchID)
 }
 
-// extractBatchNameFromFilename extracts the batch name from STARLIGHT output filenames
-// e.g., "output_NGC7025_LR-V_final_cube_voronoi_cell_0.txt" -> "NGC7025"
+// extractBatchNameFromFilename extracts the batch name from output filenames
+// STARLIGHT: "output_NGC7025_LR-V_final_cube_voronoi_cell_0.txt" -> "NGC7025"
+// pPXF: "NGC7025_LR-V_final_cube_voronoi_cell_0_kinematics_and_stellar_pops_info.txt" -> "NGC7025"
 func (r *Receiver) extractBatchNameFromFilename(filename string) string {
 	// Remove file extension
 	name := strings.TrimSuffix(filename, filepath.Ext(filename))
+
+	log.Printf("│ DEBUG: Extracting batch name from filename: %s (without extension: %s)", filename, name)
 
 	// Check if it's a STARLIGHT output file pattern
 	if strings.HasPrefix(name, "output_") && strings.Contains(name, "_LR-V") {
@@ -357,14 +385,46 @@ func (r *Receiver) extractBatchNameFromFilename(filename string) string {
 		if len(parts) > 0 {
 			prefixPart := parts[0]
 			if strings.HasPrefix(prefixPart, "output_") {
-				return strings.TrimPrefix(prefixPart, "output_")
+				batchName := strings.TrimPrefix(prefixPart, "output_")
+				log.Printf("│ DEBUG: STARLIGHT batch name extracted: %s", batchName)
+				return batchName
 			}
 		}
 	}
 
-	// For other file patterns, try to extract from different patterns
-	// This could be extended for PPFX and STECKMAP if needed
+	// Check if it's a pPXF output file pattern
+	// pPXF files start with batch name: "NGC7025_LR-V_final_cube_voronoi_cell_0_..."
+	if strings.Contains(name, "_LR-V_final_cube_voronoi_cell_") {
+		// Extract the part before "_LR-V"
+		parts := strings.Split(name, "_LR-V")
+		if len(parts) > 0 && parts[0] != "" {
+			batchName := parts[0]
+			log.Printf("│ DEBUG: pPXF batch name extracted: %s", batchName)
+			return batchName
+		}
+	}
 
+	// More generic pattern for pPXF files - look for anything before "_LR-V" or "_LR-R"
+	if strings.Contains(name, "_LR-V") || strings.Contains(name, "_LR-R") {
+		var separator string
+		if strings.Contains(name, "_LR-V") {
+			separator = "_LR-V"
+		} else {
+			separator = "_LR-R"
+		}
+
+		parts := strings.Split(name, separator)
+		if len(parts) > 0 && parts[0] != "" {
+			batchName := parts[0]
+			log.Printf("│ DEBUG: Generic pPXF batch name extracted: %s", batchName)
+			return batchName
+		}
+	}
+
+	// For other file patterns, try to extract from different patterns
+	// This could be extended for STECKMAP if needed
+
+	log.Printf("│ DEBUG: No batch name could be extracted from filename: %s", filename)
 	return "" // Return empty if no batch name can be extracted
 }
 

@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { mean, median, standardDeviation } from 'simple-statistics';
 import DatasetProgressBar from './DatasetProgressBar';
 
-function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapsed = false, onToggleCollapse }) {
+function PipelineProgress({ datasets, inputFiles, outputFiles, isCollapsed = false, onToggleCollapse }) {
   const [progressData, setProgressData] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   
@@ -99,7 +99,7 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
 
   // Calculate progress data from props
   useEffect(() => {
-    console.log('PipelineProgressMonitor calculating progress from props');
+    console.log('PipelineProgress calculating progress from props');
     console.log('Datasets:', datasets);
     console.log('Input files:', inputFiles.length);
     console.log('Output files:', outputFiles.length);
@@ -162,7 +162,7 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
     const interval = setInterval(() => {
       setRefreshing(true);
       setTimeout(() => setRefreshing(false), 500);
-    }, 3000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, []);
@@ -413,7 +413,7 @@ function PipelineProgressMonitor({ datasets, inputFiles, outputFiles, isCollapse
   );
 }
 
-PipelineProgressMonitor.propTypes = {
+PipelineProgress.propTypes = {
   datasets: PropTypes.arrayOf(
     PropTypes.shape({
       id: PropTypes.string.isRequired,
@@ -429,4 +429,4 @@ PipelineProgressMonitor.propTypes = {
   onToggleCollapse: PropTypes.func.isRequired,
 };
 
-export default PipelineProgressMonitor; 
+export default PipelineProgress; 
