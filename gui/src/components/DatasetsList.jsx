@@ -69,12 +69,20 @@ function DatasetsList({ processorType = 'starlight' }) {
 
   // Track current processor to detect changes
   const currentProcessorType = useRef(processorType);
+  
+  // Refs to track current state for change detection
+  const currentDatasets = useRef([]);
+  const currentInputFiles = useRef([]);
+  const currentOutputFiles = useRef([]);
 
-  // Simple function to load datasets
-  const loadDatasets = useCallback(async (forceAutoSelect = false) => {
-    console.log('Loading datasets for processor:', processorType, 'forceAutoSelect:', forceAutoSelect);
-    setLoading(true);
-    setError(null);
+  // Function to load datasets with optional silent mode
+  const loadDatasets = useCallback(async (forceAutoSelect = false, silent = false) => {
+    console.log('Loading datasets for processor:', processorType, 'forceAutoSelect:', forceAutoSelect, 'silent:', silent);
+    
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     
     try {
       const datasetNames = await getDatasets(processorType);
@@ -93,7 +101,20 @@ function DatasetsList({ processorType = 'starlight' }) {
         stage: 'Ready for processing'
       }));
       
+      // For silent refresh, check if datasets actually changed
+      if (silent) {
+        const currentDatasetNames = currentDatasets.current.map(d => d.name).sort();
+        const newDatasetNames = datasetObjects.map(d => d.name).sort();
+        
+        if (JSON.stringify(currentDatasetNames) === JSON.stringify(newDatasetNames)) {
+          console.log('Background refresh: datasets unchanged');
+          return; // No change, skip update
+        }
+        console.log('Background refresh: datasets changed, updating');
+      }
+      
       setDatasets(datasetObjects);
+      currentDatasets.current = datasetObjects; // Update ref
       
       // Auto-select first dataset if forced or none selected or current selection is invalid
       if (datasetObjects.length > 0) {
@@ -110,23 +131,32 @@ function DatasetsList({ processorType = 'starlight' }) {
       
     } catch (err) {
       console.error('Failed to load datasets:', err);
-      setError(err.message || 'Failed to load datasets');
-      setDatasets([]);
-      setSelectedDataset('');
+      if (!silent) {
+        setError(err.message || 'Failed to load datasets');
+        setDatasets([]);
+        setSelectedDataset('');
+        currentDatasets.current = [];
+      }
+      // For silent refresh, don't update error state or clear data
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [processorType]);
 
-  // Simple function to load input files
-  const loadInputFiles = useCallback(async (datasetName) => {
+  // Function to load input files with optional silent mode
+  const loadInputFiles = useCallback(async (datasetName, silent = false) => {
     if (!datasetName) {
       setInputFiles([]);
       return;
     }
     
-    console.log('Loading input files for dataset:', datasetName);
-    setLoading(true);
+    console.log('Loading input files for dataset:', datasetName, 'silent:', silent);
+    
+    if (!silent) {
+      setLoading(true);
+    }
     
     try {
       const files = await getDatasetFiles(datasetName, processorType);
@@ -145,26 +175,35 @@ function DatasetsList({ processorType = 'starlight' }) {
       );
       
       setInputFiles(sortedFiles);
+      currentInputFiles.current = sortedFiles; // Update ref
       console.log(`Loaded ${sortedFiles.length} input files`);
       
     } catch (err) {
       console.error('Failed to load input files:', err);
-      setError(err.message || 'Failed to load input files');
-      setInputFiles([]);
+      if (!silent) {
+        setError(err.message || 'Failed to load input files');
+        setInputFiles([]);
+        currentInputFiles.current = [];
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [processorType]);
 
-  // Simple function to load output files
-  const loadOutputFiles = useCallback(async (datasetName) => {
+  // Function to load output files with optional silent mode
+  const loadOutputFiles = useCallback(async (datasetName, silent = false) => {
     if (!datasetName) {
       setOutputFiles([]);
       return;
     }
     
-    console.log('Loading output files for dataset:', datasetName);
-    setLoading(true);
+    console.log('Loading output files for dataset:', datasetName, 'silent:', silent);
+    
+    if (!silent) {
+      setLoading(true);
+    }
     
     try {
       const files = await getDatasetOutputFiles(datasetName, processorType);
@@ -183,28 +222,37 @@ function DatasetsList({ processorType = 'starlight' }) {
       );
       
       setOutputFiles(sortedFiles);
+      currentOutputFiles.current = sortedFiles; // Update ref
       console.log(`Loaded ${sortedFiles.length} output files`);
       
     } catch (err) {
       console.error('Failed to load output files:', err);
-      setError(err.message || 'Failed to load output files');
-      setOutputFiles([]);
+      if (!silent) {
+        setError(err.message || 'Failed to load output files');
+        setOutputFiles([]);
+        currentOutputFiles.current = [];
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [processorType]);
 
-  // Simple function to load all files for a dataset
-  const loadAllFiles = useCallback(async (datasetName) => {
+  // Function to load all files for a dataset with optional silent mode
+  const loadAllFiles = useCallback(async (datasetName, silent = false) => {
     if (!datasetName) {
       setInputFiles([]);
       setOutputFiles([]);
       return;
     }
     
-    console.log('Loading all files for dataset:', datasetName);
-    setLoading(true);
-    setError(null);
+    console.log('Loading all files for dataset:', datasetName, 'silent:', silent);
+    
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     
     try {
       // Load both input and output files in parallel
@@ -240,18 +288,44 @@ function DatasetsList({ processorType = 'starlight' }) {
         a.name.toLowerCase().localeCompare(b.name.toLowerCase())
       );
       
+      // For silent refresh, check if files actually changed
+      if (silent) {
+        const currentInputNames = currentInputFiles.current.map(f => f.name).sort();
+        const newInputNames = sortedInputFiles.map(f => f.name).sort();
+        const currentOutputNames = currentOutputFiles.current.map(f => f.name).sort();
+        const newOutputNames = sortedOutputFiles.map(f => f.name).sort();
+        
+        const inputChanged = JSON.stringify(currentInputNames) !== JSON.stringify(newInputNames);
+        const outputChanged = JSON.stringify(currentOutputNames) !== JSON.stringify(newOutputNames);
+        
+        if (!inputChanged && !outputChanged) {
+          console.log('Background refresh: files unchanged');
+          return; // No change, skip update
+        }
+        console.log('Background refresh: files changed', { inputChanged, outputChanged });
+      }
+      
       setInputFiles(sortedInputFiles);
       setOutputFiles(sortedOutputFiles);
+      currentInputFiles.current = sortedInputFiles; // Update ref
+      currentOutputFiles.current = sortedOutputFiles; // Update ref
       
       console.log(`Loaded ${sortedInputFiles.length} input files and ${sortedOutputFiles.length} output files`);
       
     } catch (err) {
       console.error('Failed to load files:', err);
-      setError(err.message || 'Failed to load files');
-      setInputFiles([]);
-      setOutputFiles([]);
+      if (!silent) {
+        setError(err.message || 'Failed to load files');
+        setInputFiles([]);
+        setOutputFiles([]);
+        currentInputFiles.current = [];
+        currentOutputFiles.current = [];
+      }
+      // For silent refresh, don't update error state or clear data
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [processorType]);
 
@@ -267,6 +341,10 @@ function DatasetsList({ processorType = 'starlight' }) {
       setOutputFiles([]);
       setError(null);
       
+      // Clear refs as well
+      currentInputFiles.current = [];
+      currentOutputFiles.current = [];
+      
       // Load datasets for new processor type and force auto-selection
       loadDatasets(true);
     }
@@ -277,27 +355,29 @@ function DatasetsList({ processorType = 'starlight' }) {
     loadDatasets();
   }, []);
 
-  // Load files when dataset changes
+  // Load files when dataset changes (user action - show loading)
   useEffect(() => {
     if (selectedDataset) {
-      loadAllFiles(selectedDataset);
+      loadAllFiles(selectedDataset, false); // silent=false for user actions
     } else {
       setInputFiles([]);
       setOutputFiles([]);
+      currentInputFiles.current = [];
+      currentOutputFiles.current = [];
     }
   }, [selectedDataset, loadAllFiles]);
 
-  // Simple auto-refresh every 30 seconds
+  // Background auto-refresh every 5 seconds (silent)
   useEffect(() => {
     const interval = setInterval(() => {
       if (!loading) {
-        console.log('Auto-refreshing...');
-        loadDatasets();
+        console.log('Background refresh...');
+        loadDatasets(false, true); // forceAutoSelect=false, silent=true
         if (selectedDataset) {
-          loadAllFiles(selectedDataset);
+          loadAllFiles(selectedDataset, true); // silent=true
         }
       }
-    }, 30000);
+    }, 5000); // 5 second interval for dynamic updates
 
     return () => clearInterval(interval);
   }, [loading, selectedDataset, loadDatasets, loadAllFiles]);
