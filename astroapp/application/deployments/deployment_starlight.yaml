@@ -153,3 +153,31 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
+      - image: quay.io/bcapper30/uc3-ppxf:latest
+        name: ppxf
+        workingDir: /processing_data/
+        command: ["/home/ppxf/ppxf_script.sh"]
+        volumeMounts:
+        - mountPath: /processing_data/
+          name: ucm-pv-storage
+        securityContext:
+          privileged: true
+        env:
+        - name: PPXF_INPUT_DIR
+          value: "/processing_data/ppxf/data/input"
+        - name: PPXF_OUTPUT_DIR
+          value: "/processing_data/ppxf/data/output"
+        - name: PROCESS_FILE
+          value: "/processing_data/ppxf/runtime/processlist.txt"
+        - name: PPXF_REDSHIFT
+          value: "0.0"
+        - name: PPXF_VEL_DISP
+          value: "100.0"
+        - name: PPXF_WAVE_START
+          value: "4000"
+        - name: PPXF_WAVE_END
+          value: "7000"
+        - name: PPXF_SPS_NAME
+          value: "emiles"
+        - name: API_URL
+          value: "http://uc3-backend-service:8080/api/progress/update"

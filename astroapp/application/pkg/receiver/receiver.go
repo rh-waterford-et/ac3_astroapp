@@ -72,11 +72,42 @@ func (r *Receiver) Start(side string) {
 }
 
 func (r *Receiver) ProcessMessages(queueName string, side string) {
+	// Check if connection is still valid, reconnect if needed
+	if r.Queue == nil {
+		log.Printf("QUEUE ERROR: Queue connection is nil, attempting to reconnect...")
+		err := r.Queue.Connect()
+		if err != nil {
+			log.Printf("QUEUE ERROR: Failed to reconnect to RabbitMQ: %v", err)
+			return
+		}
+		err = r.Queue.DeclareQueue(queueName)
+		if err != nil {
+			log.Printf("QUEUE ERROR: Failed to redeclare queue after reconnect: %v", err)
+			return
+		}
+	}
 
 	queueInfo, err := r.Queue.InspectQueue(queueName)
 	if err != nil {
 		log.Printf("QUEUE ERROR: Failed to inspect queue %s: %v", queueName, err)
-		return
+		// Try to reconnect on inspection failure
+		log.Printf("QUEUE ERROR: Attempting to reconnect due to inspection failure...")
+		reconnectErr := r.Queue.Connect()
+		if reconnectErr != nil {
+			log.Printf("QUEUE ERROR: Failed to reconnect: %v", reconnectErr)
+			return
+		}
+		redeclareErr := r.Queue.DeclareQueue(queueName)
+		if redeclareErr != nil {
+			log.Printf("QUEUE ERROR: Failed to redeclare queue after reconnect: %v", redeclareErr)
+			return
+		}
+		// Try inspection again after reconnection
+		queueInfo, err = r.Queue.InspectQueue(queueName)
+		if err != nil {
+			log.Printf("QUEUE ERROR: Failed to inspect queue after reconnect: %v", err)
+			return
+		}
 	}
 
 	if queueInfo.Messages == 0 {
