@@ -2,6 +2,7 @@ package receiver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,6 +17,7 @@ import (
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/app"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/metrics"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
 )
@@ -27,16 +29,18 @@ type ReceiverInterface interface {
 }
 
 type Receiver struct {
-	Queue  queue.QueueInterface
-	Utils  common.UtilsInterface
-	Bucket s3bucket.S3BucketInterface
+	Queue       queue.QueueInterface
+	Utils       common.UtilsInterface
+	Bucket      s3bucket.S3BucketInterface
+	RedisClient *metrics.RedisClient
 }
 
-func NewReceiver(queue queue.QueueInterface, utils common.UtilsInterface, bucket s3bucket.S3BucketInterface) *Receiver {
+func NewReceiver(queue queue.QueueInterface, utils common.UtilsInterface, bucket s3bucket.S3BucketInterface, redisClient *metrics.RedisClient) *Receiver {
 	return &Receiver{
-		Queue:  queue,
-		Utils:  utils,
-		Bucket: bucket,
+		Queue:       queue,
+		Utils:       utils,
+		Bucket:      bucket,
+		RedisClient: redisClient,
 	}
 }
 
@@ -72,42 +76,15 @@ func (r *Receiver) Start(side string) {
 }
 
 func (r *Receiver) ProcessMessages(queueName string, side string) {
-	// Check if connection is still valid, reconnect if needed
-	if r.Queue == nil {
-		log.Printf("QUEUE ERROR: Queue connection is nil, attempting to reconnect...")
-		err := r.Queue.Connect()
-		if err != nil {
-			log.Printf("QUEUE ERROR: Failed to reconnect to RabbitMQ: %v", err)
-			return
-		}
-		err = r.Queue.DeclareQueue(queueName)
-		if err != nil {
-			log.Printf("QUEUE ERROR: Failed to redeclare queue after reconnect: %v", err)
-			return
-		}
+	// Ensure queue connection is valid
+	if !r.ensureQueueConnection(queueName) {
+		return
 	}
 
 	queueInfo, err := r.Queue.InspectQueue(queueName)
 	if err != nil {
 		log.Printf("QUEUE ERROR: Failed to inspect queue %s: %v", queueName, err)
-		// Try to reconnect on inspection failure
-		log.Printf("QUEUE ERROR: Attempting to reconnect due to inspection failure...")
-		reconnectErr := r.Queue.Connect()
-		if reconnectErr != nil {
-			log.Printf("QUEUE ERROR: Failed to reconnect: %v", reconnectErr)
-			return
-		}
-		redeclareErr := r.Queue.DeclareQueue(queueName)
-		if redeclareErr != nil {
-			log.Printf("QUEUE ERROR: Failed to redeclare queue after reconnect: %v", redeclareErr)
-			return
-		}
-		// Try inspection again after reconnection
-		queueInfo, err = r.Queue.InspectQueue(queueName)
-		if err != nil {
-			log.Printf("QUEUE ERROR: Failed to inspect queue after reconnect: %v", err)
-			return
-		}
+		return
 	}
 
 	if queueInfo.Messages == 0 {
@@ -146,23 +123,54 @@ func (r *Receiver) ProcessMessages(queueName string, side string) {
 }
 
 func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
-	processStart := time.Now()
-
 	// Get the app_name from headers to determine processing logic
 	appName, ok := d.Headers["app_name"].(string)
-
 	if !ok {
 		log.Printf("│ ERROR: 'app_name' header missing or invalid")
 		r.requeueWithLog(d, "unknown-app")
 		return
 	}
 
-	batchID := fmt.Sprintf("%s-%d", appName, d.DeliveryTag)
+	// Get event_id and batch_id from headers
+	eventID, ok := d.Headers["event_id"].(string)
+	if !ok {
+		log.Printf("│ ERROR: 'event_id' header missing or invalid")
+		r.requeueWithLog(d, "unknown-event")
+		return
+	}
+
+	batchID, ok := d.Headers["batch_id"].(string)
+	if !ok {
+		log.Printf("│ ERROR: 'batch_id' header missing or invalid")
+		r.requeueWithLog(d, "unknown-batch")
+		return
+	}
 
 	log.Printf("\n■■■ BATCH START [%s] ■■■", batchID)
 	log.Printf("│ App:        %s", appName)
+	log.Printf("│ Event ID:   %s", eventID)
+	log.Printf("│ Batch ID:   %s", batchID)
 	log.Printf("│ DeliveryTag: %d", d.DeliveryTag)
 	log.Printf("│ Timestamp:   %s", d.Timestamp)
+
+	// Record queue end time (when first batch is received)
+	if r.RedisClient != nil {
+		metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
+
+		// Check if this is the first batch for this event
+		existingMetrics, err := metricsStore.GetEventMetrics(context.Background(), eventID)
+		if err != nil {
+			log.Printf("Failed to get existing metrics for event %s: %v", eventID, err)
+		} else if len(existingMetrics) == 0 {
+			// This is the first batch, record queue end time
+			err = metricsStore.UpdateMetricField(context.Background(), eventID, batchID, "queue_first_receive_time", time.Now())
+			if err != nil {
+				log.Printf("Failed to record queue first receive time: %v", err)
+			} else {
+				log.Printf("Recorded queue first receive time for event %s, batch %s", eventID, batchID)
+			}
+		}
+	}
 
 	// Update progress to processing stage
 	r.updateProgress(appName, batchID, api.StageProcessing, 20.0)
@@ -375,6 +383,17 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		}
 		log.Printf("│ ✔ Successfully processed all %d files", batchSize)
 
+		// Record batch end time when processing is complete (on producer side)
+		if side == "producer" && r.RedisClient != nil {
+			metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
+			err = metricsStore.UpdateMetricField(context.Background(), eventID, batchID, "batch_end_time", time.Now())
+			if err != nil {
+				log.Printf("Failed to record batch end time: %v", err)
+			} else {
+				log.Printf("Recorded batch end time for event %s, batch %s", eventID, batchID)
+			}
+		}
+
 		// Update progress to completion if all files processed
 		r.updateProgress(appName, batchID, api.StageComplete, 100.0)
 	} else {
@@ -388,7 +407,6 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		r.updateProgress(appName, batchID, api.StageError, 0.0)
 	}
 
-	log.Printf("│ Duration: %s", time.Since(processStart))
 	log.Printf("■■■ BATCH COMPLETE [%s] ■■■", batchID)
 }
 
@@ -559,4 +577,47 @@ func (r *Receiver) clearProcessList() {
 	} else {
 		log.Printf("│ ✓ Created cleanup lock file: %s", lockFilePath)
 	}
+}
+
+// ensureQueueConnection validates the queue connection and attempts reconnection if needed
+func (r *Receiver) ensureQueueConnection(queueName string) bool {
+	if r.Queue == nil {
+		log.Printf("QUEUE ERROR: Queue connection is nil, attempting to reconnect...")
+		err := r.Queue.Connect()
+		if err != nil {
+			log.Printf("QUEUE ERROR: Failed to reconnect to RabbitMQ: %v", err)
+			return false
+		}
+		err = r.Queue.DeclareQueue(queueName)
+		if err != nil {
+			log.Printf("QUEUE ERROR: Failed to redeclare queue after reconnect: %v", err)
+			return false
+		}
+	}
+
+	// Test the connection by trying to inspect the queue
+	_, err := r.Queue.InspectQueue(queueName)
+	if err != nil {
+		log.Printf("QUEUE ERROR: Failed to inspect queue %s: %v", queueName, err)
+		// Try to reconnect on inspection failure
+		log.Printf("QUEUE ERROR: Attempting to reconnect due to inspection failure...")
+		reconnectErr := r.Queue.Connect()
+		if reconnectErr != nil {
+			log.Printf("QUEUE ERROR: Failed to reconnect: %v", reconnectErr)
+			return false
+		}
+		redeclareErr := r.Queue.DeclareQueue(queueName)
+		if redeclareErr != nil {
+			log.Printf("QUEUE ERROR: Failed to redeclare queue after reconnect: %v", redeclareErr)
+			return false
+		}
+		// Try inspection again after reconnection
+		_, err = r.Queue.InspectQueue(queueName)
+		if err != nil {
+			log.Printf("QUEUE ERROR: Failed to inspect queue after reconnect: %v", err)
+			return false
+		}
+	}
+
+	return true
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/metrics"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 )
 
@@ -20,8 +21,17 @@ type EventSender interface {
 }
 
 type RabbitMQSender struct {
-	Queue queue.QueueInterface
-	Utils common.UtilsInterface
+	Queue       queue.QueueInterface
+	Utils       common.UtilsInterface
+	RedisClient *metrics.RedisClient
+}
+
+func NewRabbitMQSender(queue queue.QueueInterface, utils common.UtilsInterface, redisClient *metrics.RedisClient) *RabbitMQSender {
+	return &RabbitMQSender{
+		Queue:       queue,
+		Utils:       utils,
+		RedisClient: redisClient,
+	}
 }
 
 func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string, q queue.QueueInterface) {
@@ -55,6 +65,8 @@ func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string,
 	headers := make(amqp.Table)
 	headers["batch_size"] = len(event.Files)
 	headers["app_name"] = appName
+	headers["event_id"] = event.ID
+	headers["batch_id"] = event.BatchID
 
 	filenames := []string{}
 	for _, f := range event.Files {
@@ -66,6 +78,26 @@ func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string,
 	if err != nil {
 		s.Utils.FailOnError("Failed to publish message: %v", err)
 	}
+
+	// Record queue start time for the first batch of each event
+	if s.RedisClient != nil {
+		metricsStore := metrics.NewMetricsStore(s.RedisClient, 168*time.Hour)
+
+		// Check if this is the first batch for this event
+		existingMetrics, err := metricsStore.GetEventMetrics(ctx, event.ID)
+		if err != nil {
+			log.Printf("Failed to get existing metrics for event %s: %v", event.ID, err)
+		} else if len(existingMetrics) == 0 {
+			// This is the first batch, record queue start time
+			err = metricsStore.UpdateMetricField(ctx, event.ID, event.BatchID, "queue_start_time", time.Now())
+			if err != nil {
+				log.Printf("Failed to record queue start time: %v", err)
+			} else {
+				log.Printf("Recorded queue start time for event %s, batch %s", event.ID, event.BatchID)
+			}
+		}
+	}
+
 	log.Printf("DEBUG: Published message to queue %s", queueName)
 	log.Printf(" [x] Sent batch with %d files for app %s\n", len(event.Files), appName)
 	log.Printf("     Files: %s\n", strings.Join(filenames, ", "))

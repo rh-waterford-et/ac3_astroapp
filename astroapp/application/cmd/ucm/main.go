@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/metrics"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/receiver"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
@@ -88,7 +89,20 @@ func LaunchReceiver(side string) error {
 		log.Fatalf("Failed to create RabbitMQ connection: %v", err)
 	}
 	s3bucket := s3bucket.NewS3Bucket()
-	receiver := receiver.NewReceiver(queue, utils, s3bucket)
+
+	// Initialize Redis client
+	var redisClient *metrics.RedisClient
+	if os.Getenv("REDIS_HOST") != "" {
+		redisClient, err = metrics.NewRedisConnection()
+		if err != nil {
+			log.Printf("Failed to connect to Redis: %v", err)
+			log.Printf("Continuing without Redis metrics tracking")
+		} else {
+			log.Printf("Connected to Redis for metrics tracking")
+		}
+	}
+
+	receiver := receiver.NewReceiver(queue, utils, s3bucket, redisClient)
 	receiver.Start(side)
 
 	return nil

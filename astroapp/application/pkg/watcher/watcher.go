@@ -8,6 +8,7 @@ import (
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/metrics"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/producer"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
@@ -21,10 +22,22 @@ type Watcher struct{}
 
 func NewWatcher() *Watcher {
 	return &Watcher{}
-
 }
 
 func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, queue queue.QueueInterface) {
+	// Initialize Redis client
+	var redisClient *metrics.RedisClient
+	var err error
+	if os.Getenv("REDIS_HOST") != "" {
+		redisClient, err = metrics.NewRedisConnection()
+		if err != nil {
+			log.Printf("Failed to connect to Redis: %v", err)
+			log.Printf("Continuing without Redis metrics tracking")
+		} else {
+			log.Printf("Connected to Redis for metrics tracking")
+		}
+	}
+
 	inputDirEnv := "EXPLORED_" + appName
 	outputDirEnv := "OUTPUT_" + appName
 	processedDirEnv := "PROCESSED_" + appName
@@ -40,6 +53,9 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, 
 
 	var fileSource producer.FileSource
 	var length = 0
+	batchCounts := make(map[string]int)
+	var eventID string
+
 	switch side {
 	case "producer":
 		watcher := s3bucket.NewS3Watcher()
@@ -56,13 +72,16 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, 
 		}
 		length = len(files)
 		if length > 0 {
-			log.Printf("Found %d files in %s input directory across all batches", length, appName)
-			// Group files by batch for better logging
-			batchCounts := make(map[string]int)
+			log.Printf("Found %d files in %s input directory across all batches: %v", length, appName, files)
 			for _, file := range files {
+				if strings.Contains(file, ".batch_placeholder") ||
+					strings.Contains(file, ".dataset_placeholder") {
+					continue
+				}
 				parts := strings.Split(file, "/")
 				if len(parts) >= 1 {
 					batchName := parts[0]
+					eventID = batchName
 					batchCounts[batchName]++
 				}
 			}
@@ -88,12 +107,10 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, 
 		return
 	}
 
-	if length > 0 {
+	if len(batchCounts) > 0 {
 		log.Printf("Processing %s files...\n", appName)
 		eventQueue := make(chan api.Event, 10)
-		producer := producer.NewProducer(batchSize, fileSource, eventQueue, utils, side)
+		producer := producer.NewProducer(batchSize, fileSource, eventQueue, utils, side, eventID, redisClient)
 		producer.CreateEvent(appName, side, queue)
-	} /* else {
-		log.Printf("No files found in %s directories\n", appName)
-	}*/
+	}
 }

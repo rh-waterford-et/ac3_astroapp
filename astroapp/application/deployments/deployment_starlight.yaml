@@ -62,7 +62,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-provider"
+          value: "test-consumer"
         - name: IN_FILE_OUTPUT_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST
@@ -119,7 +119,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-provider"
+          value: "test-consumer"
         - name: EXPLORED_STARLIGHT
           value: "/processing_data/starlight/data/output"
         - name: OUTPUT_STARLIGHT

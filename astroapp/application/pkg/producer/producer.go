@@ -6,11 +6,11 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/app"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/metrics"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/sender"
 )
@@ -29,38 +29,52 @@ type ProducerInterface interface {
 }
 
 type Producer struct {
-	BatchSize  int
-	Batch      []api.DataFile
-	EventQueue chan api.Event
-	FileSource FileSource
-	Utils      common.UtilsInterface
-	Side       string
-	EventID    string
+	BatchSize   int
+	Batch       []api.DataFile
+	EventQueue  chan api.Event
+	FileSource  FileSource
+	Utils       common.UtilsInterface
+	Side        string
+	EventID     string
+	RedisClient *metrics.RedisClient
+	Sender      sender.EventSender
 }
 
-func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event, utils common.UtilsInterface, side string) *Producer {
-	return &Producer{
-		BatchSize:  batchSize,
-		Batch:      make([]api.DataFile, 0, batchSize),
-		EventQueue: eventQueue,
-		FileSource: fileSource,
-		Utils:      utils,
-		Side:       side,
-		EventID:    utils.GenerateUUID(),
+func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event, utils common.UtilsInterface, side string, eventID string, redisClient *metrics.RedisClient) *Producer {
+	// Initialize sender with Redis client
+	var senderInstance sender.EventSender
+	if redisClient != nil {
+		senderInstance = sender.NewRabbitMQSender(nil, utils, redisClient)
+	} else {
+		senderInstance = &sender.RabbitMQSender{
+			Queue:       nil,
+			Utils:       utils,
+			RedisClient: nil,
+		}
 	}
 
+	return &Producer{
+		BatchSize:   batchSize,
+		Batch:       make([]api.DataFile, 0, batchSize),
+		EventQueue:  eventQueue,
+		FileSource:  fileSource,
+		Utils:       utils,
+		Side:        side,
+		EventID:     eventID,
+		RedisClient: redisClient,
+		Sender:      senderInstance,
+	}
 }
 
 var starlight app.StarlightInterface = &app.Starlight{
 	Utils: &common.Utils{},
 }
-var send sender.EventSender = &sender.RabbitMQSender{}
 
 func (p *Producer) CreateEvent(appName string, side string, q queue.QueueInterface) {
 	go func() {
 		for event := range p.EventQueue {
 			log.Printf("Sending event (ID: %s) with %d files\n", p.EventID, len(event.Files))
-			send.SendEvent(event, appName, side, q)
+			p.Sender.SendEvent(event, appName, side, q)
 		}
 	}()
 
@@ -76,33 +90,10 @@ func (p *Producer) AddFile(file api.DataFile, appName string) {
 
 func (p *Producer) SendBatch(appName string) {
 	if len(p.Batch) > 0 {
-		// For STARLIGHT producer side, check if we have actual spectrum files, not just placeholder files
-		if appName == "STARLIGHT" && p.Side == "producer" {
-			// Count non-placeholder files in the batch
-			spectrumFileCount := 0
-			for _, file := range p.Batch {
-				if !strings.Contains(file.Name, ".batch_placeholder") &&
-					!strings.Contains(file.Name, ".dataset_placeholder") &&
-					!strings.HasSuffix(file.Name, ".in") {
-					spectrumFileCount++
-				}
-			}
-
-			// Only proceed if we have actual spectrum files
-			if spectrumFileCount == 0 {
-				log.Printf("Skipping batch with only placeholder files - no spectrum files found")
-				// Still delete the processed files (move placeholder to processed)
-				p.DeleteProcessedFiles()
-				// Clear the batch
-				p.Batch = make([]api.DataFile, 0, p.BatchSize)
-				return
-			}
-		}
-
+		batchID := p.Utils.GenerateUUID()
 		// Update the .in file before sending the batch
 		if appName == "STARLIGHT" && p.Side == "producer" {
 			inFileName, content := starlight.UpdateInFile(p.Batch)
-			println(inFileName)
 			println(content)
 			if inFileName != "" && content != "" {
 				p.Batch = append(p.Batch, api.DataFile{Name: inFileName, Content: content})
@@ -113,8 +104,9 @@ func (p *Producer) SendBatch(appName string) {
 		p.updateProgress(appName, api.StageQueued, 10.0)
 
 		event := api.Event{
-			ID:    p.EventID,
-			Files: p.Batch,
+			ID:      p.EventID,
+			BatchID: batchID,
+			Files:   p.Batch,
 		}
 		p.EventQueue <- event
 
