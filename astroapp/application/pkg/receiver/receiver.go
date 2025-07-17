@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -312,6 +313,7 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 
 			log.Printf("│ DEBUG: S3 upload - folderPath: '%s', fileName: '%s'", folderPath, fileName)
 
+			// Upload file content to bucket
 			err := r.Bucket.UploadFileToBucket(folderPath, fileName, []byte(file.Content))
 			if err != nil {
 				log.Printf("│ ✗ Error uploading file %s to bucket: %v", uploadPath, err)
@@ -467,6 +469,24 @@ func (r *Receiver) extractBatchNameFromFilename(filename string) string {
 
 	log.Printf("│ DEBUG: No batch name could be extracted from filename: %s", filename)
 	return "" // Return empty if no batch name can be extracted
+}
+
+// extractCellNumberFromFilename extracts cell number from PPXF output files
+// Example: "NGC7025_LR-V_final_cube_voronoi_cell_0_bestfit.fits" -> "0"
+// Example: "NGC7025_LR-V_final_cube_voronoi_cell_12_galaxy.fits" -> "12"
+func (r *Receiver) extractCellNumberFromFilename(filename string) string {
+	// Regex pattern to match "cell_" followed by digits
+	cellPattern := regexp.MustCompile(`cell_(\d+)`)
+	matches := cellPattern.FindStringSubmatch(filename)
+
+	if len(matches) >= 2 {
+		cellNumber := matches[1]
+		log.Printf("│ DEBUG: Extracted cell number '%s' from filename: %s", cellNumber, filename)
+		return cellNumber
+	}
+
+	log.Printf("│ DEBUG: No cell number found in filename: %s", filename)
+	return ""
 }
 
 // updateProgress sends a progress update to the API server
@@ -668,10 +688,32 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 			// Handle S3 upload for binary files
 			batchName := r.extractBatchNameFromFilename(file.Name)
 			var uploadPath string
-			if batchName != "" {
-				uploadPath = filepath.Join(outputPath, batchName, file.Name)
+
+			// Special handling for PPXF: organize by cell number
+			if appName == "PPXF" {
+				log.Printf("│ DEBUG: Processing PPXF file for cell organization: %s", file.Name)
+				cellNumber := r.extractCellNumberFromFilename(file.Name)
+				log.Printf("│ DEBUG: Cell number extracted: '%s' (batchName: '%s')", cellNumber, batchName)
+				if batchName != "" && cellNumber != "" {
+					// Path: /ppxf/output/<batch_name>/<cell_number>/filename
+					uploadPath = filepath.Join(outputPath, batchName, cellNumber, file.Name)
+					log.Printf("│ DEBUG: Using cell-organized path: %s", uploadPath)
+				} else if batchName != "" {
+					// Fallback: /ppxf/output/<batch_name>/filename
+					uploadPath = filepath.Join(outputPath, batchName, file.Name)
+					log.Printf("│ DEBUG: Using batch fallback path (missing cell): %s", uploadPath)
+				} else {
+					// Last resort: flat structure
+					uploadPath = filepath.Join(outputPath, file.Name)
+					log.Printf("│ DEBUG: Using flat fallback path: %s", uploadPath)
+				}
 			} else {
-				uploadPath = filepath.Join(outputPath, file.Name)
+				// Standard logic for other apps (Starlight, etc.)
+				if batchName != "" {
+					uploadPath = filepath.Join(outputPath, batchName, file.Name)
+				} else {
+					uploadPath = filepath.Join(outputPath, file.Name)
+				}
 			}
 
 			folderPath := filepath.Dir(uploadPath)
@@ -682,6 +724,15 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 			}
 
 			log.Printf("│ DEBUG: S3 binary upload - folderPath: '%s', fileName: '%s'", folderPath, fileName)
+
+			// Create directory structure if folderPath exists
+			if folderPath != "" {
+				err := r.Bucket.CreateDirectory(folderPath)
+				if err != nil {
+					log.Printf("│ ⚠ Error creating directory %s: %v", folderPath, err)
+					// Continue with upload even if directory creation fails
+				}
+			}
 
 			// Upload binary content directly (no string conversion corruption)
 			err := r.Bucket.UploadFileToBucket(folderPath, fileName, file.Content)

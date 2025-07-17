@@ -27,6 +27,7 @@ type S3BucketInterface interface {
 	GetS3Client() *s3.S3
 	GetBucketName() string
 	UploadFileToBucket(folderPath string, fileName string, content []byte) error
+	CreateDirectory(directoryPath string) error
 	GetObjectMetadata(objectKey string) (*ObjectMetadata, error)
 	DeleteDirectory(directoryPath string) error
 	DeleteFile(fileKey string) error
@@ -230,6 +231,23 @@ func (sb *S3Bucket) UploadFileToBucket(folderPath string, fileName string, conte
 	}
 
 	log.Printf("Successfully uploaded content to s3://%s/%s", sb.BucketName, fullKey)
+	return nil
+}
+
+func (sb *S3Bucket) CreateDirectory(directoryPath string) error {
+	// Create directory marker by uploading empty object with trailing slash
+	directoryKey := strings.TrimSuffix(directoryPath, "/") + "/"
+
+	_, err := sb.S3Client.PutObject(&s3.PutObjectInput{
+		Bucket: aws.String(sb.BucketName),
+		Key:    aws.String(directoryKey),
+		Body:   bytes.NewReader([]byte{}),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create directory %s in S3: %v", directoryPath, err)
+	}
+
+	log.Printf("Successfully created directory s3://%s/%s", sb.BucketName, directoryKey)
 	return nil
 }
 
