@@ -38,6 +38,17 @@ type Producer struct {
 	EventID    string
 }
 
+// BinaryProducer handles binary files for PPXF
+type BinaryProducer struct {
+	BatchSize        int
+	BinaryBatch      []api.BinaryDataFile
+	BinaryEventQueue chan api.BinaryEvent
+	FileSource       FileSource
+	Utils            common.UtilsInterface
+	Side             string
+	EventID          string
+}
+
 func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event, utils common.UtilsInterface, side string) *Producer {
 	return &Producer{
 		BatchSize:  batchSize,
@@ -48,7 +59,18 @@ func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event
 		Side:       side,
 		EventID:    utils.GenerateUUID(),
 	}
+}
 
+func NewBinaryProducer(batchSize int, fileSource FileSource, eventQueue chan api.BinaryEvent, utils common.UtilsInterface, side string) *BinaryProducer {
+	return &BinaryProducer{
+		BatchSize:        batchSize,
+		BinaryBatch:      make([]api.BinaryDataFile, 0, batchSize),
+		BinaryEventQueue: eventQueue,
+		FileSource:       fileSource,
+		Utils:            utils,
+		Side:             side,
+		EventID:          utils.GenerateUUID(),
+	}
 }
 
 var starlight app.StarlightInterface = &app.Starlight{
@@ -71,6 +93,14 @@ func (p *Producer) AddFile(file api.DataFile, appName string) {
 	p.Batch = append(p.Batch, file)
 	if len(p.Batch) >= p.BatchSize {
 		p.SendBatch(appName)
+	}
+}
+
+// AddBinaryFile handles binary files for PPXF
+func (bp *BinaryProducer) AddBinaryFile(file api.BinaryDataFile, appName string) {
+	bp.BinaryBatch = append(bp.BinaryBatch, file)
+	if len(bp.BinaryBatch) >= bp.BatchSize {
+		bp.SendBinaryBatch(appName)
 	}
 }
 
@@ -203,4 +233,107 @@ func (p *Producer) updateProgress(appName string, stage api.PipelineStage, progr
 			log.Printf("Progress update returned non-200 status: %d", resp.StatusCode)
 		}
 	}()
+}
+
+// SendBinaryBatch handles binary file batches for PPXF
+func (bp *BinaryProducer) SendBinaryBatch(appName string) {
+	if len(bp.BinaryBatch) > 0 {
+		// Update progress to queued stage
+		bp.updateBinaryProgress(appName, api.StageQueued, 10.0)
+
+		event := api.BinaryEvent{
+			ID:    bp.EventID,
+			Files: bp.BinaryBatch,
+		}
+		bp.BinaryEventQueue <- event
+
+		bp.DeleteProcessedBinaryFiles()
+		bp.BinaryBatch = make([]api.BinaryDataFile, 0, bp.BatchSize)
+	}
+}
+
+// DeleteProcessedBinaryFiles handles file cleanup for binary batches
+func (bp *BinaryProducer) DeleteProcessedBinaryFiles() {
+	for _, file := range bp.BinaryBatch {
+		err := bp.FileSource.DeleteFile(file.Name)
+		if err != nil {
+			log.Printf("Error deleting binary file %s: %v\n", file.Name, err)
+		} else {
+			log.Printf("Successfully moved binary file %s to processed dir", file.Name)
+		}
+	}
+}
+
+// updateBinaryProgress sends progress updates for binary processing
+func (bp *BinaryProducer) updateBinaryProgress(appName string, stage api.PipelineStage, progress float64) {
+	// Extract dataset name from the first file in the batch
+	if len(bp.BinaryBatch) == 0 {
+		return
+	}
+
+	// For producer side, we use the app name as dataset ID
+	datasetID := appName
+	if bp.Side == "producer" {
+		datasetID = appName + "_" + bp.EventID
+	}
+
+	request := api.ProgressUpdateRequest{
+		DatasetID:   datasetID,
+		DatasetName: appName,
+		Stage:       stage,
+		Progress:    progress,
+		FilesTotal:  len(bp.BinaryBatch),
+	}
+
+	// Send progress update to local API server
+	go func() {
+		jsonData, err := json.Marshal(request)
+		if err != nil {
+			log.Printf("Error marshaling binary progress update: %v", err)
+			return
+		}
+
+		apiURL := "http://localhost:8080/api/progress/update"
+		if serverURL := os.Getenv("API_SERVER_URL"); serverURL != "" {
+			apiURL = serverURL + "/api/progress/update"
+		}
+
+		resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Printf("Error sending binary progress update: %v", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("Binary progress update returned non-200 status: %d", resp.StatusCode)
+		}
+	}()
+}
+
+// ProcessBinaryFiles handles PPXF files without string corruption
+func (bp *BinaryProducer) ProcessBinaryFiles(appName string) {
+	files, err := bp.FileSource.ListFiles()
+
+	if err != nil {
+		log.Printf("Failed listing binary files: %v", err)
+		return
+	}
+
+	for _, filename := range files {
+		content, err := bp.FileSource.ReadFile(filename)
+		if err != nil {
+			log.Printf("Error reading binary file %s: %v\n", filename, err)
+			continue
+		}
+		// NO STRING CONVERSION - keep as []byte to prevent corruption
+		binaryFile := api.BinaryDataFile{
+			Name:    filename,
+			Content: content, // Keep as []byte - NO string(content)
+			Size:    int64(len(content)),
+		}
+		bp.AddBinaryFile(binaryFile, appName)
+	}
+
+	bp.SendBinaryBatch(appName)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/producer"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/sender"
 )
 
 type WatcherInterface interface {
@@ -90,10 +91,38 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, 
 
 	if length > 0 {
 		log.Printf("Processing %s files...\n", appName)
-		eventQueue := make(chan api.Event, 10)
-		producer := producer.NewProducer(batchSize, fileSource, eventQueue, utils, side)
-		producer.CreateEvent(appName, side, queue)
+
+		// Check if this app needs binary processing (PPXF)
+		if api.IsAppBinary(appName) {
+			log.Printf("Using binary processing for %s (prevents .fits corruption)", appName)
+			binaryEventQueue := make(chan api.BinaryEvent, 10)
+			binaryProducer := producer.NewBinaryProducer(batchSize, fileSource, binaryEventQueue, utils, side)
+			w.CreateBinaryEvent(appName, side, queue, binaryProducer, binaryEventQueue)
+		} else {
+			log.Printf("Using standard text processing for %s", appName)
+			eventQueue := make(chan api.Event, 10)
+			standardProducer := producer.NewProducer(batchSize, fileSource, eventQueue, utils, side)
+			standardProducer.CreateEvent(appName, side, queue)
+		}
 	} /* else {
 		log.Printf("No files found in %s directories\n", appName)
 	}*/
+}
+
+// CreateBinaryEvent handles binary event processing for PPXF
+func (w *Watcher) CreateBinaryEvent(appName string, side string, queue queue.QueueInterface, binaryProducer *producer.BinaryProducer, eventQueue chan api.BinaryEvent) {
+	go func() {
+		for event := range eventQueue {
+			log.Printf("Sending binary event (ID: %s) with %d files\n", event.ID, len(event.Files))
+			w.SendBinaryEvent(event, appName, side, queue)
+		}
+	}()
+
+	binaryProducer.ProcessBinaryFiles(appName)
+}
+
+// SendBinaryEvent sends binary events via RabbitMQ (handles .fits files safely)
+func (w *Watcher) SendBinaryEvent(event api.BinaryEvent, appName string, side string, queue queue.QueueInterface) {
+	binarySender := &sender.BinaryRabbitMQSender{}
+	binarySender.SendBinaryEvent(event, appName, side, queue)
 }

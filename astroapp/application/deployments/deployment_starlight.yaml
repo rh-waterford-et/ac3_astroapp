@@ -125,7 +125,7 @@ spec:
         - name: OUTPUT_STARLIGHT
           value: "/processing_data/starlight/data/output"
         - name: EXPLORED_PPXF
-          value: "/processing_data/ppxf/data/input"
+          value: "/processing_data/ppxf/data/output"
         - name: OUTPUT_PPXF
           value: "/processing_data/ppxf/data/output"
         - name: EXPLORED_STECKMAP

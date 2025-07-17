@@ -164,6 +164,16 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	log.Printf("│ DeliveryTag: %d", d.DeliveryTag)
 	log.Printf("│ Timestamp:   %s", d.Timestamp)
 
+	// Check if this is a binary event (PPXF .fits files)
+	isBinary, _ := d.Headers["is_binary"].(bool)
+	if isBinary {
+		log.Printf("│ Processing binary event for %s", appName)
+		r.ProcessBinaryMessage(d, side, appName, batchID)
+		return
+	}
+
+	log.Printf("│ Processing standard text event for %s", appName)
+
 	// Update progress to processing stage
 	r.updateProgress(appName, batchID, api.StageProcessing, 20.0)
 
@@ -559,4 +569,160 @@ func (r *Receiver) clearProcessList() {
 	} else {
 		log.Printf("│ ✓ Created cleanup lock file: %s", lockFilePath)
 	}
+}
+
+// ProcessBinaryMessage handles binary events for PPXF (prevents .fits corruption)
+func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName string, batchID string) {
+	processStart := time.Now()
+
+	// Update progress to processing stage
+	r.updateProgress(appName, batchID, api.StageProcessing, 20.0)
+
+	if len(d.Headers) > 0 {
+		headers, err := json.Marshal(d.Headers)
+		if err != nil {
+			log.Printf("│ ERROR: marshaling json: %v", err)
+		}
+		log.Printf("│ Headers:    %s", headers)
+	}
+
+	batchSize, ok := d.Headers["batch_size"].(int32)
+	if !ok {
+		log.Printf("│ ERROR: 'batch_size' header missing or invalid")
+		r.requeueWithLog(d, batchID)
+		return
+	}
+
+	filenamesHeader, ok := d.Headers["filenames"].(string)
+	if !ok {
+		log.Printf("│ ERROR: 'filenames' header missing or invalid")
+		r.requeueWithLog(d, batchID)
+		return
+	}
+
+	filenames := strings.Split(filenamesHeader, ",")
+	if len(filenames) != int(batchSize) {
+		log.Printf("│ ERROR: Filenames count doesn't match batch_size")
+		r.requeueWithLog(d, batchID)
+		return
+	}
+
+	log.Printf("│ Processing binary batch of %d files:", batchSize)
+	for i, filename := range filenames {
+		log.Printf("│ %d. %s", i+1, filename)
+	}
+
+	// Get output path for binary files
+	var outputPath string
+	if side == "producer" {
+		switch appName {
+		case "PPXF":
+			outputPath = os.Getenv("OUTPUT_BUCKET_PPXF")
+		default:
+			log.Printf("│ ERROR: Unknown binary app: %s", appName)
+			r.requeueWithLog(d, batchID)
+			return
+		}
+	} else {
+		switch appName {
+		case "PPXF":
+			outputPath = os.Getenv("EXPLORED_DIR_PPXF")
+		default:
+			log.Printf("│ ERROR: Unknown binary app: %s", appName)
+			r.requeueWithLog(d, batchID)
+			return
+		}
+	}
+
+	if outputPath == "" {
+		log.Printf("│ ERROR: Output directory not configured for binary app")
+		r.requeueWithLog(d, batchID)
+		return
+	}
+
+	// Unmarshal as BinaryMessageBody for binary events
+	var binaryMsgBody api.BinaryMessageBody
+	err := json.Unmarshal(d.Body, &binaryMsgBody)
+	if err != nil {
+		log.Printf("│ ERROR parsing binary message body: %v", err)
+		r.requeueWithLog(d, batchID)
+		return
+	}
+
+	if len(binaryMsgBody.Files) != int(batchSize) {
+		log.Printf("│ ERROR: Binary files count in body doesn't match batch_size")
+		r.requeueWithLog(d, batchID)
+		return
+	}
+
+	successCount := 0
+	for _, file := range binaryMsgBody.Files {
+		// Skip hidden files (files starting with .)
+		if strings.HasPrefix(filepath.Base(file.Name), ".") {
+			log.Printf("│ ⚠ Skipping hidden binary file: %s", file.Name)
+			successCount++
+			continue
+		}
+
+		if side == "producer" {
+			// Handle S3 upload for binary files
+			batchName := r.extractBatchNameFromFilename(file.Name)
+			var uploadPath string
+			if batchName != "" {
+				uploadPath = filepath.Join(outputPath, batchName, file.Name)
+			} else {
+				uploadPath = filepath.Join(outputPath, file.Name)
+			}
+
+			folderPath := filepath.Dir(uploadPath)
+			fileName := filepath.Base(uploadPath)
+
+			if folderPath == "." {
+				folderPath = ""
+			}
+
+			log.Printf("│ DEBUG: S3 binary upload - folderPath: '%s', fileName: '%s'", folderPath, fileName)
+
+			// Upload binary content directly (no string conversion corruption)
+			err := r.Bucket.UploadFileToBucket(folderPath, fileName, file.Content)
+			if err != nil {
+				log.Printf("│ ✗ Error uploading binary file %s to bucket: %v", uploadPath, err)
+			} else {
+				log.Printf("│ ✓ Uploaded binary file to bucket: %s (%d bytes)", uploadPath, len(file.Content))
+				successCount++
+			}
+		} else {
+			// Handle local file write for binary files - NO STRING CONVERSION
+			filename := filepath.Base(file.Name)
+			filePath := filepath.Join(outputPath, filename)
+
+			// Write binary content directly (preserves .fits integrity)
+			err := os.WriteFile(filePath, file.Content, 0644)
+			if err != nil {
+				log.Printf("│ ✗ Error writing binary file %s: %v", filePath, err)
+			} else {
+				log.Printf("│ ✓ Wrote binary file: %s to %s (%d bytes)", file.Name, filePath, len(file.Content))
+				successCount++
+
+				// For pPXF, add each .fits file to the process list immediately
+				if appName == "PPXF" && strings.HasSuffix(file.Name, ".fits") {
+					ppxf := app.NewPPXF(r.Utils)
+					ppxf.AddToProcessList(filename)
+					log.Printf("│ ✓ Added pPXF binary file to process list: %s", filename)
+				}
+			}
+		}
+	}
+
+	if successCount == int(batchSize) {
+		log.Printf("│ ✓ Successfully processed all %d binary files", successCount)
+		// Update progress to analysis stage for pPXF
+		r.updateProgress(appName, batchID, api.StageAnalysis, 70.0)
+	} else {
+		log.Printf("│ ⚠ Processed %d of %d binary files", successCount, batchSize)
+	}
+
+	processDuration := time.Since(processStart)
+	log.Printf("\n■■■ BINARY BATCH END [%s] ■■■ Duration: %v\n", batchID, processDuration)
+	d.Ack(false)
 }
