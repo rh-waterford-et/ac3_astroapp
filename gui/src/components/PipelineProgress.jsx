@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { mean, median, standardDeviation } from 'simple-statistics';
 import DatasetProgressBar from './DatasetProgressBar';
 
-function PipelineProgress({ datasets, inputFiles, outputFiles, isCollapsed = false, onToggleCollapse }) {
+function PipelineProgress({ datasets, inputFiles, outputFiles, processorType, isCollapsed = false, onToggleCollapse }) {
   const [progressData, setProgressData] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   
@@ -117,9 +117,19 @@ function PipelineProgress({ datasets, inputFiles, outputFiles, isCollapsed = fal
       
       // Only recalculate if we have input/output files for the selected dataset
       if (datasets.length === 1 && processedCount > 0) {
-        progress = Math.min((outputCount / processedCount) * 100, 100);
+        // Calculate expected output count based on app type
+        let expectedOutputCount;
+        if (processorType === 'ppxf') {
+          // PPXF: Each input file produces 5 output files
+          expectedOutputCount = processedCount * 5;
+        } else {
+          // Starlight: 1:1 ratio (default)
+          expectedOutputCount = processedCount;
+        }
         
-        console.log(`Dataset ${dataset.name}: ${processedCount} processed files, ${outputCount} output files, ${progress.toFixed(1)}% progress`);
+        progress = Math.min((outputCount / expectedOutputCount) * 100, 100);
+        
+        console.log(`Dataset ${dataset.name} (${processorType || 'STARLIGHT'}): ${processedCount} input files, ${outputCount} output files, expected: ${expectedOutputCount}, ${progress.toFixed(1)}% progress`);
         
         // Determine status and stage based on progress only if not already set
         if (progress >= 100) {
@@ -127,7 +137,7 @@ function PipelineProgress({ datasets, inputFiles, outputFiles, isCollapsed = fal
           stage = 'Completed';
         } else if (progress > 0) {
           status = 'processing';
-          stage = 'Starlight analysis';
+          stage = processorType === 'ppxf' ? 'PPXF analysis' : 'Starlight analysis';
         } else {
           status = 'queued';
           stage = 'Queued for processing';
@@ -155,7 +165,7 @@ function PipelineProgress({ datasets, inputFiles, outputFiles, isCollapsed = fal
     console.log('Final progress map:', progressMap);
     setProgressData(progressMap);
     
-  }, [datasets, inputFiles, outputFiles, processingHistory]);
+  }, [datasets, inputFiles, outputFiles, processingHistory, processorType]);
 
   // Periodic refresh indicator
   useEffect(() => {
@@ -328,7 +338,7 @@ function PipelineProgress({ datasets, inputFiles, outputFiles, isCollapsed = fal
                           {dataset.name}
                         </span>
                         <span className="pipeline-progress-dataset-type">
-                          {dataset.type || 'STARLIGHT'}
+                          {processorType === 'ppxf' ? 'PPXF' : 'STARLIGHT'}
                         </span>
                       </div>
                       <div className="pipeline-progress-stage">
@@ -354,7 +364,7 @@ function PipelineProgress({ datasets, inputFiles, outputFiles, isCollapsed = fal
                     status={currentProgress.status}
                   />
                   
-                  {(currentProgress.status === 'processing' || currentProgress.status === 'completed') && (
+                  {(currentProgress.status === 'processing' || currentProgress.status === 'completed') && processorType !== 'ppxf' && (
                     <div className="pipeline-progress-processing-info">
                       <span>
                         {currentProgress.filesProcessed} of {currentProgress.filesTotal} files processed
@@ -425,6 +435,7 @@ PipelineProgress.propTypes = {
   ).isRequired,
   inputFiles: PropTypes.array.isRequired,
   outputFiles: PropTypes.array.isRequired,
+  processorType: PropTypes.string,
   isCollapsed: PropTypes.bool,
   onToggleCollapse: PropTypes.func.isRequired,
 };

@@ -802,6 +802,7 @@ function DatasetsList({ processorType = 'starlight' }) {
         datasets={datasets} 
         inputFiles={inputFiles}
         outputFiles={outputFiles}
+        processorType={processorType}
         isCollapsed={isPipelineProgressCollapsed}
         onToggleCollapse={togglePipelineProgressCollapsed}
       />
