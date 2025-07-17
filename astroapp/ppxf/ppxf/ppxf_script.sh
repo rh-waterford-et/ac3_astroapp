@@ -42,8 +42,12 @@ send_progress_update() {
 
 # Create default mask file if it doesn't exist
 create_default_mask() {
+    echo "Checking mask file: $MASK_FILE"
     if [ ! -f "$MASK_FILE" ]; then
+        echo "Mask file not found, creating directories and file..."
         mkdir -p "$(dirname "$MASK_FILE")"
+        echo "Created directory: $(dirname "$MASK_FILE")"
+        
         cat > "$MASK_FILE" << EOF
 5245 5280 False
 5572 5582 False
@@ -52,6 +56,19 @@ create_default_mask() {
 5875 5910 True
 EOF
         echo "Created default mask file: $MASK_FILE"
+        
+        # Verify the file was created
+        if [ -f "$MASK_FILE" ]; then
+            echo "Mask file successfully created and verified"
+            ls -la "$MASK_FILE"
+            echo "Mask file contents:"
+            cat "$MASK_FILE"
+        else
+            echo "ERROR: Mask file creation failed!"
+        fi
+    else
+        echo "Mask file already exists: $MASK_FILE"
+        ls -la "$MASK_FILE"
     fi
 }
 
@@ -96,13 +113,28 @@ main() {
         # Extract dataset ID from filename for progress tracking
         dataset_id=$(echo "$filename" | sed 's/\.[^.]*$//')
         
+        # Ensure mask file exists before processing
+        echo "Ensuring mask file exists before processing..."
+        create_default_mask
+        
         # Run pPXF analysis directly on the input file
         echo "Running pPXF analysis for: $filename"
+        
+        # Debug: Check mask file right before Python script
+        echo "=== PRE-PYTHON DEBUG ==="
+        echo "Current working directory: $(pwd)"
+        echo "Checking mask file existence right before Python script:"
+        ls -la "$MASK_FILE" || echo "Mask file not found!"
+        echo "Directory contents of $(dirname "$MASK_FILE"):"
+        ls -la "$(dirname "$MASK_FILE")" || echo "Directory not found!"
+        echo "File system check:"
+        file "$MASK_FILE" || echo "File command failed"
+        echo "========================"
         
         # Send progress update - processing started
         send_progress_update "$dataset_id" "processing" 30.0
         
-        # Execute pPXF with configurable parameters directly on processing_data
+        # Run pPXF analysis
         python3 "$PPXF_SCRIPT" \
             --filenames "$input_file" \
             --mask-file "$MASK_FILE" \
@@ -110,7 +142,7 @@ main() {
             --velocity-dispersion "$VELOCITY_DISPERSION" \
             --wave-range "$WAVE_RANGE_START" "$WAVE_RANGE_END" \
             --sps-name "$SPS_NAME" \
-            --output-dir "$PPXF_OUTPUT_DIR"
+            --output-dir "$PPXF_OUTPUT_DIR" || echo "Python script failed with exit code $?"
         
         ppxf_exit_code=$?
         

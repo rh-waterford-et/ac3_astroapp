@@ -170,13 +170,13 @@ spec:
         - name: PROCESS_FILE
           value: "/processing_data/ppxf/runtime/processlist.txt"
         - name: PPXF_REDSHIFT
-          value: "0.0"
+          value: "0.016571"
         - name: PPXF_VEL_DISP
-          value: "100.0"
+          value: "200.0"
         - name: PPXF_WAVE_START
-          value: "4000"
+          value: "5200"
         - name: PPXF_WAVE_END
-          value: "7000"
+          value: "6150"
         - name: PPXF_SPS_NAME
           value: "emiles"
         - name: API_URL
