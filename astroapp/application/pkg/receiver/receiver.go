@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -164,6 +165,16 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	log.Printf("│ DeliveryTag: %d", d.DeliveryTag)
 	log.Printf("│ Timestamp:   %s", d.Timestamp)
 
+	// Check if this is a binary event (PPXF .fits files)
+	isBinary, _ := d.Headers["is_binary"].(bool)
+	if isBinary {
+		log.Printf("│ Processing binary event for %s", appName)
+		r.ProcessBinaryMessage(d, side, appName, batchID)
+		return
+	}
+
+	log.Printf("│ Processing standard text event for %s", appName)
+
 	// Update progress to processing stage
 	r.updateProgress(appName, batchID, api.StageProcessing, 20.0)
 
@@ -302,6 +313,7 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 
 			log.Printf("│ DEBUG: S3 upload - folderPath: '%s', fileName: '%s'", folderPath, fileName)
 
+			// Upload file content to bucket
 			err := r.Bucket.UploadFileToBucket(folderPath, fileName, []byte(file.Content))
 			if err != nil {
 				log.Printf("│ ✗ Error uploading file %s to bucket: %v", uploadPath, err)
@@ -459,6 +471,24 @@ func (r *Receiver) extractBatchNameFromFilename(filename string) string {
 	return "" // Return empty if no batch name can be extracted
 }
 
+// extractCellNumberFromFilename extracts cell number from PPXF output files
+// Example: "NGC7025_LR-V_final_cube_voronoi_cell_0_bestfit.fits" -> "0"
+// Example: "NGC7025_LR-V_final_cube_voronoi_cell_12_galaxy.fits" -> "12"
+func (r *Receiver) extractCellNumberFromFilename(filename string) string {
+	// Regex pattern to match "cell_" followed by digits
+	cellPattern := regexp.MustCompile(`cell_(\d+)`)
+	matches := cellPattern.FindStringSubmatch(filename)
+
+	if len(matches) >= 2 {
+		cellNumber := matches[1]
+		log.Printf("│ DEBUG: Extracted cell number '%s' from filename: %s", cellNumber, filename)
+		return cellNumber
+	}
+
+	log.Printf("│ DEBUG: No cell number found in filename: %s", filename)
+	return ""
+}
+
 // updateProgress sends a progress update to the API server
 func (r *Receiver) updateProgress(appName, batchID string, stage api.PipelineStage, progress float64) {
 	request := api.ProgressUpdateRequest{
@@ -559,4 +589,191 @@ func (r *Receiver) clearProcessList() {
 	} else {
 		log.Printf("│ ✓ Created cleanup lock file: %s", lockFilePath)
 	}
+}
+
+// ProcessBinaryMessage handles binary events for PPXF (prevents .fits corruption)
+func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName string, batchID string) {
+	processStart := time.Now()
+
+	// Update progress to processing stage
+	r.updateProgress(appName, batchID, api.StageProcessing, 20.0)
+
+	if len(d.Headers) > 0 {
+		headers, err := json.Marshal(d.Headers)
+		if err != nil {
+			log.Printf("│ ERROR: marshaling json: %v", err)
+		}
+		log.Printf("│ Headers:    %s", headers)
+	}
+
+	batchSize, ok := d.Headers["batch_size"].(int32)
+	if !ok {
+		log.Printf("│ ERROR: 'batch_size' header missing or invalid")
+		r.requeueWithLog(d, batchID)
+		return
+	}
+
+	filenamesHeader, ok := d.Headers["filenames"].(string)
+	if !ok {
+		log.Printf("│ ERROR: 'filenames' header missing or invalid")
+		r.requeueWithLog(d, batchID)
+		return
+	}
+
+	filenames := strings.Split(filenamesHeader, ",")
+	if len(filenames) != int(batchSize) {
+		log.Printf("│ ERROR: Filenames count doesn't match batch_size")
+		r.requeueWithLog(d, batchID)
+		return
+	}
+
+	log.Printf("│ Processing binary batch of %d files:", batchSize)
+	for i, filename := range filenames {
+		log.Printf("│ %d. %s", i+1, filename)
+	}
+
+	// Get output path for binary files
+	var outputPath string
+	if side == "producer" {
+		switch appName {
+		case "PPXF":
+			outputPath = os.Getenv("OUTPUT_BUCKET_PPXF")
+		default:
+			log.Printf("│ ERROR: Unknown binary app: %s", appName)
+			r.requeueWithLog(d, batchID)
+			return
+		}
+	} else {
+		switch appName {
+		case "PPXF":
+			outputPath = os.Getenv("EXPLORED_DIR_PPXF")
+		default:
+			log.Printf("│ ERROR: Unknown binary app: %s", appName)
+			r.requeueWithLog(d, batchID)
+			return
+		}
+	}
+
+	if outputPath == "" {
+		log.Printf("│ ERROR: Output directory not configured for binary app")
+		r.requeueWithLog(d, batchID)
+		return
+	}
+
+	// Unmarshal as BinaryMessageBody for binary events
+	var binaryMsgBody api.BinaryMessageBody
+	err := json.Unmarshal(d.Body, &binaryMsgBody)
+	if err != nil {
+		log.Printf("│ ERROR parsing binary message body: %v", err)
+		r.requeueWithLog(d, batchID)
+		return
+	}
+
+	if len(binaryMsgBody.Files) != int(batchSize) {
+		log.Printf("│ ERROR: Binary files count in body doesn't match batch_size")
+		r.requeueWithLog(d, batchID)
+		return
+	}
+
+	successCount := 0
+	for _, file := range binaryMsgBody.Files {
+		// Skip hidden files (files starting with .)
+		if strings.HasPrefix(filepath.Base(file.Name), ".") {
+			log.Printf("│ ⚠ Skipping hidden binary file: %s", file.Name)
+			successCount++
+			continue
+		}
+
+		if side == "producer" {
+			// Handle S3 upload for binary files
+			batchName := r.extractBatchNameFromFilename(file.Name)
+			var uploadPath string
+
+			// Special handling for PPXF: organize by cell number
+			if appName == "PPXF" {
+				log.Printf("│ DEBUG: Processing PPXF file for cell organization: %s", file.Name)
+				cellNumber := r.extractCellNumberFromFilename(file.Name)
+				log.Printf("│ DEBUG: Cell number extracted: '%s' (batchName: '%s')", cellNumber, batchName)
+				if batchName != "" && cellNumber != "" {
+					// Path: /ppxf/output/<batch_name>/<cell_number>/filename
+					uploadPath = filepath.Join(outputPath, batchName, cellNumber, file.Name)
+					log.Printf("│ DEBUG: Using cell-organized path: %s", uploadPath)
+				} else if batchName != "" {
+					// Fallback: /ppxf/output/<batch_name>/filename
+					uploadPath = filepath.Join(outputPath, batchName, file.Name)
+					log.Printf("│ DEBUG: Using batch fallback path (missing cell): %s", uploadPath)
+				} else {
+					// Last resort: flat structure
+					uploadPath = filepath.Join(outputPath, file.Name)
+					log.Printf("│ DEBUG: Using flat fallback path: %s", uploadPath)
+				}
+			} else {
+				// Standard logic for other apps (Starlight, etc.)
+				if batchName != "" {
+					uploadPath = filepath.Join(outputPath, batchName, file.Name)
+				} else {
+					uploadPath = filepath.Join(outputPath, file.Name)
+				}
+			}
+
+			folderPath := filepath.Dir(uploadPath)
+			fileName := filepath.Base(uploadPath)
+
+			if folderPath == "." {
+				folderPath = ""
+			}
+
+			log.Printf("│ DEBUG: S3 binary upload - folderPath: '%s', fileName: '%s'", folderPath, fileName)
+
+			// Create directory structure if folderPath exists
+			if folderPath != "" {
+				err := r.Bucket.CreateDirectory(folderPath)
+				if err != nil {
+					log.Printf("│ ⚠ Error creating directory %s: %v", folderPath, err)
+					// Continue with upload even if directory creation fails
+				}
+			}
+
+			// Upload binary content directly (no string conversion corruption)
+			err := r.Bucket.UploadFileToBucket(folderPath, fileName, file.Content)
+			if err != nil {
+				log.Printf("│ ✗ Error uploading binary file %s to bucket: %v", uploadPath, err)
+			} else {
+				log.Printf("│ ✓ Uploaded binary file to bucket: %s (%d bytes)", uploadPath, len(file.Content))
+				successCount++
+			}
+		} else {
+			// Handle local file write for binary files - NO STRING CONVERSION
+			filename := filepath.Base(file.Name)
+			filePath := filepath.Join(outputPath, filename)
+
+			// Write binary content directly (preserves .fits integrity)
+			err := os.WriteFile(filePath, file.Content, 0644)
+			if err != nil {
+				log.Printf("│ ✗ Error writing binary file %s: %v", filePath, err)
+			} else {
+				log.Printf("│ ✓ Wrote binary file: %s to %s (%d bytes)", file.Name, filePath, len(file.Content))
+				successCount++
+
+				// For pPXF, add each .fits file to the process list immediately
+				if appName == "PPXF" && strings.HasSuffix(file.Name, ".fits") {
+					ppxf := app.NewPPXF(r.Utils)
+					ppxf.AddToProcessList(filename)
+					log.Printf("│ ✓ Added pPXF binary file to process list: %s", filename)
+				}
+			}
+		}
+	}
+
+	if successCount == int(batchSize) {
+		log.Printf("│ ✓ Successfully processed all %d binary files", successCount)
+		// Update progress to analysis stage for pPXF
+		r.updateProgress(appName, batchID, api.StageAnalysis, 70.0)
+	} else {
+		log.Printf("│ ⚠ Processed %d of %d binary files", successCount, batchSize)
+	}
+
+	processDuration := time.Since(processStart)
+	log.Printf("\n■■■ BINARY BATCH END [%s] ■■■ Duration: %v\n", batchID, processDuration)
+	d.Ack(false)
 }

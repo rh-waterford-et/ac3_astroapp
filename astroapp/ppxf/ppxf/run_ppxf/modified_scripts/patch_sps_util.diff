@@ -1,5 +1,5 @@
---- /usr/local/lib/python3.8/dist-packages/ppxf/sps_util.py	2025-03-18 12:22:10.681430101 +0000
-+++ shared_directory/sps_util.py	2025-03-18 12:44:26.307889707 +0000
+--- /usr/local/lib/python3.8/dist-packages/ppxf/sps_util.py	2024-11-07 12:27:08.749543905 +0000
++++ shared_directory/modified_scripts/sps_util.py	2024-11-07 14:58:35.002739255 +0000
 @@ -14,6 +14,8 @@
  from pathlib import Path
  import numpy as np
@@ -173,7 +173,7 @@
 -        p1 = util.synthetic_photometry(self.lam_temp_full, self.templates_full, band, 
 +        p1 = util.synthetic_photometry(self.templates_full, self.lam_temp_full, band, 
                                         redshift=redshift, quiet=True)
--        dist = 3.085677581491367e+19    # 10pc in cm by definition
+-        dist = 3.085677581491367e+19    # 10pc in cm
 -        p1.flux /= 4*np.pi*dist**2      # convert luminosity to observed flux/cm^2 at 10pc
 -        p1.flux *= 3.828e+33            # spectra are in units of Lsun (erg/s IAU 2015)
 +        dist = (10*units.pc).to('cm').value        

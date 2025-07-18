@@ -32,7 +32,14 @@ func (l *LocalFileSource) ListFiles() ([]string, error) {
 	var files []string
 	for _, entry := range entries {
 		if !entry.IsDir() {
-			files = append(files, entry.Name())
+			filename := entry.Name()
+
+			// Skip system/configuration files that shouldn't be processed as data files
+			if l.isSystemFile(filename) {
+				continue
+			}
+
+			files = append(files, filename)
 		}
 	}
 	return files, nil
@@ -102,4 +109,27 @@ func (l *LocalFileSource) DeleteFile(filename string) error {
 
 func moveFile(source, destination string) error {
 	return os.Rename(source, destination)
+}
+
+// isSystemFile checks if a file is a system/configuration file that shouldn't be processed
+func (l *LocalFileSource) isSystemFile(filename string) bool {
+	systemFiles := []string{
+		"mask.txt",  // pPXF mask file
+		".gitkeep",  // Git keep files
+		".DS_Store", // macOS system files
+		"Thumbs.db", // Windows thumbnail cache
+	}
+
+	for _, sysFile := range systemFiles {
+		if filename == sysFile {
+			return true
+		}
+	}
+
+	// Skip hidden files (starting with .)
+	if strings.HasPrefix(filename, ".") {
+		return true
+	}
+
+	return false
 }

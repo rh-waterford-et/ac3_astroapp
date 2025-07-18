@@ -161,14 +161,16 @@ function DatasetsList({ processorType = 'starlight' }) {
     try {
       const files = await getDatasetFiles(datasetName, processorType);
       
-      // Transform and sort files
-      const transformedFiles = files.map(file => ({
-        name: file.name,
-        size: formatFileSize(file.size),
-        uploaded: file.timestamp,
-        status: 'processed',
-        key: file.key
-      }));
+      // Transform and sort files, filtering out directories and invalid files
+      const transformedFiles = files
+        .filter(file => isValidFile(file.name))
+        .map(file => ({
+          name: file.name,
+          size: formatFileSize(file.size),
+          uploaded: file.timestamp,
+          status: 'processed',
+          key: file.key
+        }));
       
       const sortedFiles = transformedFiles.sort((a, b) => 
         a.name.toLowerCase().localeCompare(b.name.toLowerCase())
@@ -208,14 +210,16 @@ function DatasetsList({ processorType = 'starlight' }) {
     try {
       const files = await getDatasetOutputFiles(datasetName, processorType);
       
-      // Transform and sort files
-      const transformedFiles = files.map(file => ({
-        name: file.name,
-        size: formatFileSize(file.size),
-        uploaded: file.timestamp,
-        status: 'completed',
-        key: file.key
-      }));
+      // Transform and sort files, filtering out directories and invalid files
+      const transformedFiles = files
+        .filter(file => isValidFile(file.name))
+        .map(file => ({
+          name: file.name,
+          size: formatFileSize(file.size),
+          uploaded: file.timestamp,
+          status: 'completed',
+          key: file.key
+        }));
       
       const sortedFiles = transformedFiles.sort((a, b) => 
         a.name.toLowerCase().localeCompare(b.name.toLowerCase())
@@ -261,23 +265,27 @@ function DatasetsList({ processorType = 'starlight' }) {
         getDatasetOutputFiles(datasetName, processorType)
       ]);
       
-      // Transform input files
-      const transformedInputFiles = inputFilesData.map(file => ({
-        name: file.name,
-        size: formatFileSize(file.size),
-        uploaded: file.timestamp,
-        status: 'processed',
-        key: file.key
-      }));
+      // Transform input files, filtering out directories and invalid files
+      const transformedInputFiles = inputFilesData
+        .filter(file => isValidFile(file.name))
+        .map(file => ({
+          name: file.name,
+          size: formatFileSize(file.size),
+          uploaded: file.timestamp,
+          status: 'processed',
+          key: file.key
+        }));
       
-      // Transform output files
-      const transformedOutputFiles = outputFilesData.map(file => ({
-        name: file.name,
-        size: formatFileSize(file.size),
-        uploaded: file.timestamp,
-        status: 'completed',
-        key: file.key
-      }));
+      // Transform output files, filtering out directories and invalid files
+      const transformedOutputFiles = outputFilesData
+        .filter(file => isValidFile(file.name))
+        .map(file => ({
+          name: file.name,
+          size: formatFileSize(file.size),
+          uploaded: file.timestamp,
+          status: 'completed',
+          key: file.key
+        }));
       
       // Sort files
       const sortedInputFiles = transformedInputFiles.sort((a, b) => 
@@ -388,6 +396,28 @@ function DatasetsList({ processorType = 'starlight' }) {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  // Helper function to check if an item is a valid file (has extension, not a directory)
+  const isValidFile = (fileName) => {
+    // Filter out directory markers (ending with /)
+    if (fileName.endsWith('/')) {
+      return false;
+    }
+    
+    // Filter out items without file extensions
+    const lastDotIndex = fileName.lastIndexOf('.');
+    if (lastDotIndex === -1 || lastDotIndex === fileName.length - 1) {
+      return false;
+    }
+    
+    // Additional check: file extension should be at least 1 character and at most 10 characters
+    const extension = fileName.substring(lastDotIndex + 1);
+    if (extension.length < 1 || extension.length > 10) {
+      return false;
+    }
+    
+    return true;
   };
 
   const truncateFileName = (fileName, maxLength = 50) => {
@@ -772,6 +802,7 @@ function DatasetsList({ processorType = 'starlight' }) {
         datasets={datasets} 
         inputFiles={inputFiles}
         outputFiles={outputFiles}
+        processorType={processorType}
         isCollapsed={isPipelineProgressCollapsed}
         onToggleCollapse={togglePipelineProgressCollapsed}
       />
