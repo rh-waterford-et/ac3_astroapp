@@ -21,7 +21,7 @@ spec:
         persistentVolumeClaim:
           claimName: ucm-pv-claim-producer
       containers:
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/bcapper30/uc3-metrics:latest
         name: watcher-producer
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
@@ -46,7 +46,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: EXPLORED_STARLIGHT
           value: "starlight/input"
         - name: EXPLORED_PPXF
@@ -82,7 +82,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/bcapper30/uc3-metrics:latest
         name: http-server
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
@@ -97,7 +97,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: SERVER_PORT
           value: "8080"
         - name: CORS_ALLOWED_ORIGINS
@@ -145,7 +145,7 @@ spec:
         - containerPort: 28181
         - containerPort: 28182
         - containerPort: 28183
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/bcapper30/uc3-metrics:latest
         name: receiver-producer
         workingDir: /processing_data/
         volumeMounts:
@@ -173,7 +173,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: IN_FILE_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST

@@ -60,7 +60,7 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, 
 		}
 		length = len(files)
 		if length > 0 {
-		//	log.Printf("Found %d files in %s input directory across all batches: %v", length, appName, files)
+			//	log.Printf("Found %d files in %s input directory across all batches: %v", length, appName, files)
 			for _, file := range files {
 				if strings.Contains(file, ".batch_placeholder") ||
 					strings.Contains(file, ".dataset_placeholder") {
@@ -95,7 +95,15 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, 
 		return
 	}
 
-	if len(batchCounts) > 0 {
+	// Process files if we have batches (producer) or files (processor)
+	shouldProcess := false
+	if side == "producer" && len(batchCounts) > 0 {
+		shouldProcess = true
+	} else if side == "processor" && length > 0 {
+		shouldProcess = true
+	}
+
+	if shouldProcess {
 		log.Printf("Processing %s files...\n", appName)
 		eventQueue := make(chan api.Event, 10)
 		producer := producer.NewProducer(batchSize, fileSource, eventQueue, utils, side, eventID, redisClient)

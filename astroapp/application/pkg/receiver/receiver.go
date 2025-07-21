@@ -29,18 +29,23 @@ type ReceiverInterface interface {
 }
 
 type Receiver struct {
-	Queue       queue.QueueInterface
-	Utils       common.UtilsInterface
-	Bucket      s3bucket.S3BucketInterface
-	RedisClient *metrics.RedisClient
+	Queue              queue.QueueInterface
+	Utils              common.UtilsInterface
+	Bucket             s3bucket.S3BucketInterface
+	RedisClient        *metrics.RedisClient
+	AggregationService *metrics.AggregationService
 }
 
 func NewReceiver(queue queue.QueueInterface, utils common.UtilsInterface, bucket s3bucket.S3BucketInterface, redisClient *metrics.RedisClient) *Receiver {
+	metricsStore := metrics.NewMetricsStore(redisClient, 168*time.Hour)
+	aggregationService := metrics.NewAggregationService(metricsStore)
+
 	return &Receiver{
-		Queue:       queue,
-		Utils:       utils,
-		Bucket:      bucket,
-		RedisClient: redisClient,
+		Queue:              queue,
+		Utils:              utils,
+		Bucket:             bucket,
+		RedisClient:        redisClient,
+		AggregationService: aggregationService,
 	}
 }
 
@@ -50,6 +55,18 @@ func (r *Receiver) Start(side string) {
 	// Clear process list on startup to prevent processing old entries
 	if side == "processor" {
 		r.clearProcessList()
+	}
+
+	// Start aggregation service in background (only on processor side to avoid duplication)
+	if side == "processor" && r.AggregationService != nil {
+		ctx := context.Background()
+		go func() {
+			// Wait a bit before starting aggregation to let the system initialize
+			time.Sleep(30 * time.Second)
+			// Run aggregation every 5 minutes
+			r.AggregationService.RunPeriodicAggregation(ctx, 5*time.Minute)
+		}()
+		log.Printf("🔄 Started event metrics aggregation service (5-minute intervals)")
 	}
 
 	var queueName string
@@ -153,39 +170,44 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 
 	// Record queue first receive time (when first batch is received)
 	if side == "processor" {
+		log.Printf("│ DEBUG: Recording QueueFirstReceiveTime for processor side")
 		if r.RedisClient != nil {
 			ctx := context.Background()
 			metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
 
 			// Check if metric already exists
 			key := metricsStore.GetBatchKey(eventID, batchID)
+			log.Printf("│ DEBUG: Redis key = %s", key)
 			exists, err := r.RedisClient.Exists(ctx, key)
 			if err != nil {
-				log.Printf("Failed to check metric existence: %v", err)
+				log.Printf("│ ✗ Failed to check metric existence: %v", err)
 			} else if exists == 0 {
 				// Create new metric record with queue first receive time
+				log.Printf("│ DEBUG: Creating new metric record")
 				err = metricsStore.RecordMetric(ctx, &metrics.MetricRecord{
 					EventID:               eventID,
 					BatchID:               batchID,
 					QueueFirstReceiveTime: time.Now(),
 				})
 				if err != nil {
-					log.Printf("Failed to record queue first receive time: %v", err)
+					log.Printf("│ ✗ Failed to record queue first receive time: %v", err)
 				} else {
 					log.Printf("│ ✓ Recorded queue first receive time for event %s, batch %s", eventID, batchID)
 				}
 			} else {
+				log.Printf("│ DEBUG: Metric already exists, checking if queue_first_receive_time is set")
 				// Check if queue_first_receive_time is already set by getting all fields
 				allFields, err := r.RedisClient.HGetAll(ctx, key)
 				if err != nil {
-					log.Printf("Failed to get metric fields: %v", err)
+					log.Printf("│ ✗ Failed to get metric fields: %v", err)
 				} else {
 					currentTime := allFields["queue_first_receive_time"]
-					if currentTime == "" {
+					log.Printf("│ DEBUG: Current queue_first_receive_time = '%s'", currentTime)
+					if currentTime == "" || currentTime == "0001-01-01T00:00:00Z" {
 						err = metricsStore.UpdateMetricField(ctx, eventID, batchID,
 							"queue_first_receive_time", time.Now())
 						if err != nil {
-							log.Printf("Failed to update queue first receive time: %v", err)
+							log.Printf("│ ✗ Failed to update queue first receive time: %v", err)
 						} else {
 							log.Printf("│ ✓ Updated queue first receive time for event %s, batch %s", eventID, batchID)
 						}
@@ -336,13 +358,14 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 			}
 
 			// Record batch end time when processing is complete (on producer side)
-			if r.RedisClient != nil {
+			// Use the extracted batch name as the event ID (e.g., NGC7025)
+			if r.RedisClient != nil && batchName != "" {
 				metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
-				err = metricsStore.UpdateMetricField(context.Background(), eventID, batchID, "batch_end_time", time.Now())
+				err = metricsStore.UpdateMetricField(context.Background(), batchName, batchID, "batch_end_time", time.Now())
 				if err != nil {
 					log.Printf("│ ✗ Failed to record batch end time: %v", err)
 				} else {
-					log.Printf("│ ✓ Recorded batch end time for event %s, batch %s", eventID, batchID)
+					log.Printf("│ ✓ Recorded batch end time for event %s, batch %s", batchName, batchID)
 				}
 			}
 
@@ -428,16 +451,19 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	log.Printf("■■■ BATCH COMPLETE [%s] ■■■", batchID)
 
 	// Remove Redis entry for this batch after completion
-	if r.RedisClient != nil {
-		metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
-		key := metricsStore.GetBatchKey(eventID, batchID)
-		err := r.RedisClient.Del(context.Background(), key)
-		if err != nil {
-			log.Printf("│ ⚠ Failed to remove Redis entry for batch %s: %v", batchID, err)
-		} else {
-			log.Printf("│ ✓ Removed Redis entry for batch %s", batchID)
+	// COMMENTED OUT - Keep Redis entries for debugging
+	/*
+		if r.RedisClient != nil {
+			metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
+			key := metricsStore.GetBatchKey(eventID, batchID)
+			err := r.RedisClient.Del(context.Background(), key)
+			if err != nil {
+				log.Printf("│ ⚠ Failed to remove Redis entry for batch %s: %v", batchID, err)
+			} else {
+				log.Printf("│ ✓ Removed Redis entry for batch %s", batchID)
+			}
 		}
-	}
+	*/
 }
 
 func (r *Receiver) requeueWithLog(d amqp.Delivery, batchID string) {
