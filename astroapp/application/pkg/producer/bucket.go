@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
 )
@@ -48,7 +49,7 @@ func (s *S3FileSource) ReadFile(filename string) ([]byte, error) {
 	}
 	defer result.Body.Close()
 
-	log.Printf("Successfully read file from S3: %s", filepath.Join(s.InputDir, filename))
+	//log.Printf("Successfully read file from S3: %s", filepath.Join(s.InputDir, filename))
 	return io.ReadAll(result.Body)
 }
 
@@ -56,8 +57,6 @@ func (s *S3FileSource) DeleteFile(filename string) error {
 	s3Client := s.Bucket.GetS3Client()
 	bucketName := s.Bucket.GetBucketName()
 
-	// filename includes batch directory (e.g., "NGC7025/spectrum_001.txt")
-	// Extract batch name from filename
 	parts := strings.Split(filename, "/")
 	if len(parts) < 2 {
 		return fmt.Errorf("invalid filename format, expected batch/filename: %s", filename)
@@ -74,12 +73,24 @@ func (s *S3FileSource) DeleteFile(filename string) error {
 	// Construct source and destination keys
 	sourceKey := filepath.Join(s.InputDir, filename)
 
+	// First check if source file exists
+	_, err := s3Client.HeadObject(&s3.HeadObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(sourceKey),
+	})
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
+			return fmt.Errorf("source file does not exist: s3://%s/%s", bucketName, sourceKey)
+		}
+		return fmt.Errorf("error checking source file: %v", err)
+	}
+
 	// Replace /input/ with /processed/ and maintain batch structure
 	processedDir := strings.Replace(s.InputDir, "/input", "/processed", 1)
 	destKey := filepath.Join(processedDir, batchName, actualFilename)
 
 	// Copy file to processed directory
-	_, err := s3Client.CopyObject(&s3.CopyObjectInput{
+	_, err = s3Client.CopyObject(&s3.CopyObjectInput{
 		Bucket:     aws.String(bucketName),
 		CopySource: aws.String(bucketName + "/" + sourceKey),
 		Key:        aws.String(destKey),
@@ -106,7 +117,6 @@ func (s *S3FileSource) DeleteFile(filename string) error {
 		return fmt.Errorf("delete failed for batch %s: %v", batchName, err)
 	}
 
-	log.Printf("Moved batch file: s3://%s/%s -> s3://%s/%s", bucketName, sourceKey, bucketName, destKey)
 	return nil
 }
 

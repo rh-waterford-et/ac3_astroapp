@@ -150,24 +150,47 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	log.Printf("│ App:        %s", appName)
 	log.Printf("│ Event ID:   %s", eventID)
 	log.Printf("│ Batch ID:   %s", batchID)
-	log.Printf("│ DeliveryTag: %d", d.DeliveryTag)
-	log.Printf("│ Timestamp:   %s", d.Timestamp)
 
-	// Record queue end time (when first batch is received)
-	if r.RedisClient != nil {
-		metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
+	// Record queue first receive time (when first batch is received)
+	if side == "processor" {
+		if r.RedisClient != nil {
+			ctx := context.Background()
+			metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
 
-		// Check if this is the first batch for this event
-		existingMetrics, err := metricsStore.GetEventMetrics(context.Background(), eventID)
-		if err != nil {
-			log.Printf("Failed to get existing metrics for event %s: %v", eventID, err)
-		} else if len(existingMetrics) == 0 {
-			// This is the first batch, record queue end time
-			err = metricsStore.UpdateMetricField(context.Background(), eventID, batchID, "queue_first_receive_time", time.Now())
+			// Check if metric already exists
+			key := metricsStore.GetBatchKey(eventID, batchID)
+			exists, err := r.RedisClient.Exists(ctx, key)
 			if err != nil {
-				log.Printf("Failed to record queue first receive time: %v", err)
+				log.Printf("Failed to check metric existence: %v", err)
+			} else if exists == 0 {
+				// Create new metric record with queue first receive time
+				err = metricsStore.RecordMetric(ctx, &metrics.MetricRecord{
+					EventID:               eventID,
+					BatchID:               batchID,
+					QueueFirstReceiveTime: time.Now(),
+				})
+				if err != nil {
+					log.Printf("Failed to record queue first receive time: %v", err)
+				} else {
+					log.Printf("│ ✓ Recorded queue first receive time for event %s, batch %s", eventID, batchID)
+				}
 			} else {
-				log.Printf("Recorded queue first receive time for event %s, batch %s", eventID, batchID)
+				// Check if queue_first_receive_time is already set by getting all fields
+				allFields, err := r.RedisClient.HGetAll(ctx, key)
+				if err != nil {
+					log.Printf("Failed to get metric fields: %v", err)
+				} else {
+					currentTime := allFields["queue_first_receive_time"]
+					if currentTime == "" {
+						err = metricsStore.UpdateMetricField(ctx, eventID, batchID,
+							"queue_first_receive_time", time.Now())
+						if err != nil {
+							log.Printf("Failed to update queue first receive time: %v", err)
+						} else {
+							log.Printf("│ ✓ Updated queue first receive time for event %s, batch %s", eventID, batchID)
+						}
+					}
+				}
 			}
 		}
 	}
@@ -236,12 +259,6 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 			r.requeueWithLog(d, batchID)
 			return
 		}
-	}
-
-	if outputPath == "" {
-		log.Printf("│ ERROR: Output directory not configured for app")
-		r.requeueWithLog(d, batchID)
-		return
 	}
 
 	var msgBody api.MessageBody
@@ -317,6 +334,18 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 				log.Printf("│ ✓ Uploaded file to bucket: %s", uploadPath)
 				successCount++
 			}
+
+			// Record batch end time when processing is complete (on producer side)
+			if r.RedisClient != nil {
+				metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
+				err = metricsStore.UpdateMetricField(context.Background(), eventID, batchID, "batch_end_time", time.Now())
+				if err != nil {
+					log.Printf("│ ✗ Failed to record batch end time: %v", err)
+				} else {
+					log.Printf("│ ✓ Recorded batch end time for event %s, batch %s", eventID, batchID)
+				}
+			}
+
 		} else {
 			// Handle local file write for processor side
 			// Store files flat using just the basename to match .in file references
@@ -383,17 +412,6 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		}
 		log.Printf("│ ✔ Successfully processed all %d files", batchSize)
 
-		// Record batch end time when processing is complete (on producer side)
-		if side == "producer" && r.RedisClient != nil {
-			metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
-			err = metricsStore.UpdateMetricField(context.Background(), eventID, batchID, "batch_end_time", time.Now())
-			if err != nil {
-				log.Printf("Failed to record batch end time: %v", err)
-			} else {
-				log.Printf("Recorded batch end time for event %s, batch %s", eventID, batchID)
-			}
-		}
-
 		// Update progress to completion if all files processed
 		r.updateProgress(appName, batchID, api.StageComplete, 100.0)
 	} else {
@@ -408,6 +426,18 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	}
 
 	log.Printf("■■■ BATCH COMPLETE [%s] ■■■", batchID)
+
+	// Remove Redis entry for this batch after completion
+	if r.RedisClient != nil {
+		metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
+		key := metricsStore.GetBatchKey(eventID, batchID)
+		err := r.RedisClient.Del(context.Background(), key)
+		if err != nil {
+			log.Printf("│ ⚠ Failed to remove Redis entry for batch %s: %v", batchID, err)
+		} else {
+			log.Printf("│ ✓ Removed Redis entry for batch %s", batchID)
+		}
+	}
 }
 
 func (r *Receiver) requeueWithLog(d amqp.Delivery, batchID string) {

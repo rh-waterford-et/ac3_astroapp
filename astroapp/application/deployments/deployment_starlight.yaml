@@ -34,7 +34,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/bcapper30/uc3-backend:latest
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: receiver-processor
         workingDir: /processing_data/
         volumeMounts:
@@ -94,7 +94,7 @@ spec:
           value: "/processing_data/starlight/data/output"
         ports:
         - containerPort: 5672  
-      - image: quay.io/bcapper30/uc3-backend:latest
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: watcher-processor
         workingDir: /processing_data/
         command: ["/usr/bin/ucm"]

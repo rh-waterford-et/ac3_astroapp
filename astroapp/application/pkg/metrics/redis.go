@@ -86,3 +86,7 @@ func (rc *RedisClient) Keys(ctx context.Context, pattern string) ([]string, erro
 func (rc *RedisClient) Exists(ctx context.Context, key string) (int64, error) {
 	return rc.client.Exists(ctx, key).Result()
 }
+
+func (rc *RedisClient) Del(ctx context.Context, key string) error {
+	return rc.client.Del(ctx, key).Err()
+}

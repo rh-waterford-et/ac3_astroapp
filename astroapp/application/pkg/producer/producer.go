@@ -124,9 +124,9 @@ func (p *Producer) DeleteProcessedFiles() {
 		err := p.FileSource.DeleteFile(file.Name)
 		if err != nil {
 			log.Printf("Error deleting file %s: %v\n", file.Name, err)
-		} else {
+		} /* else {
 			log.Printf("Successfully moved file %s to processed dir", file.Name)
-		}
+		} */
 	}
 }
 

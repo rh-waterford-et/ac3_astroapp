@@ -96,6 +96,8 @@ func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string,
 				log.Printf("Recorded queue start time for event %s, batch %s", event.ID, event.BatchID)
 			}
 		}
+	} else {
+		log.Printf("No Redis client found")
 	}
 
 	log.Printf("DEBUG: Published message to queue %s", queueName)

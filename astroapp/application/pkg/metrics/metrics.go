@@ -20,6 +20,10 @@ type MetricsStore struct {
 	keyPrefix string
 }
 
+func (ms *MetricsStore) RedisClient() *RedisClient {
+	return ms.redis
+}
+
 func NewMetricsStore(redis *RedisClient, ttl time.Duration) *MetricsStore {
 	return &MetricsStore{
 		redis:     redis,
@@ -35,7 +39,7 @@ func (ms *MetricsStore) WithKeyPrefix(prefix string) *MetricsStore {
 
 // RecordMetric records a single metric for an event-batch combination
 func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) error {
-	key := ms.getBatchKey(metric.EventID, metric.BatchID)
+	key := ms.GetBatchKey(metric.EventID, metric.BatchID)
 
 	values := map[string]interface{}{
 		"event_id":                 metric.EventID,
@@ -62,7 +66,7 @@ func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) 
 
 // GetMetric retrieves a metric for a specific event-batch combination
 func (ms *MetricsStore) GetMetric(ctx context.Context, eventID, batchID string) (*MetricRecord, error) {
-	key := ms.getBatchKey(eventID, batchID)
+	key := ms.GetBatchKey(eventID, batchID)
 	data, err := ms.redis.HGetAll(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get metric: %w", err)
@@ -101,7 +105,7 @@ func (ms *MetricsStore) GetEventMetrics(ctx context.Context, eventID string) ([]
 
 // UpdateMetricField updates a specific field for an event-batch combination
 func (ms *MetricsStore) UpdateMetricField(ctx context.Context, eventID, batchID, field string, value time.Time) error {
-	key := ms.getBatchKey(eventID, batchID)
+	key := ms.GetBatchKey(eventID, batchID)
 
 	// First check if the record exists
 	exists, err := ms.redis.Exists(ctx, key)
@@ -143,7 +147,7 @@ func (ms *MetricsStore) RecordMetricsBatch(ctx context.Context, metrics []*Metri
 	pipe := ms.redis.Pipeline()
 
 	for _, metric := range metrics {
-		key := ms.getBatchKey(metric.EventID, metric.BatchID)
+		key := ms.GetBatchKey(metric.EventID, metric.BatchID)
 		values := map[string]interface{}{
 			"event_id":                 metric.EventID,
 			"batch_id":                 metric.BatchID,
@@ -190,7 +194,7 @@ func (ms *MetricsStore) parseMetric(data map[string]string) (*MetricRecord, erro
 	return &result, nil
 }
 
-func (ms *MetricsStore) getBatchKey(eventID, batchID string) string {
+func (ms *MetricsStore) GetBatchKey(eventID, batchID string) string {
 	return fmt.Sprintf("%s:%s:%s", ms.keyPrefix, eventID, batchID)
 }
 
