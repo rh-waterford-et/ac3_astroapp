@@ -373,6 +373,38 @@ func (ms *MetricsStore) GetEventSummary(ctx context.Context, eventID string) (*E
 	return summary, nil
 }
 
+// CleanupIndividualBatches removes all individual batch entries for an event after aggregation
+func (ms *MetricsStore) CleanupBatches(ctx context.Context, eventID string) error {
+	pattern := ms.getEventPattern(eventID)
+	keys, err := ms.redis.Keys(ctx, pattern)
+	if err != nil {
+		return fmt.Errorf("failed to get batch keys for cleanup: %w", err)
+	}
+
+	if len(keys) == 0 {
+		return nil
+	}
+
+	// Delete all individual batch entries (skip summary keys)
+	deletedCount := 0
+	for _, key := range keys {
+		if strings.Contains(key, ":summary:") {
+			continue // Skip summary keys
+		}
+		err := ms.redis.Del(ctx, key)
+		if err != nil {
+			log.Printf("⚠ Failed to delete key %s: %v", key, err)
+		} else {
+			deletedCount++
+		}
+	}
+
+	if deletedCount > 0 {
+		log.Printf("🧹 Cleaned up %d individual batch entries for event %s", deletedCount, eventID)
+	}
+	return nil
+}
+
 // AggregateAndStoreEventSummary aggregates metrics for an event and stores the summary
 func (ms *MetricsStore) AggregateAndStoreEventSummary(ctx context.Context, eventID string) (*EventSummary, error) {
 	summary, err := ms.AggregateEventMetrics(ctx, eventID)
@@ -383,6 +415,13 @@ func (ms *MetricsStore) AggregateAndStoreEventSummary(ctx context.Context, event
 	err = ms.StoreEventSummary(ctx, summary)
 	if err != nil {
 		return nil, err
+	}
+
+	// Clean up individual batch entries after successful aggregation
+	err = ms.CleanupBatches(ctx, eventID)
+	if err != nil {
+		log.Printf("⚠ Failed to cleanup individual batch entries for event %s: %v", eventID, err)
+		// Don't fail the aggregation if cleanup fails - summary is already stored
 	}
 
 	return summary, nil
