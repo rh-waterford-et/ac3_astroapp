@@ -66,7 +66,6 @@ func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string,
 	headers["batch_size"] = len(event.Files)
 	headers["app_name"] = appName
 	headers["event_id"] = event.ID
-	headers["batch_id"] = event.BatchID
 
 	filenames := []string{}
 	for _, f := range event.Files {
@@ -84,12 +83,12 @@ func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string,
 		metricsStore := metrics.NewMetricsStore(s.RedisClient, 168*time.Hour)
 
 		// Record queue start time for this specific batch
-		err = metricsStore.UpdateMetricField(ctx, event.ID, event.BatchID, "queue_start_time", time.Now())
+		err = metricsStore.UpdateMetricField(ctx, event.ID,  "queue_start_time", time.Now())
 		if err != nil {
 			log.Printf("Failed to record queue start time: %v", err)
-		} else {
-			log.Printf("✓ Recorded batch start time for event %s, batch %s", event.ID, event.BatchID)
-		}
+		} /* else {
+			log.Printf("✓ Recorded batch start time for event %s", event.ID)
+		} */
 	} else {
 		log.Printf("No Redis client found")
 	}

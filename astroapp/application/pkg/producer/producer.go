@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/app"
@@ -90,7 +91,6 @@ func (p *Producer) AddFile(file api.DataFile, appName string) {
 
 func (p *Producer) SendBatch(appName string) {
 	if len(p.Batch) > 0 {
-		batchID := p.Utils.GenerateUUID()
 		// Update the .in file before sending the batch
 		if appName == "STARLIGHT" && p.Side == "producer" {
 			inFileName, content := starlight.UpdateInFile(p.Batch)
@@ -104,9 +104,8 @@ func (p *Producer) SendBatch(appName string) {
 		p.updateProgress(appName, api.StageQueued, 10.0)
 
 		event := api.Event{
-			ID:      p.EventID,
-			BatchID: batchID,
-			Files:   p.Batch,
+			ID:    p.EventID,
+			Files: p.Batch,
 		}
 		p.EventQueue <- event
 
@@ -142,6 +141,11 @@ func (p *Producer) ProcessFiles(appName string) {
 		content, err := p.FileSource.ReadFile(filename)
 		if err != nil {
 			log.Printf("Error reading file %s: %v\n", filename, err)
+			continue
+		}
+		if strings.Contains(filename, ".batch_placeholder") ||
+			strings.Contains(filename, ".dataset_placeholder") ||
+			strings.Contains(filename, "mask.txt") {
 			continue
 		}
 		p.AddFile(api.DataFile{Name: filename, Content: string(content)}, appName)

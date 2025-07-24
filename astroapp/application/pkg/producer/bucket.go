@@ -57,21 +57,18 @@ func (s *S3FileSource) DeleteFile(filename string) error {
 	s3Client := s.Bucket.GetS3Client()
 	bucketName := s.Bucket.GetBucketName()
 
-	parts := strings.Split(filename, "/")
-	if len(parts) < 2 {
-		return fmt.Errorf("invalid filename format, expected batch/filename: %s", filename)
-	}
-	batchName := parts[0]
-	actualFilename := strings.Join(parts[1:], "/")
-
 	// Skip moving placeholder files - they should stay in input directory to maintain batch structure
-	if strings.Contains(actualFilename, ".batch_placeholder") || strings.Contains(actualFilename, ".dataset_placeholder") {
+	if strings.Contains(filename, ".batch_placeholder") || strings.Contains(filename, ".dataset_placeholder") {
 		log.Printf("Skipping placeholder file, keeping in input directory: %s", filename)
 		return nil
 	}
 
 	// Construct source and destination keys
 	sourceKey := filepath.Join(s.InputDir, filename)
+	if strings.HasPrefix(filename, s.InputDir) {
+		// If filename already includes the input directory, use it as is
+		sourceKey = filename
+	}
 
 	// First check if source file exists
 	_, err := s3Client.HeadObject(&s3.HeadObjectInput{
@@ -80,14 +77,33 @@ func (s *S3FileSource) DeleteFile(filename string) error {
 	})
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
-			return fmt.Errorf("source file does not exist: s3://%s/%s", bucketName, sourceKey)
+			// File doesn't exist - it may have already been processed/moved
+			log.Printf("File %s already processed or moved, skipping deletion", filename)
+			return nil // Don't treat this as an error
 		}
 		return fmt.Errorf("error checking source file: %v", err)
 	}
 
-	// Replace /input/ with /processed/ and maintain batch structure
+	// Replace /input/ with /processed/ in the path
 	processedDir := strings.Replace(s.InputDir, "/input", "/processed", 1)
-	destKey := filepath.Join(processedDir, batchName, actualFilename)
+	destKey := strings.Replace(sourceKey, s.InputDir, processedDir, 1)
+
+	// Create destination directory structure if needed
+	_, err = s3Client.HeadObject(&s3.HeadObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(filepath.Dir(destKey) + "/"),
+	})
+	if err != nil {
+		// Create directory marker if it doesn't exist
+		_, err = s3Client.PutObject(&s3.PutObjectInput{
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(filepath.Dir(destKey) + "/"),
+			Body:   strings.NewReader(""),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create destination directory: %v", err)
+		}
+	}
 
 	// Copy file to processed directory
 	_, err = s3Client.CopyObject(&s3.CopyObjectInput{
@@ -96,16 +112,21 @@ func (s *S3FileSource) DeleteFile(filename string) error {
 		Key:        aws.String(destKey),
 	})
 	if err != nil {
-		return fmt.Errorf("copy failed for batch %s: %v", batchName, err)
+		// Check if the error is because the source file no longer exists
+		if aerr, ok := err.(awserr.Error); ok && (aerr.Code() == "NoSuchKey" || aerr.Code() == "NotFound") {
+			log.Printf("File %s no longer exists during copy, may have been processed concurrently", filename)
+			return nil // Don't treat this as an error
+		}
+		return fmt.Errorf("copy failed: %v", err)
 	}
 
-	// Wait for copy to complete
+	// Wait for copy to complete with timeout
 	err = s3Client.WaitUntilObjectExists(&s3.HeadObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String(destKey),
 	})
 	if err != nil {
-		return fmt.Errorf("copy verification failed for batch %s: %v", batchName, err)
+		return fmt.Errorf("copy verification failed: %v", err)
 	}
 
 	// Delete original file
@@ -114,7 +135,9 @@ func (s *S3FileSource) DeleteFile(filename string) error {
 		Key:    aws.String(sourceKey),
 	})
 	if err != nil {
-		return fmt.Errorf("delete failed for batch %s: %v", batchName, err)
+		// If deletion fails but copy succeeded, log as warning rather than error
+		log.Printf("Warning: Failed to delete original file %s after successful copy: %v", filename, err)
+		return nil // Don't fail the operation if copy succeeded
 	}
 
 	return nil

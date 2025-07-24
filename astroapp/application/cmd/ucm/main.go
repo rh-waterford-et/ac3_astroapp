@@ -125,20 +125,20 @@ func LaunchProducer(side string) error {
 		if err != nil {
 			log.Fatalf("Failed to ensure bucket directories: %v", err)
 		}
-	
+
 	}
-	 // Initialize Redis client for producer if needed
-		 var redis *metrics.RedisClient
-		 if os.Getenv("REDIS_HOST") != "" {
-			 redis, err = metrics.NewRedisConnection()
-			 if err != nil {
-				 log.Printf("Failed to connect to Redis: %v", err)
-				 log.Printf("Continuing without Redis metrics tracking")
-			 } else {
-				 log.Printf("Connected to Redis for metrics tracking")
-			 }
-		 }
-		 
+	// Initialize Redis client for producer if needed
+	var redis *metrics.RedisClient
+	if os.Getenv("REDIS_HOST") != "" {
+		redis, err = metrics.NewRedisConnection()
+		if err != nil {
+			log.Printf("Failed to connect to Redis: %v", err)
+			log.Printf("Continuing without Redis metrics tracking")
+		} else {
+			log.Printf("Connected to Redis for metrics tracking")
+		}
+	}
+
 	apps := []string{"PPXF", "STARLIGHT", "STECKMAP"}
 
 	appRunner := &watcher.Watcher{}

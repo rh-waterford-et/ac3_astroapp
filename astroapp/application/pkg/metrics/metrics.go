@@ -10,7 +10,6 @@ import (
 
 type MetricRecord struct {
 	EventID               string    `json:"event_id"`
-	BatchID               string    `json:"batch_id"`
 	QueueStartTime        time.Time `json:"queue_start_time"`         // Time of sending to the queue (fixed in Producer)
 	QueueFirstReceiveTime time.Time `json:"queue_first_receive_time"` // Time of receiving first batch from the queue (fixed in Receiver)
 	BatchEndTime          time.Time `json:"batch_end_time"`           // Time of end of processing (fixed in Receiver on producer side)
@@ -41,11 +40,10 @@ func (ms *MetricsStore) WithKeyPrefix(prefix string) *MetricsStore {
 
 // RecordMetric records a single metric for an event-batch combination
 func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) error {
-	key := ms.GetBatchKey(metric.EventID, metric.BatchID)
+	key := ms.GetBatchKey(metric.EventID)
 
 	values := map[string]interface{}{
 		"event_id":                 metric.EventID,
-		"batch_id":                 metric.BatchID,
 		"queue_start_time":         metric.QueueStartTime.Format(time.RFC3339Nano),
 		"queue_first_receive_time": metric.QueueFirstReceiveTime.Format(time.RFC3339Nano),
 		"batch_end_time":           metric.BatchEndTime.Format(time.RFC3339Nano),
@@ -67,8 +65,8 @@ func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) 
 }
 
 // GetMetric retrieves a metric for a specific event-batch combination
-func (ms *MetricsStore) GetMetric(ctx context.Context, eventID, batchID string) (*MetricRecord, error) {
-	key := ms.GetBatchKey(eventID, batchID)
+func (ms *MetricsStore) GetMetric(ctx context.Context, eventID string) (*MetricRecord, error) {
+	key := ms.GetBatchKey(eventID)
 	data, err := ms.redis.HGetAll(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get metric: %w", err)
@@ -106,34 +104,33 @@ func (ms *MetricsStore) GetEventMetrics(ctx context.Context, eventID string) ([]
 }
 
 // UpdateMetricField updates a specific field for an event-batch combination
-func (ms *MetricsStore) UpdateMetricField(ctx context.Context, eventID, batchID, field string, value time.Time) error {
-	key := ms.GetBatchKey(eventID, batchID)
+func (ms *MetricsStore) UpdateMetricField(ctx context.Context, eventID, field string, value time.Time) error {
+	key := ms.GetBatchKey(eventID)
 
 	// First check if the record exists
 	exists, err := ms.redis.Exists(ctx, key)
 	if err != nil {
 		return fmt.Errorf("failed to check if metric exists: %w", err)
 	}
-
-	if exists == 0 {
-		// Create new record with only the specified field
-		metric := &MetricRecord{
+	metric := &MetricRecord{
 			EventID: eventID,
-			BatchID: batchID,
 		}
-
+	if exists == 0 {
+		// Create new record with only the first batch
 		switch field {
 		case "queue_start_time":
 			metric.QueueStartTime = value
+			log.Printf("✓ Recorded batch start time %s for event %s", value, eventID)
 		case "queue_first_receive_time":
 			metric.QueueFirstReceiveTime = value
-		case "batch_end_time":
-			metric.BatchEndTime = value
 		}
 
 		return ms.RecordMetric(ctx, metric)
 	}
-
+	if field == "batch_end_time" {
+		metric.BatchEndTime = value
+		log.Printf("DEBUG: Updating metric end_time at %s for event %s", value, eventID)
+	}
 	// Update existing record
 	fieldValue := value.Format(time.RFC3339Nano)
 	err = ms.redis.HSet(ctx, key, field, fieldValue)
@@ -149,10 +146,9 @@ func (ms *MetricsStore) RecordMetricsBatch(ctx context.Context, metrics []*Metri
 	pipe := ms.redis.Pipeline()
 
 	for _, metric := range metrics {
-		key := ms.GetBatchKey(metric.EventID, metric.BatchID)
+		key := ms.GetBatchKey(metric.EventID)
 		values := map[string]interface{}{
 			"event_id":                 metric.EventID,
-			"batch_id":                 metric.BatchID,
 			"queue_start_time":         metric.QueueStartTime.Format(time.RFC3339Nano),
 			"queue_first_receive_time": metric.QueueFirstReceiveTime.Format(time.RFC3339Nano),
 			"batch_end_time":           metric.BatchEndTime.Format(time.RFC3339Nano),
@@ -173,7 +169,6 @@ func (ms *MetricsStore) parseMetric(data map[string]string) (*MetricRecord, erro
 	var err error
 
 	result.EventID = data["event_id"]
-	result.BatchID = data["batch_id"]
 
 	if data["queue_start_time"] != "" {
 		if result.QueueStartTime, err = time.Parse(time.RFC3339Nano, data["queue_start_time"]); err != nil {
@@ -196,8 +191,8 @@ func (ms *MetricsStore) parseMetric(data map[string]string) (*MetricRecord, erro
 	return &result, nil
 }
 
-func (ms *MetricsStore) GetBatchKey(eventID, batchID string) string {
-	return fmt.Sprintf("%s:%s:%s", ms.keyPrefix, eventID, batchID)
+func (ms *MetricsStore) GetBatchKey(eventID string) string {
+	return fmt.Sprintf("%s:%s", ms.keyPrefix, eventID)
 }
 
 func (ms *MetricsStore) getEventPattern(eventID string) string {
@@ -210,7 +205,7 @@ type EventSummary struct {
 	EventStartTime      time.Time     `json:"event_start_time"`      // Earliest queue_start_time across all batches
 	ProcessingStartTime time.Time     `json:"processing_start_time"` // Earliest queue_first_receive_time across all batches
 	EventEndTime        time.Time     `json:"event_end_time"`        // Latest batch_end_time across all batches
-	TotalBatches        int           `json:"total_batches"`         // Total number of batches processed
+	TotalFiles          int           `json:"total_files"`           // Total number of files processed
 	TotalDuration       time.Duration `json:"total_duration"`        // EventEndTime - EventStartTime
 	QueueDelay          time.Duration `json:"queue_delay"`           // ProcessingStartTime - EventStartTime
 	ProcessingDuration  time.Duration `json:"processing_duration"`   // EventEndTime - ProcessingStartTime
@@ -229,8 +224,8 @@ func (ms *MetricsStore) AggregateEventMetrics(ctx context.Context, eventID strin
 	}
 
 	summary := &EventSummary{
-		EventID:      eventID,
-		TotalBatches: len(batchMetrics),
+		EventID:    eventID,
+		TotalFiles: len(batchMetrics),
 	}
 
 	// Initialize with first batch
@@ -285,7 +280,7 @@ func (ms *MetricsStore) StoreEventSummary(ctx context.Context, summary *EventSum
 		"event_start_time":       summary.EventStartTime.Format(time.RFC3339Nano),
 		"processing_start_time":  summary.ProcessingStartTime.Format(time.RFC3339Nano),
 		"event_end_time":         summary.EventEndTime.Format(time.RFC3339Nano),
-		"total_batches":          summary.TotalBatches,
+		"total_files":            summary.TotalFiles,
 		"total_duration_ms":      summary.TotalDuration.Milliseconds(),
 		"queue_delay_ms":         summary.QueueDelay.Milliseconds(),
 		"processing_duration_ms": summary.ProcessingDuration.Milliseconds(),
@@ -348,8 +343,8 @@ func (ms *MetricsStore) GetEventSummary(ctx context.Context, eventID string) (*E
 	}
 
 	// Parse other fields
-	if data["total_batches"] != "" {
-		fmt.Sscanf(data["total_batches"], "%d", &summary.TotalBatches)
+	if data["total_files"] != "" {
+		fmt.Sscanf(data["total_files"], "%d", &summary.TotalFiles)
 	}
 
 	if data["total_duration_ms"] != "" {
@@ -496,7 +491,7 @@ func (as *AggregationService) AggregateAllEvents(ctx context.Context) error {
 
 		log.Printf("✅ Aggregated event %s: %d batches, total: %s, queue delay: %s, processing: %s",
 			eventID,
-			summary.TotalBatches,
+			summary.TotalFiles,
 			summary.TotalDuration.Round(time.Millisecond),
 			summary.QueueDelay.Round(time.Millisecond),
 			summary.ProcessingDuration.Round(time.Millisecond))
