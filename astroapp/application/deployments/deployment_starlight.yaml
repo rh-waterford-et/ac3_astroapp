@@ -101,7 +101,7 @@ spec:
           value: ""
         ports:
         - containerPort: 5672  
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/bcapper30/uc3-backend:latest
         name: watcher-processor
         workingDir: /processing_data/
         command: ["/usr/bin/ucm"]

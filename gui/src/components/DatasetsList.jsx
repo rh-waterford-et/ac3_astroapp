@@ -74,14 +74,26 @@ function DatasetsList({ processorType = 'starlight' }) {
   const currentDatasets = useRef([]);
   const currentInputFiles = useRef([]);
   const currentOutputFiles = useRef([]);
+  
+  // Background request tracking to prevent overlapping
+  const backgroundRequestInProgress = useRef(false);
+  const lastRefreshTime = useRef(0);
 
   // Function to load datasets with optional silent mode
   const loadDatasets = useCallback(async (forceAutoSelect = false, silent = false) => {
     console.log('Loading datasets for processor:', processorType, 'forceAutoSelect:', forceAutoSelect, 'silent:', silent);
     
+    // For silent/background requests, check if one is already in progress
+    if (silent && backgroundRequestInProgress.current) {
+      console.log('Background refresh already in progress, skipping datasets load');
+      return;
+    }
+    
     if (!silent) {
       setLoading(true);
       setError(null);
+    } else {
+      backgroundRequestInProgress.current = true;
     }
     
     try {
@@ -141,6 +153,8 @@ function DatasetsList({ processorType = 'starlight' }) {
     } finally {
       if (!silent) {
         setLoading(false);
+      } else {
+        backgroundRequestInProgress.current = false;
       }
     }
   }, [processorType]);
@@ -253,9 +267,17 @@ function DatasetsList({ processorType = 'starlight' }) {
     
     console.log('Loading all files for dataset:', datasetName, 'silent:', silent);
     
+    // For silent/background requests, check if one is already in progress
+    if (silent && backgroundRequestInProgress.current) {
+      console.log('Background refresh already in progress, skipping files load');
+      return;
+    }
+    
     if (!silent) {
       setLoading(true);
       setError(null);
+    } else {
+      backgroundRequestInProgress.current = true;
     }
     
     try {
@@ -333,6 +355,9 @@ function DatasetsList({ processorType = 'starlight' }) {
     } finally {
       if (!silent) {
         setLoading(false);
+      } else {
+        backgroundRequestInProgress.current = false;
+        lastRefreshTime.current = Date.now();
       }
     }
   }, [processorType]);
@@ -375,20 +400,46 @@ function DatasetsList({ processorType = 'starlight' }) {
     }
   }, [selectedDataset, loadAllFiles]);
 
-  // Background auto-refresh every 5 seconds (silent)
+  // Adaptive background auto-refresh with debouncing
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (!loading) {
-        console.log('Background refresh...');
-        loadDatasets(false, true); // forceAutoSelect=false, silent=true
-        if (selectedDataset) {
-          loadAllFiles(selectedDataset, true); // silent=true
-        }
+    const getRefreshInterval = () => {
+      const totalFiles = inputFiles.length + outputFiles.length;
+      
+      // Adaptive refresh rate based on file count
+      if (totalFiles > 300) {
+        return 30000; // 30 seconds for large datasets (like PPXF with 500+ files)
+      } else if (totalFiles > 100) {
+        return 20000; // 20 seconds for medium datasets
+      } else if (totalFiles > 50) {
+        return 15000; // 15 seconds for smaller datasets
+      } else {
+        return 10000; // 10 seconds for small datasets (like Starlight with ~50 files)
       }
-    }, 5000); // 5 second interval for dynamic updates
+    };
+
+    const interval = setInterval(() => {
+      // Check if background request is already in progress
+      if (backgroundRequestInProgress.current) {
+        console.log('Background refresh skipped - request already in progress');
+        return;
+      }
+      
+      // Check minimum time between refreshes (prevent too frequent calls)
+      const timeSinceLastRefresh = Date.now() - lastRefreshTime.current;
+      if (timeSinceLastRefresh < 8000) { // Minimum 8 seconds between refreshes
+        console.log('Background refresh skipped - too soon since last refresh');
+        return;
+      }
+      
+      console.log('Background refresh...');
+      loadDatasets(false, true); // forceAutoSelect=false, silent=true
+      if (selectedDataset) {
+        loadAllFiles(selectedDataset, true); // silent=true
+      }
+    }, getRefreshInterval());
 
     return () => clearInterval(interval);
-  }, [loading, selectedDataset, loadDatasets, loadAllFiles]);
+  }, [selectedDataset, inputFiles.length, outputFiles.length, loadDatasets, loadAllFiles]);
 
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
