@@ -53,15 +53,28 @@ type BinaryProducer struct {
 }
 
 func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event, utils common.UtilsInterface, side string, eventID string, redisClient *metrics.RedisClient) *Producer {
+	// Initialize sender with Redis client
+	var senderInstance sender.EventSender
+	if redisClient != nil {
+		senderInstance = sender.NewRabbitMQSender(nil, utils, redisClient)
+	} else {
+		senderInstance = &sender.RabbitMQSender{
+			Queue:       nil,
+			Utils:       utils,
+			RedisClient: nil,
+		}
+	}
+
 	return &Producer{
-		BatchSize:  batchSize,
-		Batch:      make([]api.DataFile, 0, batchSize),
-		EventQueue: eventQueue,
-		FileSource: fileSource,
-		Utils:      utils,
-		Side:       side,
-		EventID:    eventID,	
+		BatchSize:   batchSize,
+		Batch:       make([]api.DataFile, 0, batchSize),
+		EventQueue:  eventQueue,
+		FileSource:  fileSource,
+		Utils:       utils,
+		Side:        side,
+		EventID:     eventID,
 		RedisClient: redisClient,
+		Sender:      senderInstance,
 	}
 }
 
