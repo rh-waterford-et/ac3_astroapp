@@ -91,8 +91,8 @@ type BinaryMessageBody struct {
 }
 
 type Event struct {
-	ID    string     `json:"ID"`
-	Files []DataFile `json:"Files"`
+	ID      string     `json:"ID"`
+	Files   []DataFile `json:"Files"`
 }
 
 // BinaryEvent for handling binary files

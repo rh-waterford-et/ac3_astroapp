@@ -23,6 +23,10 @@ oc apply -f rolebinding.yaml
 echo "🐰 Deploying RabbitMQ..."
 oc apply -f deployment_rabbitmq.yaml
 
+# Deploy Redis
+echo "🔴 Deploying Redis..."
+oc apply -f deployment_redis.yaml
+
 # Deploy backend services
 echo "⚙️ Deploying backend..."
 oc apply -f deployment.yaml

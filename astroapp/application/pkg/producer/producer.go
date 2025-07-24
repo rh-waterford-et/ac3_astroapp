@@ -11,6 +11,7 @@ import (
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/app"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/metrics"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/sender"
 )
@@ -29,13 +30,15 @@ type ProducerInterface interface {
 }
 
 type Producer struct {
-	BatchSize  int
-	Batch      []api.DataFile
-	EventQueue chan api.Event
-	FileSource FileSource
-	Utils      common.UtilsInterface
-	Side       string
-	EventID    string
+	BatchSize   int
+	Batch       []api.DataFile
+	EventQueue  chan api.Event
+	FileSource  FileSource
+	Utils       common.UtilsInterface
+	Side        string
+	EventID     string
+	RedisClient *metrics.RedisClient
+	Sender      sender.EventSender
 }
 
 // BinaryProducer handles binary files for PPXF
@@ -49,7 +52,7 @@ type BinaryProducer struct {
 	EventID          string
 }
 
-func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event, utils common.UtilsInterface, side string) *Producer {
+func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event, utils common.UtilsInterface, side string, eventID string, redisClient *metrics.RedisClient) *Producer {
 	return &Producer{
 		BatchSize:  batchSize,
 		Batch:      make([]api.DataFile, 0, batchSize),
@@ -57,11 +60,12 @@ func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event
 		FileSource: fileSource,
 		Utils:      utils,
 		Side:       side,
-		EventID:    utils.GenerateUUID(),
+		EventID:    eventID,	
+		RedisClient: redisClient,
 	}
 }
 
-func NewBinaryProducer(batchSize int, fileSource FileSource, eventQueue chan api.BinaryEvent, utils common.UtilsInterface, side string) *BinaryProducer {
+func NewBinaryProducer(batchSize int, fileSource FileSource, eventQueue chan api.BinaryEvent, utils common.UtilsInterface, side string, eventID string) *BinaryProducer {
 	return &BinaryProducer{
 		BatchSize:        batchSize,
 		BinaryBatch:      make([]api.BinaryDataFile, 0, batchSize),
@@ -69,20 +73,19 @@ func NewBinaryProducer(batchSize int, fileSource FileSource, eventQueue chan api
 		FileSource:       fileSource,
 		Utils:            utils,
 		Side:             side,
-		EventID:          utils.GenerateUUID(),
+		EventID:          eventID,
 	}
 }
 
 var starlight app.StarlightInterface = &app.Starlight{
 	Utils: &common.Utils{},
 }
-var send sender.EventSender = &sender.RabbitMQSender{}
 
 func (p *Producer) CreateEvent(appName string, side string, q queue.QueueInterface) {
 	go func() {
 		for event := range p.EventQueue {
 			log.Printf("Sending event (ID: %s) with %d files\n", p.EventID, len(event.Files))
-			send.SendEvent(event, appName, side, q)
+			p.Sender.SendEvent(event, appName, side, q)
 		}
 	}()
 
@@ -106,33 +109,9 @@ func (bp *BinaryProducer) AddBinaryFile(file api.BinaryDataFile, appName string)
 
 func (p *Producer) SendBatch(appName string) {
 	if len(p.Batch) > 0 {
-		// For STARLIGHT producer side, check if we have actual spectrum files, not just placeholder files
-		if appName == "STARLIGHT" && p.Side == "producer" {
-			// Count non-placeholder files in the batch
-			spectrumFileCount := 0
-			for _, file := range p.Batch {
-				if !strings.Contains(file.Name, ".batch_placeholder") &&
-					!strings.Contains(file.Name, ".dataset_placeholder") &&
-					!strings.HasSuffix(file.Name, ".in") {
-					spectrumFileCount++
-				}
-			}
-
-			// Only proceed if we have actual spectrum files
-			if spectrumFileCount == 0 {
-				log.Printf("Skipping batch with only placeholder files - no spectrum files found")
-				// Still delete the processed files (move placeholder to processed)
-				p.DeleteProcessedFiles()
-				// Clear the batch
-				p.Batch = make([]api.DataFile, 0, p.BatchSize)
-				return
-			}
-		}
-
 		// Update the .in file before sending the batch
 		if appName == "STARLIGHT" && p.Side == "producer" {
 			inFileName, content := starlight.UpdateInFile(p.Batch)
-			println(inFileName)
 			println(content)
 			if inFileName != "" && content != "" {
 				p.Batch = append(p.Batch, api.DataFile{Name: inFileName, Content: content})
@@ -162,9 +141,9 @@ func (p *Producer) DeleteProcessedFiles() {
 		err := p.FileSource.DeleteFile(file.Name)
 		if err != nil {
 			log.Printf("Error deleting file %s: %v\n", file.Name, err)
-		} else {
+		} /* else {
 			log.Printf("Successfully moved file %s to processed dir", file.Name)
-		}
+		} */
 	}
 }
 
@@ -180,6 +159,11 @@ func (p *Producer) ProcessFiles(appName string) {
 		content, err := p.FileSource.ReadFile(filename)
 		if err != nil {
 			log.Printf("Error reading file %s: %v\n", filename, err)
+			continue
+		}
+		if strings.Contains(filename, ".batch_placeholder") ||
+			strings.Contains(filename, ".dataset_placeholder") ||
+			strings.Contains(filename, "mask.txt") {
 			continue
 		}
 		p.AddFile(api.DataFile{Name: filename, Content: string(content)}, appName)

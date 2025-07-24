@@ -121,7 +121,7 @@ func (sb *S3Bucket) GetBatchDirectories(appName string) ([]string, error) {
 		prefix = prefix + "/"
 	}
 
-	log.Printf("DEBUG: Searching for batch directories with prefix: %s in bucket: %s", prefix, sb.BucketName)
+	//log.Printf("DEBUG: Searching for batch directories with prefix: %s in bucket: %s", prefix, sb.BucketName)
 
 	resp, err := sb.S3Client.ListObjectsV2(&s3.ListObjectsV2Input{
 		Bucket:    aws.String(sb.BucketName),
@@ -133,18 +133,7 @@ func (sb *S3Bucket) GetBatchDirectories(appName string) ([]string, error) {
 		return nil, fmt.Errorf("error listing batch directories: %v", err)
 	}
 
-	log.Printf("DEBUG: ListObjectsV2 returned %d common prefixes and %d contents", len(resp.CommonPrefixes), len(resp.Contents))
-
-	// Log all common prefixes found
-	for i, commonPrefix := range resp.CommonPrefixes {
-		log.Printf("DEBUG: CommonPrefix[%d]: %s", i, *commonPrefix.Prefix)
-	}
-
-	// Log all contents found
-	for i, content := range resp.Contents {
-		log.Printf("DEBUG: Content[%d]: %s (size: %d)", i, *content.Key, *content.Size)
-	}
-
+	
 	// Use a map to collect unique batch directories
 	batchDirMap := make(map[string]bool)
 
@@ -184,7 +173,7 @@ func (sb *S3Bucket) GetBatchDirectories(appName string) ([]string, error) {
 		batchDirs = append(batchDirs, batchDir)
 	}
 
-	log.Printf("Found %d batch directories for %s: %v", len(batchDirs), appName, batchDirs)
+	//log.Printf("Found %d batch directories for %s: %v", len(batchDirs), appName, batchDirs)
 	return batchDirs, nil
 }
 
@@ -230,7 +219,7 @@ func (sb *S3Bucket) UploadFileToBucket(folderPath string, fileName string, conte
 		return fmt.Errorf("failed to upload file to S3: %v", err)
 	}
 
-	log.Printf("Successfully uploaded content to s3://%s/%s", sb.BucketName, fullKey)
+	//log.Printf("Successfully uploaded content to s3://%s/%s", sb.BucketName, fullKey)
 	return nil
 }
 

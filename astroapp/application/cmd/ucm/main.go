@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/metrics"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/receiver"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
@@ -88,7 +89,20 @@ func LaunchReceiver(side string) error {
 		log.Fatalf("Failed to create RabbitMQ connection: %v", err)
 	}
 	s3bucket := s3bucket.NewS3Bucket()
-	receiver := receiver.NewReceiver(queue, utils, s3bucket)
+
+	// Initialize Redis client
+	var redisClient *metrics.RedisClient
+	if os.Getenv("REDIS_HOST") != "" {
+		redisClient, err = metrics.NewRedisConnection()
+		if err != nil {
+			log.Printf("Failed to connect to Redis: %v", err)
+			log.Printf("Continuing without Redis metrics tracking")
+		} else {
+			log.Printf("Connected to Redis for metrics tracking")
+		}
+	}
+
+	receiver := receiver.NewReceiver(queue, utils, s3bucket, redisClient)
 	receiver.Start(side)
 
 	return nil
@@ -111,6 +125,18 @@ func LaunchProducer(side string) error {
 		if err != nil {
 			log.Fatalf("Failed to ensure bucket directories: %v", err)
 		}
+
+	}
+	// Initialize Redis client for producer if needed
+	var redis *metrics.RedisClient
+	if os.Getenv("REDIS_HOST") != "" {
+		redis, err = metrics.NewRedisConnection()
+		if err != nil {
+			log.Printf("Failed to connect to Redis: %v", err)
+			log.Printf("Continuing without Redis metrics tracking")
+		} else {
+			log.Printf("Connected to Redis for metrics tracking")
+		}
 	}
 
 	apps := []string{"PPXF", "STARLIGHT", "STECKMAP"}
@@ -118,7 +144,7 @@ func LaunchProducer(side string) error {
 	appRunner := &watcher.Watcher{}
 	for {
 		for _, app := range apps {
-			appRunner.Run(app, side, utils, queue)
+			appRunner.Run(app, side, utils, queue, redis)
 		}
 		log.Println("Checking for new files...")
 		time.Sleep(10 * time.Second)
