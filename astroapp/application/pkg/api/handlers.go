@@ -696,10 +696,6 @@ func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Requ
 		// GetS3Objects returns just the filename (without the full path)
 		filename := object
 
-		// Skip placeholder files
-		if filename == ".batch_placeholder" || filename == ".dataset_placeholder" {
-			continue
-		}
 
 		// Get file metadata from S3
 		fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
@@ -825,10 +821,6 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 		// GetS3Objects returns just the filename (without the full path)
 		filename := object
 
-		// Skip placeholder files
-		if filename == ".batch_placeholder" || filename == ".dataset_placeholder" {
-			continue
-		}
 
 		// Get file metadata from S3
 		fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)

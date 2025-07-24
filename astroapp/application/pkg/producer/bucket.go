@@ -57,11 +57,6 @@ func (s *S3FileSource) DeleteFile(filename string) error {
 	s3Client := s.Bucket.GetS3Client()
 	bucketName := s.Bucket.GetBucketName()
 
-	// Skip moving placeholder files - they should stay in input directory to maintain batch structure
-	if strings.Contains(filename, ".batch_placeholder") || strings.Contains(filename, ".dataset_placeholder") {
-		log.Printf("Skipping placeholder file, keeping in input directory: %s", filename)
-		return nil
-	}
 
 	// Construct source and destination keys
 	sourceKey := filepath.Join(s.InputDir, filename)

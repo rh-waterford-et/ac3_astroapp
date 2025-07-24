@@ -63,10 +63,6 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, 
                 if length > 0 {
                         //      log.Printf("Found %d files in %s input directory across all batches: %v", length, appName, files)
                         for _, file := range files {
-                                if strings.Contains(file, ".batch_placeholder") ||
-                                        strings.Contains(file, ".dataset_placeholder") {
-                                        continue
-                                }
                                 parts := strings.Split(file, "/")
                                 if len(parts) >= 1 {
                                         batchName := parts[0]

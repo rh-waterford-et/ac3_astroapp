@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/app"
@@ -172,11 +171,6 @@ func (p *Producer) ProcessFiles(appName string) {
 		content, err := p.FileSource.ReadFile(filename)
 		if err != nil {
 			log.Printf("Error reading file %s: %v\n", filename, err)
-			continue
-		}
-		if strings.Contains(filename, ".batch_placeholder") ||
-			strings.Contains(filename, ".dataset_placeholder") ||
-			strings.Contains(filename, "mask.txt") {
 			continue
 		}
 		p.AddFile(api.DataFile{Name: filename, Content: string(content)}, appName)

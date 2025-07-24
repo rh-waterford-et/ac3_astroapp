@@ -58,13 +58,7 @@ func (s *Starlight) UpdateInFile(batch []api.DataFile) (string, string) {
 			// Replace the input file name in the .in file
 			res := strings.Split(scanner.Text(), "  ")
 			for j := 0; j < len(batch); j++ {
-				// Skip placeholder files and non-spectrum files
-				if strings.Contains(batch[j].Name, ".batch_placeholder") ||
-					strings.Contains(batch[j].Name, ".dataset_placeholder") ||
-					strings.HasSuffix(batch[j].Name, ".in") {
-					log.Printf("Skipping placeholder/config file: %s", batch[j].Name)
-					continue
-				}
+
 
 				// Use only the filename (basename) without directory structure
 				filename := filepath.Base(batch[j].Name)
