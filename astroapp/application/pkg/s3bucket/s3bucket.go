@@ -31,6 +31,7 @@ type S3BucketInterface interface {
 	GetObjectMetadata(objectKey string) (*ObjectMetadata, error)
 	DeleteDirectory(directoryPath string) error
 	DeleteFile(fileKey string) error
+	DownloadFile(objectKey string) ([]byte, error)
 }
 
 type S3Watcher struct {
@@ -133,7 +134,6 @@ func (sb *S3Bucket) GetBatchDirectories(appName string) ([]string, error) {
 		return nil, fmt.Errorf("error listing batch directories: %v", err)
 	}
 
-	
 	// Use a map to collect unique batch directories
 	batchDirMap := make(map[string]bool)
 
@@ -324,4 +324,25 @@ func (sb *S3Bucket) DeleteFile(fileKey string) error {
 	}
 
 	return nil
+}
+
+func (sb *S3Bucket) DownloadFile(objectKey string) ([]byte, error) {
+	log.Printf("S3 DownloadFile: Attempting to download key '%s' from bucket '%s'", objectKey, sb.BucketName)
+
+	result, err := sb.S3Client.GetObject(&s3.GetObjectInput{
+		Bucket: aws.String(sb.BucketName),
+		Key:    aws.String(objectKey),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to download file %s: %v", objectKey, err)
+	}
+	defer result.Body.Close()
+
+	content := bytes.Buffer{}
+	_, err = content.ReadFrom(result.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file content: %v", err)
+	}
+
+	return content.Bytes(), nil
 }

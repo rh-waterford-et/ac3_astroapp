@@ -12,6 +12,9 @@ import NGC7025_age from '../assets/NGC7025_age.jpeg';
 import NGC7025_age_mass_weighted from '../assets/NGC7025_age_mass_weighted.jpg';
 import NGC7025_metallicity from '../assets/NGC7025_metallicity.jpg';
 
+// Import API functions
+import { getDatasetOutputFiles } from '../services/api.js';
+
 const Gallery = ({ aladinInstance }) => {
   useEffect(() => {
     if (!aladinInstance) return;
@@ -201,11 +204,48 @@ const displayImageFromNavigation = (item) => {
   const transparencySlider = document.getElementById('transparency-slider');
   
   if (modalImage && modalTitle && modalObject) {
-    // Get image source from the item
+    // Check if this is a PDF item or regular image item
+    const isPdfItem = item.classList.contains('pdf-item');
     const img = item.querySelector('.thumbnail-image');
-    if (img) {
+    
+    if (isPdfItem) {
+      // For PDF items, get the PDF URL and title
+      const pdfKey = item.dataset.pdfKey;
+      const cellNumber = item.dataset.cellNumber;
+      const objectName = item.dataset.objectName || 'Unknown';
+      const label = item.querySelector('.gallery-label');
+      
+      const pdfUrl = `/api/files/download?key=${encodeURIComponent(pdfKey)}#zoom=100&toolbar=0&navpanes=0`;
+      const title = label ? label.textContent : `Cell ${cellNumber} H4`;
+      
+      // Call openImageModal to handle PDF display properly (skip navigation setup)
+      openImageModal(pdfUrl, title, objectName, item, true, true);
+      
+      // Update navigation buttons and status
+      updateNavigationButtons();
+      
+      // Update status
+      const statusElement = document.getElementById('current-status');
+      if (statusElement) {
+        statusElement.textContent = `Viewing ${objectName} H4 PDF: ${title} (${currentImageIndex + 1}/${currentGalleryItems.length})`;
+      }
+      
+      console.log(`🔄 Navigated to PDF ${currentImageIndex + 1}/${currentGalleryItems.length}: ${title}`);
+      return; // Exit early since openImageModal handles everything
+    } else if (img) {
+      // For regular images
       modalImage.src = img.src;
       modalImage.alt = img.alt;
+      
+      // Clean up any existing PDF iframe
+      const modalImageContainer = modalImage.parentElement;
+      const existingIframe = modalImageContainer.querySelector('.pdf-iframe');
+      if (existingIframe) {
+        existingIframe.remove();
+      }
+      
+      // Ensure image is visible
+      modalImage.style.display = 'block';
       
       // Get title and object from the item
       const label = item.querySelector('.gallery-label');
@@ -237,18 +277,22 @@ const displayImageFromNavigation = (item) => {
       }
       
       console.log(`🔄 Navigated to image ${currentImageIndex + 1}/${currentGalleryItems.length}: ${modalTitle.textContent}`);
+    } else {
+      console.log('⚠️ Could not find image or PDF data for navigation item');
     }
   }
 };
 
 /**
- * Open image modal with full-size image
- * @param {string} imageSrc - The image source
+ * Open image modal with full-size image or PDF
+ * @param {string} imageSrc - The image source or PDF URL
  * @param {string} title - The image title
  * @param {string} objectName - The object name
  * @param {HTMLElement} clickedItem - The gallery item that was clicked (optional)
+ * @param {boolean} isPdf - Whether the content is a PDF (optional)
+ * @param {boolean} skipNavigationSetup - Whether to skip setting up navigation (for navigation calls)
  */
-const openImageModal = (imageSrc, title, objectName, clickedItem = null) => {
+const openImageModal = (imageSrc, title, objectName, clickedItem = null, isPdf = false, skipNavigationSetup = false) => {
   const modal = document.getElementById('image-modal');
   const modalImage = document.getElementById('modal-image');
   const modalTitle = document.getElementById('modal-title');
@@ -258,13 +302,53 @@ const openImageModal = (imageSrc, title, objectName, clickedItem = null) => {
   const transparencySlider = document.getElementById('transparency-slider');
   
   if (modal && modalImage && modalTitle && modalObject && modalRnd) {
-    modalImage.src = imageSrc;
-    modalImage.alt = `${title} for ${objectName}`;
+    if (isPdf) {
+      // For PDFs, create an iframe element and hide the image
+      modalImage.style.display = 'none';
+      
+      // Clean up any existing iframe
+      const modalImageContainer = modalImage.parentElement;
+      const existingIframe = modalImageContainer.querySelector('.pdf-iframe');
+      if (existingIframe) {
+        existingIframe.remove();
+      }
+      
+      // Create new iframe for PDF
+      const iframe = document.createElement('iframe');
+      iframe.className = 'pdf-iframe';
+      iframe.src = imageSrc;
+      iframe.style.cssText = 'width: 100%; height: 100%; border: none; border-radius: 4px;';
+      iframe.title = `${title} for ${objectName}`;
+      
+      // Add load and error handlers for debugging
+      iframe.onload = () => {
+        console.log(`✅ PDF iframe loaded successfully: ${title}`);
+      };
+      iframe.onerror = (error) => {
+        console.error(`❌ PDF iframe failed to load: ${title}`, error);
+      };
+      
+      modalImageContainer.appendChild(iframe);
+    } else {
+      // For images, use the normal img element and clean up any PDF iframes
+      const modalImageContainer = modalImage.parentElement;
+      const existingIframe = modalImageContainer.querySelector('.pdf-iframe');
+      if (existingIframe) {
+        existingIframe.remove();
+      }
+      
+      modalImage.style.display = 'block';
+      modalImage.src = imageSrc;
+      modalImage.alt = `${title} for ${objectName}`;
+    }
+    
     modalTitle.textContent = title;
     modalObject.textContent = objectName;
     
-    // Set up navigation state
-    setupNavigationState(clickedItem, imageSrc);
+    // Set up navigation state (skip if already navigating)
+    if (!skipNavigationSetup) {
+      setupNavigationState(clickedItem, imageSrc);
+    }
     
     // Reset transparency to default (only affect body)
     if (transparencySlider && modalBody) {
@@ -302,22 +386,32 @@ const openImageModal = (imageSrc, title, objectName, clickedItem = null) => {
  * @param {string} imageSrc - The image source to match
  */
 const setupNavigationState = (clickedItem, imageSrc) => {
-  // Get all gallery items that have actual images (not placeholders)
+  // Get all gallery items that have actual content (images or PDFs, not placeholders)
   const galleryItems = document.getElementById('gallery-items');
   if (galleryItems) {
     currentGalleryItems = Array.from(galleryItems.querySelectorAll('.gallery-item')).filter(item => {
       const img = item.querySelector('.thumbnail-image');
-      return img && img.src && !item.classList.contains('placeholder-item');
+      const isPdfItem = item.classList.contains('pdf-item');
+      // Include items with images OR PDF items (which don't have .thumbnail-image)
+      return (img && img.src && !item.classList.contains('placeholder-item')) || isPdfItem;
     });
     
     // Find the current image index
     if (clickedItem) {
       currentImageIndex = currentGalleryItems.indexOf(clickedItem);
     } else {
-      // Fallback: find by image source
+      // Fallback: find by image source (for regular images) or by PDF key (for PDFs)
       currentImageIndex = currentGalleryItems.findIndex(item => {
         const img = item.querySelector('.thumbnail-image');
-        return img && img.src === imageSrc;
+        if (img && img.src === imageSrc) {
+          return true;
+        }
+        // For PDFs, check if the imageSrc contains the PDF key
+        const pdfKey = item.dataset.pdfKey;
+        if (pdfKey && imageSrc.includes(encodeURIComponent(pdfKey))) {
+          return true;
+        }
+        return false;
       });
     }
     
@@ -357,11 +451,19 @@ const closeImageModal = () => {
     // Clear image source and reset position/zoom
     if (modalImage) {
       modalImage.src = '';
+      modalImage.style.display = 'block'; // Ensure image is visible for next use
       modalImage.style.transform = 'translate(0, 0) scale(1)';
       modalImage._currentZoom = 1;
       modalImage._currentX = 0;
       modalImage._currentY = 0;
       removeInteractionListeners(modalImage);
+      
+      // Clean up any PDF iframe
+      const modalImageContainer = modalImage.parentElement;
+      const existingIframe = modalImageContainer.querySelector('.pdf-iframe');
+      if (existingIframe) {
+        existingIframe.remove();
+      }
     }
     
     // Clean up navigation state
@@ -592,9 +694,18 @@ const processImageLoading = async (mapTypes, normalizedName, objectName, imageMa
     const checkbox = document.getElementById(mapType.checkboxId);
     
     if (checkbox && checkbox.checked) {
-      const imageFound = await tryLoadObjectImage(mapType, objectName, imageMap);
-      if (imageFound) {
-        imagesLoaded++;
+      // Special handling for H4: load dynamic PDF files from S3
+      if (mapType.key === 'h4') {
+        const pdfsLoaded = await tryLoadPpxfPdfFiles(objectName);
+        if (pdfsLoaded > 0) {
+          imagesLoaded += pdfsLoaded;
+        }
+      } else {
+        // Use existing static image logic for other map types
+        const imageFound = await tryLoadObjectImage(mapType, objectName, imageMap);
+        if (imageFound) {
+          imagesLoaded++;
+        }
       }
     }
   }
@@ -609,7 +720,15 @@ const processImageLoading = async (mapTypes, normalizedName, objectName, imageMa
  * @param {string} objectName - Original object name
  */
 const handleLoadingStatus = (imagesLoaded, mapTypes, objectName) => {
-  if (imagesLoaded === 0) {
+  // Hide loading indicator
+  hideGalleryLoader();
+  
+  // Check if there are already items in the gallery (like PDFs)
+  const galleryItems = document.getElementById('gallery-items');
+  const existingItems = galleryItems.querySelectorAll('.gallery-item');
+  const totalItems = imagesLoaded + existingItems.length;
+  
+  if (totalItems === 0) {
     const anyChecked = mapTypes.some(mapType => {
       const checkbox = document.getElementById(mapType.checkboxId);
       return checkbox && checkbox.checked;
@@ -621,11 +740,11 @@ const handleLoadingStatus = (imagesLoaded, mapTypes, objectName) => {
       showNoImagesMessage(objectName);
     }
   } else {
-    console.log(`Loaded ${imagesLoaded} images for ${objectName}`);
+    console.log(`Loaded ${totalItems} total items for ${objectName} (${imagesLoaded} static images + ${existingItems.length} existing items)`);
     
     const statusElement = document.getElementById('current-status');
     if (statusElement) {
-      statusElement.textContent = `Loaded ${imagesLoaded} maps for ${objectName} - click on an image to select`;
+      statusElement.textContent = `Loaded ${totalItems} maps for ${objectName} - click on an image to select`;
     }
   }
 };
@@ -652,13 +771,16 @@ const loadObjectImages = async (objectName) => {
   }
   
   // Clear existing items completely
-  const existingItems = galleryItems.querySelectorAll('.gallery-item, .no-images-message');
+  const existingItems = galleryItems.querySelectorAll('.gallery-item, .no-images-message, .gallery-loader');
   console.log(`🧹 Clearing ${existingItems.length} existing items`);
   existingItems.forEach(item => item.remove());
   
   // Also clear any placeholder items that might have been added
   galleryItems.innerHTML = '';
   console.log(`🧹 Gallery cleared completely`);
+  
+  // Show loading indicator
+  showGalleryLoader(galleryItems, objectName);
   
   // Normalize object name for file naming (remove spaces, make lowercase)
   const normalizedName = objectName.replace(/\s+/g, '').toUpperCase();
@@ -1065,6 +1187,268 @@ const showEmptyGalleryMessage = () => {
       <p>Select at least 1 option from the sidebar and navigate to a celestial object to view maps</p>
     `;
     galleryItems.appendChild(newEmptyMessage);
+  }
+};
+
+/**
+ * Try to load PPXF PDF files for H4 map type
+ * @param {string} objectName - The original object name
+ * @returns {Promise<number>} - Number of PDFs loaded
+ */
+const tryLoadPpxfPdfFiles = async (objectName) => {
+  console.log(`🔄 Loading H4 PDF files for: ${objectName}`);
+  const galleryItems = document.getElementById('gallery-items');
+  const emptyMessage = document.getElementById('empty-gallery-message');
+  
+  // Hide empty message if it exists
+  if (emptyMessage) {
+    emptyMessage.style.display = 'none';
+  }
+  
+  // Clear existing H4 items
+  const existingH4Items = galleryItems.querySelectorAll('.gallery-item[data-map-type="h4"]');
+  existingH4Items.forEach(item => item.remove());
+  console.log(`🧹 Cleared existing H4 items for ${objectName}`);
+  
+  // Normalize object name for S3 folder lookup (case-insensitive)
+  // Convert "ngc7025" or "NGC 7025" to "NGC7025" to match S3 structure
+  const normalizedObjectName = objectName
+    .toUpperCase()
+    .replace(/\s+/g, '')  // Remove spaces
+    .replace(/^NGC(\d+)$/, 'NGC$1'); // Ensure NGC format
+  
+  console.log(`📁 Normalized object name: "${objectName}" → "${normalizedObjectName}"`);
+  
+  try {
+    // Get the list of available output files from PPXF for this batch
+    const outputFiles = await getDatasetOutputFiles(normalizedObjectName, 'ppxf');
+    console.log(`📁 Found ${outputFiles.length} total output files for ${normalizedObjectName} in PPXF`);
+    
+    // Filter for PDF files that are in cell subdirectories (contain "/")
+    const pdfFiles = outputFiles.filter(file => 
+      file.name.includes('/') && 
+      file.name.toLowerCase().endsWith('.pdf')
+    );
+    console.log(`📄 Found ${pdfFiles.length} PDF files in cell directories:`, pdfFiles.map(f => f.name));
+    
+    // Sort PDF files by cell number (numeric sort, not string sort)
+    pdfFiles.sort((a, b) => {
+      const cellA = parseInt(a.name.split('/')[0]);
+      const cellB = parseInt(b.name.split('/')[0]);
+      return cellA - cellB;
+    });
+    console.log(`📄 Sorted PDF files by cell number:`, pdfFiles.map(f => f.name));
+    
+    if (pdfFiles.length === 0) {
+      console.log(`❌ No H4 PDF files found for ${normalizedObjectName} (searched as: ${objectName})`);
+      return 0;
+    }
+    
+    let pdfsLoaded = 0;
+    for (const pdfFile of pdfFiles) {
+      // Extract cell number from path (e.g., "0/filename.pdf" -> "0")
+      const cellNumber = pdfFile.name.split('/')[0];
+      const fileName = pdfFile.name.split('/').pop();
+      const displayName = `Cell ${cellNumber} H4`;
+      
+      // Check if this PDF already exists in gallery
+      const existingPdfItem = galleryItems.querySelector(`[data-map-type="h4"][data-cell-number="${cellNumber}"]`);
+      if (existingPdfItem) {
+        console.log(`⏭️ Skipping ${displayName}: already exists`);
+        continue;
+      }
+      
+      // Create gallery item for PDF
+      const mapItem = document.createElement('div');
+      mapItem.className = 'gallery-item object-map-item pdf-item';
+      mapItem.dataset.mapType = 'h4';
+      mapItem.dataset.objectName = objectName;
+      mapItem.dataset.cellNumber = cellNumber;
+      mapItem.dataset.pdfKey = pdfFile.key; // S3 key for download
+      
+      mapItem.innerHTML = `
+        <div class="gallery-thumbnail">
+          <div class="thumbnail-placeholder pdf-placeholder" id="pdf-thumb-${cellNumber}">
+            <canvas class="pdf-thumbnail-canvas" width="150" height="200" style="display: none;"></canvas>
+            <div class="pdf-loading-indicator">
+              <span class="cell-label">Cell ${cellNumber}</span>
+              <div class="loading-text">Loading preview...</div>
+            </div>
+          </div>
+        </div>
+        <div class="gallery-label">${displayName}</div>
+      `;
+      
+      // Generate PDF thumbnail - construct URL without viewer parameters for PDF.js
+      const thumbnailUrl = `/api/files/download?key=${encodeURIComponent(pdfFile.key)}`;
+      generatePdfThumbnail(thumbnailUrl, cellNumber);
+      
+      // Add click handler for PDF viewing in modal
+      mapItem.addEventListener('click', () => {
+        console.log(`📄 Clicked on ${objectName} H4 PDF: Cell ${cellNumber}`);
+        console.log(`📄 PDF Key: ${pdfFile.key}`);
+        
+        // Create PDF URL for modal display with PDF.js viewer settings
+        // #zoom=100 sets zoom to 100%, #toolbar=0 hides toolbar, #navpanes=0 hides sidebar
+        const pdfUrl = `/api/files/download?key=${encodeURIComponent(pdfFile.key)}#zoom=100&toolbar=0&navpanes=0`;
+        
+        // Open PDF in modal using existing modal system
+        openImageModal(pdfUrl, `${displayName} PDF`, objectName, mapItem, true); // true indicates it's a PDF
+        
+        // Update status
+        const statusElement = document.getElementById('current-status');
+        if (statusElement) {
+          statusElement.textContent = `Viewing ${objectName} H4 PDF: Cell ${cellNumber}`;
+        }
+        
+        // Toggle selection
+        mapItem.classList.toggle('selected');
+        
+        // Remove selection from other items
+        const otherItems = galleryItems.querySelectorAll('.gallery-item:not([data-cell-number="' + cellNumber + '"])');
+        otherItems.forEach(item => item.classList.remove('selected'));
+      });
+      
+      galleryItems.appendChild(mapItem);
+      pdfsLoaded++;
+      console.log(`✅ Added H4 PDF to gallery: Cell ${cellNumber} for ${normalizedObjectName}`);
+    }
+    
+    console.log(`🎯 Successfully loaded ${pdfsLoaded} H4 PDF files for ${normalizedObjectName} (original: ${objectName})`);
+    
+    // Hide loader if no other loading is happening
+    setTimeout(() => hideGalleryLoader(), 100);
+    
+    return pdfsLoaded;
+    
+  } catch (error) {
+    console.error(`❌ Error loading H4 PDF files for ${normalizedObjectName} (original: ${objectName}):`, error);
+    
+    // Hide loader on error too
+    setTimeout(() => hideGalleryLoader(), 100);
+    
+    return 0;
+  }
+};
+
+/**
+ * Generate a PDF thumbnail using PDF.js
+ * @param {string} pdfUrl - URL of the PDF file
+ * @param {string} cellNumber - Cell number for the thumbnail container ID
+ */
+const generatePdfThumbnail = async (pdfUrl, cellNumber) => {
+  try {
+    // Check if PDF.js is available
+    if (typeof window.pdfjsLib === 'undefined') {
+      console.log('PDF.js not available, keeping placeholder for Cell', cellNumber);
+      return;
+    }
+
+    const pdf = await window.pdfjsLib.getDocument(pdfUrl).promise;
+    const page = await pdf.getPage(1); // Get first page
+    
+    const container = document.getElementById(`pdf-thumb-${cellNumber}`);
+    if (!container) return;
+    
+    const canvas = container.querySelector('.pdf-thumbnail-canvas');
+    const loadingIndicator = container.querySelector('.pdf-loading-indicator');
+    
+    if (!canvas || !loadingIndicator) return;
+    
+    const context = canvas.getContext('2d');
+    const viewport = page.getViewport({ scale: 0.5 }); // Scale down for thumbnail
+    
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    
+    await page.render({
+      canvasContext: context,
+      viewport: viewport
+    }).promise;
+    
+    // Show canvas, hide loading indicator
+    canvas.style.display = 'block';
+    loadingIndicator.style.display = 'none';
+    
+    console.log(`✅ Generated thumbnail for Cell ${cellNumber}`);
+    
+  } catch (error) {
+    console.log(`⚠️ Could not generate thumbnail for Cell ${cellNumber}:`, error.message);
+    
+    // Show error state in the placeholder
+    const container = document.getElementById(`pdf-thumb-${cellNumber}`);
+    if (container) {
+      const loadingIndicator = container.querySelector('.pdf-loading-indicator');
+      if (loadingIndicator) {
+        loadingIndicator.innerHTML = `
+          <span class="cell-label">Cell ${cellNumber}</span>
+          <div class="loading-text" style="color: #ff6b6b;">Preview failed</div>
+        `;
+      }
+    }
+  }
+};
+
+/**
+ * Load PDF.js library dynamically if not already loaded
+ */
+const loadPdfJs = () => {
+  if (typeof window.pdfjsLib !== 'undefined') {
+    return Promise.resolve();
+  }
+  
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve();
+    };
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+};
+
+// Load PDF.js when the module loads
+loadPdfJs().catch(() => {
+  console.log('PDF.js could not be loaded, thumbnails will show placeholders');
+});
+
+/**
+ * Show loading indicator in gallery
+ * @param {HTMLElement} galleryItems - Gallery container element
+ * @param {string} objectName - Object name being loaded
+ */
+const showGalleryLoader = (galleryItems, objectName) => {
+  // Remove any existing loader
+  const existingLoader = galleryItems.querySelector('.gallery-loader');
+  if (existingLoader) {
+    existingLoader.remove();
+  }
+
+  const loaderDiv = document.createElement('div');
+  loaderDiv.className = 'gallery-loader';
+  loaderDiv.style.cssText = 'display: flex; justify-content: center; align-items: center; width: 100%; height: 200px;';
+  loaderDiv.innerHTML = `
+    <div class="astro-loading-container" style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 2rem;">
+      <div class="astro-loader-galaxy" style="width: 32px; height: 32px;"></div>
+      <div class="astro-loading-text" style="font-size: 14px; margin-top: 0.5rem;">Loading maps for ${objectName}...</div>
+    </div>
+  `;
+  
+  galleryItems.appendChild(loaderDiv);
+};
+
+/**
+ * Hide loading indicator from gallery
+ */
+const hideGalleryLoader = () => {
+  const galleryItems = document.getElementById('gallery-items');
+  if (galleryItems) {
+    const loader = galleryItems.querySelector('.gallery-loader');
+    if (loader) {
+      loader.remove();
+    }
   }
 };
 

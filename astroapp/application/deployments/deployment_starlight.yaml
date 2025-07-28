@@ -34,7 +34,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/bcapper30/uc3-backend:latest
         name: receiver-processor
         workingDir: /processing_data/
         volumeMounts:
