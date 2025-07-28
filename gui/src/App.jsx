@@ -927,33 +927,7 @@ const handleGalaxySearch = (aladin, input) => {
   const resolvedName = resolveGalaxyName(input);
   console.log('Resolved name:', resolvedName);
   
-  if (resolvedName.coordinates) {
-    console.log('Using predefined coordinates for:', resolvedName.displayName);
-    // Use predefined coordinates for known galaxies
-    aladin.gotoRaDec(resolvedName.coordinates.ra, resolvedName.coordinates.dec);
-    console.log(`Navigated to ${resolvedName.displayName} at RA: ${resolvedName.coordinates.ra}°, Dec: ${resolvedName.coordinates.dec}°`);
-    
-    // Update status
-    const statusElement = document.getElementById('current-status');
-    if (statusElement) {
-      statusElement.textContent = `Viewing: ${resolvedName.displayName}`;
-    }
-    
-    // Store the current object and coordinates, then load images
-    window.currentLoadedObject = resolvedName.displayName;
-    window.currentObjectCoords = [resolvedName.coordinates.ra, resolvedName.coordinates.dec];
-    if (window.loadObjectImages) {
-      window.loadObjectImages(resolvedName.displayName);
-    }
-    
-    // Clear the input
-    const galaxySearchInput = document.getElementById('galaxy-search');
-    if (galaxySearchInput) {
-      galaxySearchInput.value = '';
-    }
-    return;
-  }
-  
+  // Always use Aladin's gotoObject for navigation (ignore predefined coordinates)
   console.log('Using Aladin object resolution for:', resolvedName.searchName);
   // Try Aladin's object resolution with better error detection
   const currentPosition = aladin.getRaDec();

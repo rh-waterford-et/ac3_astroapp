@@ -94,3 +94,26 @@
 #aladin-lite-div > div > div[style*="position: absolute"][style*="top"] {
   /* This targets positioned divs that might be coordinate displays */
 }
+
+/* PDF Thumbnail Styles */
+.pdf-thumbnail-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.pdf-loading-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 4px;
+}
+
+.pdf-loading-indicator .loading-text {
+  font-size: 10px;
+  color: #888;
+  text-align: center;
+}

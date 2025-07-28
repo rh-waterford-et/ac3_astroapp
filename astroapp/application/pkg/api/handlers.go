@@ -289,138 +289,138 @@ func (h *FileUploadHandler) ListDatasets(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *FileUploadHandler) CreateDataset(w http.ResponseWriter, r *http.Request) {
-    // Set CORS headers
-    w.Header().Set("Access-Control-Allow-Origin", "*")
-    w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-    w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-    w.Header().Set("Content-Type", "application/json")
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
 
-    // Handle preflight requests
-    if r.Method == "OPTIONS" {
-        w.WriteHeader(http.StatusOK)
-        return
-    }
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 
-    if r.Method != "POST" {
-        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-        return
-    }
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
-    // Parse JSON request
-    var req CreateDatasetRequest
-    err := json.NewDecoder(r.Body).Decode(&req)
-    if err != nil {
-        log.Printf("Error parsing create batch request: %v", err)
-        response := CreateDatasetResponse{
-            Success: false,
-            Message: "Invalid request format",
-        }
-        json.NewEncoder(w).Encode(response)
-        return
-    }
+	// Parse JSON request
+	var req CreateDatasetRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		log.Printf("Error parsing create batch request: %v", err)
+		response := CreateDatasetResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
-    // Validate batch name
-    if req.DatasetName == "" {
-        response := CreateDatasetResponse{
-            Success: false,
-            Message: "Batch name is required",
-        }
-        json.NewEncoder(w).Encode(response)
-        return
-    }
+	// Validate batch name
+	if req.DatasetName == "" {
+		response := CreateDatasetResponse{
+			Success: false,
+			Message: "Batch name is required",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
-    // Get application type from request (default to starlight)
-    appType := req.AppType
-    if appType == "" {
-        appType = "starlight" // default
-    }
+	// Get application type from request (default to starlight)
+	appType := req.AppType
+	if appType == "" {
+		appType = "starlight" // default
+	}
 
-    // Validate application type
-    allowedApps := []string{"starlight", "ppxf", "steckmap"}
-    isValidApp := false
-    for _, app := range allowedApps {
-        if strings.ToLower(appType) == app {
-            appType = app
-            isValidApp = true
-            break
-        }
-    }
+	// Validate application type
+	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	isValidApp := false
+	for _, app := range allowedApps {
+		if strings.ToLower(appType) == app {
+			appType = app
+			isValidApp = true
+			break
+		}
+	}
 
-    if !isValidApp {
-        response := CreateDatasetResponse{
-            Success: false,
-            Message: fmt.Sprintf("Invalid application type. Allowed: %s", strings.Join(allowedApps, ", ")),
-        }
-        json.NewEncoder(w).Encode(response)
-        return
-    }
+	if !isValidApp {
+		response := CreateDatasetResponse{
+			Success: false,
+			Message: fmt.Sprintf("Invalid application type. Allowed: %s", strings.Join(allowedApps, ", ")),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
-    // Sanitize batch name
-    sanitizedName := strings.TrimSpace(req.DatasetName)
-    if strings.Contains(sanitizedName, "/") || strings.Contains(sanitizedName, "\\") {
-        response := CreateDatasetResponse{
-            Success: false,
-            Message: "Batch name cannot contain slashes",
-        }
-        json.NewEncoder(w).Encode(response)
-        return
-    }
+	// Sanitize batch name
+	sanitizedName := strings.TrimSpace(req.DatasetName)
+	if strings.Contains(sanitizedName, "/") || strings.Contains(sanitizedName, "\\") {
+		response := CreateDatasetResponse{
+			Success: false,
+			Message: "Batch name cannot contain slashes",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
-    // Define directories to create
-    directories := []string{
-        fmt.Sprintf("%s/input/%s/", appType, sanitizedName),
-        fmt.Sprintf("%s/output/%s/", appType, sanitizedName),
-        fmt.Sprintf("%s/processed/%s/", appType, sanitizedName),
-    }
+	// Define directories to create
+	directories := []string{
+		fmt.Sprintf("%s/input/%s/", appType, sanitizedName),
+		fmt.Sprintf("%s/output/%s/", appType, sanitizedName),
+		fmt.Sprintf("%s/processed/%s/", appType, sanitizedName),
+	}
 
-    // Create each directory in S3
-    for _, dir := range directories {
-        // Check if directory already exists
-        _, err := h.S3Bucket.GetS3Client().HeadObject(&s3.HeadObjectInput{
-            Bucket: aws.String(h.S3Bucket.GetBucketName()),
-            Key:    aws.String(dir),
-        })
+	// Create each directory in S3
+	for _, dir := range directories {
+		// Check if directory already exists
+		_, err := h.S3Bucket.GetS3Client().HeadObject(&s3.HeadObjectInput{
+			Bucket: aws.String(h.S3Bucket.GetBucketName()),
+			Key:    aws.String(dir),
+		})
 
-        if err == nil {
-            log.Printf("Directory already exists: %s", dir)
-            continue
-        }
+		if err == nil {
+			log.Printf("Directory already exists: %s", dir)
+			continue
+		}
 
-        // If error is not "Not Found", return error
-        if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != "NotFound" {
-            log.Printf("Error checking directory existence: %v", err)
-            response := CreateDatasetResponse{
-                Success: false,
-                Message: fmt.Sprintf("Failed to check directory %s", dir),
-            }
-            json.NewEncoder(w).Encode(response)
-            return
-        }
+		// If error is not "Not Found", return error
+		if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != "NotFound" {
+			log.Printf("Error checking directory existence: %v", err)
+			response := CreateDatasetResponse{
+				Success: false,
+				Message: fmt.Sprintf("Failed to check directory %s", dir),
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
 
-        // Create directory by putting an empty object with trailing slash
-        _, err = h.S3Bucket.GetS3Client().PutObject(&s3.PutObjectInput{
-            Bucket: aws.String(h.S3Bucket.GetBucketName()),
-            Key:    aws.String(dir),
-        })
-        if err != nil {
-            log.Printf("Error creating directory: %v", err)
-            response := CreateDatasetResponse{
-                Success: false,
-                Message: fmt.Sprintf("Failed to create directory %s", dir),
-            }
-            json.NewEncoder(w).Encode(response)
-            return
-        }
-        log.Printf("Successfully created directory: %s", dir)
-    }
+		// Create directory by putting an empty object with trailing slash
+		_, err = h.S3Bucket.GetS3Client().PutObject(&s3.PutObjectInput{
+			Bucket: aws.String(h.S3Bucket.GetBucketName()),
+			Key:    aws.String(dir),
+		})
+		if err != nil {
+			log.Printf("Error creating directory: %v", err)
+			response := CreateDatasetResponse{
+				Success: false,
+				Message: fmt.Sprintf("Failed to create directory %s", dir),
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		log.Printf("Successfully created directory: %s", dir)
+	}
 
-    // Success response
-    response := CreateDatasetResponse{
-        Success: true,
-        Message: fmt.Sprintf("Dataset '%s' created successfully for application '%s'", sanitizedName, appType),
-    }
-    json.NewEncoder(w).Encode(response)
-    log.Printf("Successfully created dataset: %s for application: %s", sanitizedName, appType)
+	// Success response
+	response := CreateDatasetResponse{
+		Success: true,
+		Message: fmt.Sprintf("Dataset '%s' created successfully for application '%s'", sanitizedName, appType),
+	}
+	json.NewEncoder(w).Encode(response)
+	log.Printf("Successfully created dataset: %s for application: %s", sanitizedName, appType)
 }
 
 func (h *FileUploadHandler) DeleteDataset(w http.ResponseWriter, r *http.Request) {
@@ -696,7 +696,6 @@ func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Requ
 		// GetS3Objects returns just the filename (without the full path)
 		filename := object
 
-
 		// Get file metadata from S3
 		fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
 		metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
@@ -820,7 +819,6 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 	for _, object := range objects {
 		// GetS3Objects returns just the filename (without the full path)
 		filename := object
-
 
 		// Get file metadata from S3
 		fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
@@ -982,4 +980,59 @@ func (h *FileUploadHandler) UpdateProgress(w http.ResponseWriter, r *http.Reques
 		Message: "Progress updated successfully",
 	}
 	json.NewEncoder(w).Encode(response)
+}
+
+// DownloadFile handles downloading files from S3
+func (h *FileUploadHandler) DownloadFile(w http.ResponseWriter, r *http.Request) {
+	// Enable CORS
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	objectKey := r.URL.Query().Get("key")
+	if objectKey == "" {
+		http.Error(w, "Missing 'key' parameter", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Downloading file with key: %s", objectKey)
+
+	// Check if file exists first
+	metadata, err := h.S3Bucket.GetObjectMetadata(objectKey)
+	if err != nil {
+		log.Printf("File metadata check failed for key '%s': %v", objectKey, err)
+	} else {
+		log.Printf("File exists - Size: %d bytes, LastModified: %s", metadata.Size, metadata.LastModified)
+	}
+
+	content, err := h.S3Bucket.DownloadFile(objectKey)
+	if err != nil {
+		log.Printf("Error downloading file '%s': %v", objectKey, err)
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+
+	filename := filepath.Base(objectKey)
+	if strings.HasSuffix(strings.ToLower(filename), ".pdf") {
+		w.Header().Set("Content-Type", "application/pdf")
+	} else {
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
+
+	_, err = w.Write(content)
+	if err != nil {
+		log.Printf("Error writing file content: %v", err)
+	}
 }
