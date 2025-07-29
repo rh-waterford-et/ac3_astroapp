@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 // Re-enabling FileUpload component
 import FileUpload from './FileUpload';
 import PipelineProgress from './PipelineProgress';
-import { getDatasets, getDatasetFiles, getDatasetOutputFiles, deleteDataset, deleteFile } from '../services/api';
+import { getDatasets, getDatasetFiles, getDatasetOutputFiles, deleteDataset, deleteFile, startProcessing } from '../services/api';
 import { getProcessorConfig } from '../config/processorConfig';
 
 function DatasetsList({ processorType }) {
@@ -313,6 +313,29 @@ function DatasetsList({ processorType }) {
   const selectedDatasetInfo = datasets.find(dataset => dataset.id === selectedDataset);
   const datasetName = selectedDatasetInfo ? selectedDatasetInfo.name : 'Unknown';
 
+  // Start processing function
+  const handleStartProcessing = async (datasetName) => {
+    const confirmed = window.confirm(`Start processing dataset "${datasetName}" with ${processorType}?`);
+    
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      console.log('Starting processing for dataset:', datasetName);
+      
+      const result = await startProcessing(datasetName, processorType);
+      
+      if (result.success) {
+        console.log('Processing started successfully for:', datasetName);
+      } else {
+        console.error('Failed to start processing:', result.message);
+      }
+    } catch (error) {
+      console.error('Error starting processing:', error.message);
+    }
+  };
+
   // Delete dataset function
   const handleDeleteDataset = async (datasetId, datasetName) => {
     const confirmed = window.confirm(`Are you sure you want to delete the dataset "${datasetName}"?`);
@@ -468,16 +491,28 @@ function DatasetsList({ processorType }) {
                       ></span>
                     </div>
                   </button>
-                  <button
-                    className="dataset-delete-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteDataset(dataset.id, dataset.name);
-                    }}
-                    title={`Delete dataset "${dataset.name}"`}
-                  >
-                    ×
-                  </button>
+                  <div className="dataset-actions">
+                    <button
+                      className="dataset-process-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStartProcessing(dataset.name);
+                      }}
+                      title={`Start processing "${dataset.name}"`}
+                    >
+                      ▶
+                    </button>
+                    <button
+                      className="dataset-delete-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteDataset(dataset.id, dataset.name);
+                      }}
+                      title={`Delete dataset "${dataset.name}"`}
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
               ))
             ) : (

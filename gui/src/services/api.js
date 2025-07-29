@@ -429,4 +429,36 @@ export const updatePipelineProgress = async (progressData) => {
     console.error('Error updating progress:', error);
     throw error;
   }
+};
+
+/**
+ * Start processing for a specific dataset
+ * @param {string} datasetName - The name of the dataset to process
+ * @param {string} processorType - The processor type (starlight, ppxf, steckmap)
+ * @returns {Promise<Object>} - Processing response
+ */
+export const startProcessing = async (datasetName, processorType) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/datasets/process`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        dataset: datasetName,
+        processorType: processorType
+      }),
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      return data;
+    } else {
+      throw new Error(data.message || 'Failed to start processing');
+    }
+  } catch (error) {
+    console.error('Error starting processing:', error);
+    throw error;
+  }
 }; 
