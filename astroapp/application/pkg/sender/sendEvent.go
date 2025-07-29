@@ -142,7 +142,7 @@ func (bs *BinaryRabbitMQSender) SendBinaryEvent(event api.BinaryEvent, appName s
 	headers["batch_size"] = len(event.Files)
 	headers["app_name"] = appName
 	headers["event_id"] = event.ID
-	headers["is_binary"] = true // Flag to identify binary events
+	
 
 	filenames := []string{}
 	for _, f := range event.Files {

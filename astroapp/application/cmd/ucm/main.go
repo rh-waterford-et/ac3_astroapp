@@ -80,6 +80,7 @@ func LaunchReceiver(side string) error {
 	// Initialize directories first
 	utils := &common.Utils{}
 
+
 	if err := utils.EnsureDirectoriesExist(); err != nil {
 		log.Fatalf("Directory initialization failed: %v", err)
 	}

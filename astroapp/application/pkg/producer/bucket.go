@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
 )
@@ -28,6 +27,7 @@ func NewS3FileSource(bucket s3bucket.S3BucketInterface, appName, inputDir, outpu
 		InputDir:  inputDir,
 		OutputDir: outputDir,
 	}
+
 }
 
 func (s *S3FileSource) ListFiles() ([]string, error) {
@@ -40,9 +40,10 @@ func (s *S3FileSource) ReadFile(filename string) ([]byte, error) {
 
 	// filename now includes batch directory (e.g., "NGC7025/spectrum_001.txt")
 	// Construct the full S3 key: inputDir/batchDir/filename
+	fullKey := filepath.Join(s.InputDir, filename)
 	result, err := s3Client.GetObject(&s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
-		Key:    aws.String(filepath.Join(s.InputDir, filename)),
+		Key:    aws.String(fullKey),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error reading file %s from S3: %v", filename, err)
@@ -50,67 +51,36 @@ func (s *S3FileSource) ReadFile(filename string) ([]byte, error) {
 	defer result.Body.Close()
 
 	//log.Printf("Successfully read file from S3: %s", filepath.Join(s.InputDir, filename))
-	return io.ReadAll(result.Body)
+	data, readErr := io.ReadAll(result.Body)
+	return data, readErr
 }
 
-func (s *S3FileSource) DeleteFile(filename string) error {
+/* func (s *S3FileSource) DeleteFile(filename string) error {
 	s3Client := s.Bucket.GetS3Client()
 	bucketName := s.Bucket.GetBucketName()
 
-
 	// Construct source and destination keys
 	sourceKey := filepath.Join(s.InputDir, filename)
-	if strings.HasPrefix(filename, s.InputDir) {
-		// If filename already includes the input directory, use it as is
-		sourceKey = filename
-	}
-
-	// First check if source file exists
-	_, err := s3Client.HeadObject(&s3.HeadObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(sourceKey),
-	})
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
-			// File doesn't exist - it may have already been processed/moved
-			log.Printf("File %s already processed or moved, skipping deletion", filename)
-			return nil // Don't treat this as an error
-		}
-		return fmt.Errorf("error checking source file: %v", err)
-	}
 
 	// Replace /input/ with /processed/ in the path
 	processedDir := strings.Replace(s.InputDir, "/input", "/processed", 1)
 	destKey := strings.Replace(sourceKey, s.InputDir, processedDir, 1)
 
 	// Create destination directory structure if needed
-	_, err = s3Client.HeadObject(&s3.HeadObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(filepath.Dir(destKey) + "/"),
-	})
-	if err != nil {
-		// Create directory marker if it doesn't exist
-		_, err = s3Client.PutObject(&s3.PutObjectInput{
-			Bucket: aws.String(bucketName),
-			Key:    aws.String(filepath.Dir(destKey) + "/"),
-			Body:   strings.NewReader(""),
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create destination directory: %v", err)
-		}
-	}
+	dirPath := filepath.Dir(destKey) + "/"
 
 	// Copy file to processed directory
-	_, err = s3Client.CopyObject(&s3.CopyObjectInput{
+	copySource := bucketName + "/" + sourceKey
+	_, err := s3Client.CopyObject(&s3.CopyObjectInput{
 		Bucket:     aws.String(bucketName),
-		CopySource: aws.String(bucketName + "/" + sourceKey),
+		CopySource: aws.String(copySource),
 		Key:        aws.String(destKey),
 	})
 	if err != nil {
 		// Check if the error is because the source file no longer exists
 		if aerr, ok := err.(awserr.Error); ok && (aerr.Code() == "NoSuchKey" || aerr.Code() == "NotFound") {
 			log.Printf("File %s no longer exists during copy, may have been processed concurrently", filename)
-			return nil // Don't treat this as an error
+				return nil // Don't treat this as an error
 		}
 		return fmt.Errorf("copy failed: %v", err)
 	}
@@ -131,34 +101,46 @@ func (s *S3FileSource) DeleteFile(filename string) error {
 	})
 	if err != nil {
 		// If deletion fails but copy succeeded, log as warning rather than error
-		log.Printf("Warning: Failed to delete original file %s after successful copy: %v", filename, err)
 		return nil // Don't fail the operation if copy succeeded
 	}
 
 	return nil
-}
+} */
 
 // ExtractBatchName extracts the batch name from a file path
 // e.g., "NGC7025/spectrum_001.txt" -> "NGC7025"
 func (s *S3FileSource) ExtractBatchName(filename string) (string, error) {
+
 	parts := strings.Split(filename, "/")
+
 	if len(parts) < 2 {
+
 		return "", fmt.Errorf("invalid filename format, expected batch/filename: %s", filename)
 	}
-	return parts[0], nil
+	batchName := parts[0]
+
+	return batchName, nil
 }
 
 // GetBatchesWithFiles returns a map of batch names to their file counts
 func (s *S3FileSource) GetBatchesWithFiles() (map[string]int, error) {
+
 	files, err := s.ListFiles()
+
 	if err != nil {
+
 		return nil, err
 	}
 
 	batchCounts := make(map[string]int)
+
 	for _, file := range files {
+
 		if batch, err := s.ExtractBatchName(file); err == nil {
 			batchCounts[batch]++
+
+		} else {
+			log.Printf("DEBUG: Failed to extract batch name from file %s: %v", file, err)
 		}
 	}
 

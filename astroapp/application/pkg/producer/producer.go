@@ -19,7 +19,7 @@ import (
 type FileSource interface {
 	ListFiles() ([]string, error)
 	ReadFile(filename string) ([]byte, error)
-	DeleteFile(filename string) error
+	//DeleteFile(filename string) error
 }
 
 // ProducerInterface defines the producer operations
@@ -39,8 +39,6 @@ type Producer struct {
 	RedisClient *metrics.RedisClient
 	Sender      sender.EventSender
 }
-
-
 
 func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event, utils common.UtilsInterface, side string, eventID string, redisClient *metrics.RedisClient) *Producer {
 	// Initialize sender with Redis client
@@ -68,8 +66,6 @@ func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event
 	}
 }
 
-
-
 var starlight app.StarlightInterface = &app.Starlight{
 	Utils: &common.Utils{},
 }
@@ -91,7 +87,6 @@ func (p *Producer) AddFile(file api.DataFile, appName string) {
 		p.SendBatch(appName)
 	}
 }
-
 
 func (p *Producer) SendBatch(appName string) {
 	if len(p.Batch) > 0 {
@@ -117,21 +112,20 @@ func (p *Producer) SendBatch(appName string) {
 			p.Batch = starlight.RemoveInFileFromBatch(p.Batch)
 		}
 
-		p.DeleteProcessedFiles()
+		//p.DeleteProcessedFiles()
 		p.Batch = make([]api.DataFile, 0, p.BatchSize)
 	}
 }
 
-func (p *Producer) DeleteProcessedFiles() {
+/* func (p *Producer) DeleteProcessedFiles() {
 	for _, file := range p.Batch {
 		err := p.FileSource.DeleteFile(file.Name)
 		if err != nil {
 			log.Printf("Error deleting file %s: %v\n", file.Name, err)
-		} /* else {
-			log.Printf("Successfully moved file %s to processed dir", file.Name)
-		} */
+		}  
 	}
 }
+ */
 
 func (p *Producer) ProcessFiles(appName string) {
 	files, err := p.FileSource.ListFiles()
@@ -199,4 +193,3 @@ func (p *Producer) updateProgress(appName string, stage api.PipelineStage, progr
 		}
 	}()
 }
-

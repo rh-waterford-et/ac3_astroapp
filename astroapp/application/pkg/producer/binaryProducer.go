@@ -35,13 +35,14 @@ func NewBinaryProducer(batchSize int, fileSource FileSource, eventQueue chan api
 		EventID:          eventID,
 	}
 }
+
 // CreateBinaryEvent handles binary event processing for PPXF
 func (bp *BinaryProducer) CreateBinaryEvent(appName string, side string, queue queue.QueueInterface, eventQueue chan api.BinaryEvent) {
 	go func() {
-			for event := range eventQueue {
-					log.Printf("Sending binary event (ID: %s) with %d files\n", event.ID, len(event.Files))
-					bp.SendBinaryEvent(event, appName, side, queue)
-			}
+		for event := range eventQueue {
+			log.Printf("Sending binary event (ID: %s) with %d files\n", event.ID, len(event.Files))
+			bp.SendBinaryEvent(event, appName, side, queue)
+		}
 	}()
 
 	bp.ProcessBinaryFiles(appName)
@@ -53,7 +54,6 @@ func (bp *BinaryProducer) SendBinaryEvent(event api.BinaryEvent, appName string,
 	binarySender.SendBinaryEvent(event, appName, side, queue)
 }
 
-
 // AddBinaryFile handles binary files for PPXF
 func (bp *BinaryProducer) AddBinaryFile(file api.BinaryDataFile, appName string) {
 	bp.BinaryBatch = append(bp.BinaryBatch, file)
@@ -61,6 +61,7 @@ func (bp *BinaryProducer) AddBinaryFile(file api.BinaryDataFile, appName string)
 		bp.SendBinaryBatch(appName)
 	}
 }
+
 // SendBinaryBatch handles binary file batches for PPXF
 func (bp *BinaryProducer) SendBinaryBatch(appName string) {
 	if len(bp.BinaryBatch) > 0 {
@@ -73,22 +74,22 @@ func (bp *BinaryProducer) SendBinaryBatch(appName string) {
 		}
 		bp.BinaryEventQueue <- event
 
-		bp.DeleteProcessedBinaryFiles()
+		//bp.DeleteProcessedBinaryFiles()
 		bp.BinaryBatch = make([]api.BinaryDataFile, 0, bp.BatchSize)
 	}
 }
 
-// DeleteProcessedBinaryFiles handles file cleanup for binary batches
+/* // DeleteProcessedBinaryFiles handles file cleanup for binary batches
 func (bp *BinaryProducer) DeleteProcessedBinaryFiles() {
 	for _, file := range bp.BinaryBatch {
 		err := bp.FileSource.DeleteFile(file.Name)
 		if err != nil {
 			log.Printf("Error deleting binary file %s: %v\n", file.Name, err)
 		} else {
-			log.Printf("Successfully moved binary file %s to processed dir", file.Name)
+			log.Printf("Successfully processed binary file %s (moved to processed dir or already processed)", file.Name)
 		}
 	}
-}
+} */
 
 // updateBinaryProgress sends progress updates for binary processing
 func (bp *BinaryProducer) updateBinaryProgress(appName string, stage api.PipelineStage, progress float64) {

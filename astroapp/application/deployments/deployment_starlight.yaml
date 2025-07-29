@@ -34,7 +34,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/bcapper30/uc3-backend:latest
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: receiver-processor
         workingDir: /processing_data/
         volumeMounts:
@@ -62,7 +62,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-provider"
+          value: "test-consumer"
         - name: IN_FILE_OUTPUT_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST
@@ -101,7 +101,7 @@ spec:
           value: ""
         ports:
         - containerPort: 5672  
-      - image: quay.io/bcapper30/uc3-backend:latest
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: watcher-processor
         workingDir: /processing_data/
         command: ["/usr/bin/ucm"]
@@ -155,6 +155,12 @@ spec:
           value: "/processing_data/starlight/config_files_starlight/grid_example.in"
         - name: "IN_FILE_OUTPUT_PATH"
           value: "/processing_data/starlight/runtime/infiles/"
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          value: ""
         volumeMounts:
         - mountPath: /processing_data/
           name: ucm-pv-storage
