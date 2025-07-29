@@ -23,7 +23,7 @@ function App() {
    */
   const centerModal = () => {
     if (modalRndRef.current) {
-      const modalWidth = 600;
+      const modalWidth = 928; // 58rem = 928px at 16px base font
       const modalHeight = 500;
       const centerX = Math.max(0, (window.innerWidth - modalWidth) / 2);
       const centerY = Math.max(0, (window.innerHeight - modalHeight) / 2);
@@ -655,7 +655,7 @@ function App() {
           default={{
             x: 0,
             y: 0,
-            width: 600,
+            width: 928,
             height: 500,
           }}
           minWidth={480}
