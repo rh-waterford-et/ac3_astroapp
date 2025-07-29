@@ -6,7 +6,7 @@ import PipelineProgress from './PipelineProgress';
 import { getDatasets, getDatasetFiles, getDatasetOutputFiles, deleteDataset, deleteFile } from '../services/api';
 import { getProcessorConfig } from '../config/processorConfig';
 
-function DatasetsList({ processorType = 'starlight' }) {
+function DatasetsList({ processorType }) {
   const [selectedDataset, setSelectedDataset] = useState('');
   
   // Helper functions for localStorage persistence
@@ -58,237 +58,105 @@ function DatasetsList({ processorType = 'starlight' }) {
     setStoredCollapseState('progress', newState);
   };
 
-  // Simple state management - no complex tracking
+  // Simple state management
   const [datasets, setDatasets] = useState([]);
   const [inputFiles, setInputFiles] = useState([]);
   const [outputFiles, setOutputFiles] = useState([]);
-  
-  // Simple loading states
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Track current processor to detect changes
-  const currentProcessorType = useRef(processorType);
-  
-  // Refs to track current state for change detection
-  const currentDatasets = useRef([]);
-  const currentInputFiles = useRef([]);
-  const currentOutputFiles = useRef([]);
-  
-  // Background request tracking to prevent overlapping
-  const backgroundRequestInProgress = useRef(false);
-  const lastRefreshTime = useRef(0);
+  // Simple refresh tracking
+  const refreshTimer = useRef(null);
+  const isRefreshing = useRef(false);
 
-  // Function to load datasets with optional silent mode
-  const loadDatasets = useCallback(async (forceAutoSelect = false, silent = false) => {
-    console.log('Loading datasets for processor:', processorType, 'forceAutoSelect:', forceAutoSelect, 'silent:', silent);
+  // Clear all data when processor type changes
+  useEffect(() => {
+    console.log('🔄 ProcessorType changed to:', processorType, '- clearing all state');
     
-    // For silent/background requests, check if one is already in progress
-    if (silent && backgroundRequestInProgress.current) {
-      console.log('Background refresh already in progress, skipping datasets load');
-      return;
+    // Stop any existing refresh timer
+    if (refreshTimer.current) {
+      clearInterval(refreshTimer.current);
+      refreshTimer.current = null;
     }
     
+    // Clear all state immediately
+    setDatasets([]);
+    setInputFiles([]);
+    setOutputFiles([]);
+    setSelectedDataset('');
+    setError(null);
+    isRefreshing.current = false;
+    
+         // Start fresh
+     loadDatasets();
+   }, [processorType]);
+
+  // Load datasets only
+  const loadDatasets = useCallback(async (silent = false) => {
+    if (isRefreshing.current) return;
+    
+    console.log(silent ? '🔄 Background refresh datasets for' : '🔄 Loading datasets for', processorType);
+    isRefreshing.current = true;
+    
+    // Only show loading spinner for user actions
     if (!silent) {
       setLoading(true);
-      setError(null);
-    } else {
-      backgroundRequestInProgress.current = true;
     }
     
     try {
       const datasetNames = await getDatasets(processorType);
-      
-      // Sort dataset names alphabetically
-      const sortedDatasetNames = datasetNames.sort((a, b) => 
-        a.toLowerCase().localeCompare(b.toLowerCase())
-      );
-      
-      // Create dataset objects
-      const datasetObjects = sortedDatasetNames.map((name) => ({
-        id: name,
-        name: name,
-        status: 'ready',
-        progress: 0,
-        stage: 'Ready for processing'
-      }));
-      
-      // For silent refresh, check if datasets actually changed
-      if (silent) {
-        const currentDatasetNames = currentDatasets.current.map(d => d.name).sort();
-        const newDatasetNames = datasetObjects.map(d => d.name).sort();
-        
-        if (JSON.stringify(currentDatasetNames) === JSON.stringify(newDatasetNames)) {
-          console.log('Background refresh: datasets unchanged');
-          return; // No change, skip update
-        }
-        console.log('Background refresh: datasets changed, updating');
-      }
-      
+      const datasetObjects = datasetNames
+        .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+        .map(name => ({
+          id: name,
+          name: name,
+          status: 'ready',
+          progress: 0,
+          stage: 'Ready for processing'
+        }));
+
       setDatasets(datasetObjects);
-      currentDatasets.current = datasetObjects; // Update ref
-      
-      // Auto-select first dataset if forced or none selected or current selection is invalid
-      if (datasetObjects.length > 0) {
-        const currentDatasetExists = datasetObjects.find(d => d.id === selectedDataset);
-        if (forceAutoSelect || !selectedDataset || !currentDatasetExists) {
-          const firstDataset = datasetObjects[0];
-          console.log('Auto-selecting first dataset:', firstDataset.id, 'reason:', forceAutoSelect ? 'forced' : 'no valid selection');
-          setSelectedDataset(firstDataset.id);
-        }
-      } else {
-        // No datasets available, clear selection
-        setSelectedDataset('');
+
+      // Auto-select first dataset if none selected
+      if (!selectedDataset && datasetObjects.length > 0) {
+        console.log('🎯 Auto-selecting first dataset:', datasetObjects[0].id);
+        setSelectedDataset(datasetObjects[0].id);
       }
-      
     } catch (err) {
-      console.error('Failed to load datasets:', err);
+      console.error('❌ Failed to load datasets:', err);
+      // Only show error for user actions
       if (!silent) {
         setError(err.message || 'Failed to load datasets');
-        setDatasets([]);
-        setSelectedDataset('');
-        currentDatasets.current = [];
       }
-      // For silent refresh, don't update error state or clear data
     } finally {
+      // Only hide loading spinner if we showed it
       if (!silent) {
         setLoading(false);
-      } else {
-        backgroundRequestInProgress.current = false;
       }
+      isRefreshing.current = false;
     }
   }, [processorType]);
 
-  // Function to load input files with optional silent mode
-  const loadInputFiles = useCallback(async (datasetName, silent = false) => {
-    if (!datasetName) {
-      setInputFiles([]);
-      return;
-    }
+  // Load files for current dataset
+  const loadFiles = useCallback(async (silent = false) => {
+    if (!selectedDataset || isRefreshing.current) return;
     
-    console.log('Loading input files for dataset:', datasetName, 'silent:', silent);
+    console.log(silent ? '🔄 Background refresh files for' : '🔄 Loading files for', selectedDataset);
+    isRefreshing.current = true;
     
+    // Only show loading spinner for user actions, not background refreshes
     if (!silent) {
       setLoading(true);
     }
     
     try {
-      const files = await getDatasetFiles(datasetName, processorType);
-      
-      // Transform and sort files, filtering out directories and invalid files
-      const transformedFiles = files
-        .filter(file => isValidFile(file.name))
-        .map(file => ({
-          name: file.name,
-          size: formatFileSize(file.size),
-          uploaded: file.timestamp,
-          status: 'processed',
-          key: file.key
-        }));
-      
-      const sortedFiles = transformedFiles.sort((a, b) => 
-        a.name.toLowerCase().localeCompare(b.name.toLowerCase())
-      );
-      
-      setInputFiles(sortedFiles);
-      currentInputFiles.current = sortedFiles; // Update ref
-      console.log(`Loaded ${sortedFiles.length} input files`);
-      
-    } catch (err) {
-      console.error('Failed to load input files:', err);
-      if (!silent) {
-        setError(err.message || 'Failed to load input files');
-        setInputFiles([]);
-        currentInputFiles.current = [];
-      }
-    } finally {
-      if (!silent) {
-        setLoading(false);
-      }
-    }
-  }, [processorType]);
-
-  // Function to load output files with optional silent mode
-  const loadOutputFiles = useCallback(async (datasetName, silent = false) => {
-    if (!datasetName) {
-      setOutputFiles([]);
-      return;
-    }
-    
-    console.log('Loading output files for dataset:', datasetName, 'silent:', silent);
-    
-    if (!silent) {
-      setLoading(true);
-    }
-    
-    try {
-      const files = await getDatasetOutputFiles(datasetName, processorType);
-      
-      // Transform and sort files, filtering out directories and invalid files
-      const transformedFiles = files
-        .filter(file => isValidFile(file.name))
-        .map(file => ({
-          name: file.name,
-          size: formatFileSize(file.size),
-          uploaded: file.timestamp,
-          status: 'completed',
-          key: file.key
-        }));
-      
-      const sortedFiles = transformedFiles.sort((a, b) => 
-        a.name.toLowerCase().localeCompare(b.name.toLowerCase())
-      );
-      
-      setOutputFiles(sortedFiles);
-      currentOutputFiles.current = sortedFiles; // Update ref
-      console.log(`Loaded ${sortedFiles.length} output files`);
-      
-    } catch (err) {
-      console.error('Failed to load output files:', err);
-      if (!silent) {
-        setError(err.message || 'Failed to load output files');
-        setOutputFiles([]);
-        currentOutputFiles.current = [];
-      }
-    } finally {
-      if (!silent) {
-        setLoading(false);
-      }
-    }
-  }, [processorType]);
-
-  // Function to load all files for a dataset with optional silent mode
-  const loadAllFiles = useCallback(async (datasetName, silent = false) => {
-    if (!datasetName) {
-      setInputFiles([]);
-      setOutputFiles([]);
-      return;
-    }
-    
-    console.log('Loading all files for dataset:', datasetName, 'silent:', silent);
-    
-    // For silent/background requests, check if one is already in progress
-    if (silent && backgroundRequestInProgress.current) {
-      console.log('Background refresh already in progress, skipping files load');
-      return;
-    }
-    
-    if (!silent) {
-      setLoading(true);
-      setError(null);
-    } else {
-      backgroundRequestInProgress.current = true;
-    }
-    
-    try {
-      // Load both input and output files in parallel
       const [inputFilesData, outputFilesData] = await Promise.all([
-        getDatasetFiles(datasetName, processorType),
-        getDatasetOutputFiles(datasetName, processorType)
+        getDatasetFiles(selectedDataset, processorType),
+        getDatasetOutputFiles(selectedDataset, processorType)
       ]);
-      
-      // Transform input files, filtering out directories and invalid files
-      const transformedInputFiles = inputFilesData
+
+      // Process input files
+      const inputFiles = inputFilesData
         .filter(file => isValidFile(file.name))
         .map(file => ({
           name: file.name,
@@ -296,10 +164,11 @@ function DatasetsList({ processorType = 'starlight' }) {
           uploaded: file.timestamp,
           status: 'processed',
           key: file.key
-        }));
-      
-      // Transform output files, filtering out directories and invalid files
-      const transformedOutputFiles = outputFilesData
+        }))
+        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
+      // Process output files
+      const outputFiles = outputFilesData
         .filter(file => isValidFile(file.name))
         .map(file => ({
           name: file.name,
@@ -307,139 +176,64 @@ function DatasetsList({ processorType = 'starlight' }) {
           uploaded: file.timestamp,
           status: 'completed',
           key: file.key
-        }));
-      
-      // Sort files
-      const sortedInputFiles = transformedInputFiles.sort((a, b) => 
-        a.name.toLowerCase().localeCompare(b.name.toLowerCase())
-      );
-      
-      const sortedOutputFiles = transformedOutputFiles.sort((a, b) => 
-        a.name.toLowerCase().localeCompare(b.name.toLowerCase())
-      );
-      
-      // For silent refresh, check if files actually changed
-      if (silent) {
-        const currentInputNames = currentInputFiles.current.map(f => f.name).sort();
-        const newInputNames = sortedInputFiles.map(f => f.name).sort();
-        const currentOutputNames = currentOutputFiles.current.map(f => f.name).sort();
-        const newOutputNames = sortedOutputFiles.map(f => f.name).sort();
-        
-        const inputChanged = JSON.stringify(currentInputNames) !== JSON.stringify(newInputNames);
-        const outputChanged = JSON.stringify(currentOutputNames) !== JSON.stringify(newOutputNames);
-        
-        if (!inputChanged && !outputChanged) {
-          console.log('Background refresh: files unchanged');
-          return; // No change, skip update
-        }
-        console.log('Background refresh: files changed', { inputChanged, outputChanged });
-      }
-      
-      setInputFiles(sortedInputFiles);
-      setOutputFiles(sortedOutputFiles);
-      currentInputFiles.current = sortedInputFiles; // Update ref
-      currentOutputFiles.current = sortedOutputFiles; // Update ref
-      
-      console.log(`Loaded ${sortedInputFiles.length} input files and ${sortedOutputFiles.length} output files`);
-      
+        }))
+        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
+      setInputFiles(inputFiles);
+      setOutputFiles(outputFiles);
     } catch (err) {
-      console.error('Failed to load files:', err);
+      console.error('❌ Failed to load files:', err);
+      // Only show error for user actions, not background refreshes
       if (!silent) {
         setError(err.message || 'Failed to load files');
-        setInputFiles([]);
-        setOutputFiles([]);
-        currentInputFiles.current = [];
-        currentOutputFiles.current = [];
       }
-      // For silent refresh, don't update error state or clear data
     } finally {
+      // Only hide loading spinner if we showed it
       if (!silent) {
         setLoading(false);
-      } else {
-        backgroundRequestInProgress.current = false;
-        lastRefreshTime.current = Date.now();
       }
+      isRefreshing.current = false;
     }
-  }, [processorType]);
+  }, [selectedDataset, processorType]);
 
-  // Handle processor type changes
+  // Start refresh timer
   useEffect(() => {
-    if (currentProcessorType.current !== processorType) {
-      console.log('Processor type changed from', currentProcessorType.current, 'to', processorType);
-      currentProcessorType.current = processorType;
-      
-      // Clear current state
-      setSelectedDataset('');
-      setInputFiles([]);
-      setOutputFiles([]);
-      setError(null);
-      
-      // Clear refs as well
-      currentInputFiles.current = [];
-      currentOutputFiles.current = [];
-      
-      // Load datasets for new processor type and force auto-selection
-      loadDatasets(true);
+    // Clear any existing timer
+    if (refreshTimer.current) {
+      clearInterval(refreshTimer.current);
     }
-  }, [processorType, loadDatasets]);
 
-  // Load datasets on initial mount
-  useEffect(() => {
-    loadDatasets();
-  }, []);
+    // Start new timer - only refresh files
+    refreshTimer.current = setInterval(() => {
+      if (!loading && !isRefreshing.current && selectedDataset) {
+        console.log('🔄 5s refresh cycle');
+        loadFiles(true); // Silent background refresh
+      }
+    }, 5000);
 
-  // Load files when dataset changes (user action - show loading)
-  useEffect(() => {
-    if (selectedDataset) {
-      loadAllFiles(selectedDataset, false); // silent=false for user actions
-    } else {
-      setInputFiles([]);
-      setOutputFiles([]);
-      currentInputFiles.current = [];
-      currentOutputFiles.current = [];
-    }
-  }, [selectedDataset, loadAllFiles]);
-
-  // Adaptive background auto-refresh with debouncing
-  useEffect(() => {
-    const getRefreshInterval = () => {
-      const totalFiles = inputFiles.length + outputFiles.length;
-      
-      // Adaptive refresh rate based on file count
-      if (totalFiles > 300) {
-        return 30000; // 30 seconds for large datasets (like PPXF with 500+ files)
-      } else if (totalFiles > 100) {
-        return 20000; // 20 seconds for medium datasets
-      } else if (totalFiles > 50) {
-        return 15000; // 15 seconds for smaller datasets
-      } else {
-        return 10000; // 10 seconds for small datasets (like Starlight with ~50 files)
+    // Cleanup on unmount
+    return () => {
+      if (refreshTimer.current) {
+        clearInterval(refreshTimer.current);
       }
     };
+  }, [loadFiles, loading, selectedDataset]);
 
-    const interval = setInterval(() => {
-      // Check if background request is already in progress
-      if (backgroundRequestInProgress.current) {
-        console.log('Background refresh skipped - request already in progress');
-        return;
-      }
-      
-      // Check minimum time between refreshes (prevent too frequent calls)
-      const timeSinceLastRefresh = Date.now() - lastRefreshTime.current;
-      if (timeSinceLastRefresh < 8000) { // Minimum 8 seconds between refreshes
-        console.log('Background refresh skipped - too soon since last refresh');
-        return;
-      }
-      
-      console.log('Background refresh...');
-      loadDatasets(false, true); // forceAutoSelect=false, silent=true
-      if (selectedDataset) {
-        loadAllFiles(selectedDataset, true); // silent=true
-      }
-    }, getRefreshInterval());
+     // Load files when dataset selection changes
+   useEffect(() => {
+     if (selectedDataset) {
+       loadFiles();
+     } else {
+       setInputFiles([]);
+       setOutputFiles([]);
+     }
+   }, [selectedDataset, loadFiles]);
 
-    return () => clearInterval(interval);
-  }, [selectedDataset, inputFiles.length, outputFiles.length, loadDatasets, loadAllFiles]);
+   // Handle dataset creation callback
+   const handleDatasetCreated = useCallback((datasetName) => {
+     console.log('✅ Dataset created:', datasetName, '- refreshing...');
+     loadDatasets(true); // Silent reload since upload already showed loading
+   }, [loadDatasets]);
 
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
@@ -599,21 +393,13 @@ function DatasetsList({ processorType = 'starlight' }) {
         console.error('Failed to delete file:', result.message);
         
         // Restore the file in the UI if deletion failed, then refresh
-        if (isInputFile) {
-          await loadInputFiles(selectedDataset);
-        } else {
-          await loadOutputFiles(selectedDataset);
-        }
+        await loadFiles();
       }
     } catch (error) {
       console.error('Error deleting file:', error);
       
       // Restore the correct state if deletion failed
-      if (isInputFile) {
-        await loadInputFiles(selectedDataset);
-      } else {
-        await loadOutputFiles(selectedDataset);
-      }
+      await loadFiles();
     }
   };
 
@@ -621,7 +407,12 @@ function DatasetsList({ processorType = 'starlight' }) {
     <div className="pipeline-wrapper">
       {/* File Upload Container */}
       <div style={{ marginBottom: '0.75rem' }}>
-        <FileUpload isCollapsed={isUploadCollapsed} onToggleCollapse={toggleUploadCollapsed} processorType={processorType} />
+        <FileUpload 
+          isCollapsed={isUploadCollapsed} 
+          onToggleCollapse={toggleUploadCollapsed} 
+          processorType={processorType}
+          onDatasetCreated={handleDatasetCreated}
+        />
       </div>
       
       {/* Three-pane layout Container */}
@@ -863,7 +654,7 @@ function DatasetsList({ processorType = 'starlight' }) {
 }
 
 DatasetsList.propTypes = {
-  processorType: PropTypes.string,
+  processorType: PropTypes.string.isRequired,
 };
 
 export default DatasetsList; 

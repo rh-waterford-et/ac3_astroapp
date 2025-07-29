@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { uploadFiles as apiUploadFiles, getDatasets, createDataset } from '../services/api';
 import { getProcessorConfig } from '../config/processorConfig';
 
-function FileUpload({ isCollapsed = false, onToggleCollapse, processorType = 'starlight' }) {
+function FileUpload({ isCollapsed = false, onToggleCollapse, processorType, onDatasetCreated }) {
   const [dragActive, setDragActive] = useState(false);
   const [uploadQueue, setUploadQueue] = useState([]);
   const fileInputRef = useRef(null);
@@ -230,6 +230,11 @@ function FileUpload({ isCollapsed = false, onToggleCollapse, processorType = 'st
             await loadDatasets(true);
             
             console.log('Dataset created successfully:', sanitizedName);
+            
+            // Trigger refresh in parent DatasetsList component
+            if (onDatasetCreated) {
+              onDatasetCreated(sanitizedName);
+            }
           } else {
             setDatasetError(result.message || 'Failed to create dataset');
             console.error('Failed to create dataset:', result.message);
@@ -529,7 +534,8 @@ function FileUpload({ isCollapsed = false, onToggleCollapse, processorType = 'st
 FileUpload.propTypes = {
   isCollapsed: PropTypes.bool,
   onToggleCollapse: PropTypes.func,
-  processorType: PropTypes.string,
+  processorType: PropTypes.string.isRequired,
+  onDatasetCreated: PropTypes.func,
 };
 
 export default FileUpload; 
