@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
 )
@@ -55,7 +56,7 @@ func (s *S3FileSource) ReadFile(filename string) ([]byte, error) {
 	return data, readErr
 }
 
-/* func (s *S3FileSource) DeleteFile(filename string) error {
+func (s *S3FileSource) DeleteFile(filename string) error {
 	s3Client := s.Bucket.GetS3Client()
 	bucketName := s.Bucket.GetBucketName()
 
@@ -66,8 +67,6 @@ func (s *S3FileSource) ReadFile(filename string) ([]byte, error) {
 	processedDir := strings.Replace(s.InputDir, "/input", "/processed", 1)
 	destKey := strings.Replace(sourceKey, s.InputDir, processedDir, 1)
 
-	// Create destination directory structure if needed
-	dirPath := filepath.Dir(destKey) + "/"
 
 	// Copy file to processed directory
 	copySource := bucketName + "/" + sourceKey
@@ -80,7 +79,7 @@ func (s *S3FileSource) ReadFile(filename string) ([]byte, error) {
 		// Check if the error is because the source file no longer exists
 		if aerr, ok := err.(awserr.Error); ok && (aerr.Code() == "NoSuchKey" || aerr.Code() == "NotFound") {
 			log.Printf("File %s no longer exists during copy, may have been processed concurrently", filename)
-				return nil // Don't treat this as an error
+			return nil // Don't treat this as an error
 		}
 		return fmt.Errorf("copy failed: %v", err)
 	}
@@ -105,7 +104,7 @@ func (s *S3FileSource) ReadFile(filename string) ([]byte, error) {
 	}
 
 	return nil
-} */
+}
 
 // ExtractBatchName extracts the batch name from a file path
 // e.g., "NGC7025/spectrum_001.txt" -> "NGC7025"

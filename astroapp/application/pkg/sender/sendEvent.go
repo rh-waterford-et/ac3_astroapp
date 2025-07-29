@@ -3,7 +3,6 @@ package sender
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -19,87 +18,87 @@ import (
 type EventSender interface {
 	SendEvent(event api.Event, appName string, side string, q queue.QueueInterface)
 }
-
-// BinaryEventSender handles binary events for PPXF
-type BinaryEventSender interface {
-	SendBinaryEvent(event api.BinaryEvent, appName string, side string, q queue.QueueInterface)
-}
-
 type RabbitMQSender struct {
 	Queue       queue.QueueInterface
 	Utils       common.UtilsInterface
 	RedisClient *metrics.RedisClient
 }
 
-func NewRabbitMQSender(queue queue.QueueInterface, utils common.UtilsInterface, redisClient *metrics.RedisClient) *RabbitMQSender {
-	return &RabbitMQSender{
-		Queue:       queue,
-		Utils:       utils,
-		RedisClient: redisClient,
-	}
-}
-
-// BinaryRabbitMQSender handles binary events via RabbitMQ
-type BinaryRabbitMQSender struct {
-	Queue queue.QueueInterface
-	Utils common.UtilsInterface
-}
-
 func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string, q queue.QueueInterface) {
+	log.Printf("DEBUG: SendEvent called with event.ID=%s, appName=%s, side=%s", event.ID, appName, side)
 	var queueName string
+
 
 	if side == "producer" {
 		queueName = "producer_to_processor_queue"
+		log.Printf("DEBUG: queueName set to: %s", queueName)
 	} else {
 		queueName = "processor_to_producer_queue"
+		log.Printf("DEBUG: queueName set to: %s", queueName)
 	}
 
 	err := q.Connect()
+	log.Printf("DEBUG: Queue connect attempt finished, err=%v", err)
 	if err != nil {
 		s.Utils.FailOnError("Failed to connect to RabbitMQ", err)
 	}
 	defer q.Close()
+	log.Printf("DEBUG: Deferred queue close registered")
 
 	err = q.DeclareQueue(queueName)
+	log.Printf("DEBUG: DeclareQueue(%s) finished, err=%v", queueName, err)
 	if err != nil {
-		s.Utils.FailOnError(fmt.Sprintf("Failed to declare queue"), err)
+		s.Utils.FailOnError("Failed to declare queue", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	eventJSON, err := json.Marshal(event)
+	log.Printf("DEBUG: Event marshaling finished, eventJSON length=%d, err=%v", len(eventJSON), err)
 	if err != nil {
+		log.Printf("DEBUG: Event marshaling failed, calling FailOnError")
 		s.Utils.FailOnError("Failed to marshal event", err)
+		log.Printf("DEBUG: FailOnError called for marshaling failure")
 	}
 
 	headers := make(amqp.Table)
+	log.Printf("DEBUG: AMQP headers table created")
 	headers["batch_size"] = len(event.Files)
+	log.Printf("DEBUG: batch_size header set to %d", len(event.Files))
 	headers["app_name"] = appName
+	log.Printf("DEBUG: app_name header set to %s", appName)
 	headers["event_id"] = event.ID
+	log.Printf("DEBUG: event_id header set to %s", event.ID)
 
 	filenames := []string{}
+	log.Printf("DEBUG: Filenames slice initialized")
 	for _, f := range event.Files {
+		log.Printf("DEBUG: Processing file: %s", f.Name)
 		filenames = append(filenames, f.Name)
+		log.Printf("DEBUG: Added filename to slice: %s", f.Name)
 	}
 	headers["filenames"] = strings.Join(filenames, ",")
+	log.Printf("DEBUG: filenames header set to: %s", headers["filenames"])
 
 	err = q.Publish(ctx, queueName, eventJSON, headers)
+	log.Printf("DEBUG: Queue publish finished, err=%v", err)
 	if err != nil {
 		s.Utils.FailOnError("Failed to publish message: %v", err)
 	}
 
 	// Record queue start time for each batch (individual batch tracking)
 	if s.RedisClient != nil {
+		log.Printf("DEBUG: RedisClient is available, creating metrics store")
 		metricsStore := metrics.NewMetricsStore(s.RedisClient, 168*time.Hour)
+		log.Printf("DEBUG: MetricsStore created with 168h TTL")
 
 		// Record queue start time for this specific batch
 		err = metricsStore.UpdateMetricField(ctx, event.ID, "queue_start_time", time.Now())
+		log.Printf("DEBUG: UpdateMetricField called for queue_start_time, err=%v", err)
 		if err != nil {
 			log.Printf("Failed to record queue start time: %v", err)
-		} /* else {
-			log.Printf("✓ Recorded batch start time for event %s", event.ID)
-		} */
+		}
 	} else {
 		log.Printf("No Redis client found")
 	}
@@ -107,54 +106,5 @@ func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string,
 	log.Printf("DEBUG: Published message to queue %s", queueName)
 	log.Printf(" [x] Sent batch with %d files for app %s\n", len(event.Files), appName)
 	log.Printf("     Files: %s\n", strings.Join(filenames, ", "))
-}
-
-// SendBinaryEvent handles binary events for PPXF (preserves .fits file integrity)
-func (bs *BinaryRabbitMQSender) SendBinaryEvent(event api.BinaryEvent, appName string, side string, q queue.QueueInterface) {
-	var queueName string
-
-	if side == "producer" {
-		queueName = "producer_to_processor_queue"
-	} else {
-		queueName = "processor_to_producer_queue"
-	}
-
-	err := q.Connect()
-	if err != nil {
-		bs.Utils.FailOnError("Failed to connect to RabbitMQ", err)
-	}
-	defer q.Close()
-
-	err = q.DeclareQueue(queueName)
-	if err != nil {
-		bs.Utils.FailOnError(fmt.Sprintf("Failed to declare queue"), err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	eventJSON, err := json.Marshal(event)
-	if err != nil {
-		bs.Utils.FailOnError("Failed to marshal binary event", err)
-	}
-
-	headers := make(amqp.Table)
-	headers["batch_size"] = len(event.Files)
-	headers["app_name"] = appName
-	headers["event_id"] = event.ID
-	
-
-	filenames := []string{}
-	for _, f := range event.Files {
-		filenames = append(filenames, f.Name)
-	}
-	headers["filenames"] = strings.Join(filenames, ",")
-
-	err = q.Publish(ctx, queueName, eventJSON, headers)
-	if err != nil {
-		bs.Utils.FailOnError("Failed to publish binary message: %v", err)
-	}
-	log.Printf("DEBUG: Published binary message to queue %s", queueName)
-	log.Printf(" [x] Sent binary batch with %d files for app %s\n", len(event.Files), appName)
-	log.Printf("     Binary Files: %s\n", strings.Join(filenames, ", "))
+	log.Printf("DEBUG: SendEvent completed successfully")
 }

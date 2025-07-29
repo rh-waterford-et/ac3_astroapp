@@ -19,7 +19,7 @@ import (
 type FileSource interface {
 	ListFiles() ([]string, error)
 	ReadFile(filename string) ([]byte, error)
-	//DeleteFile(filename string) error
+	DeleteFile(filename string) error
 }
 
 // ProducerInterface defines the producer operations
@@ -37,22 +37,10 @@ type Producer struct {
 	Side        string
 	EventID     string
 	RedisClient *metrics.RedisClient
-	Sender      sender.EventSender
+	
 }
 
 func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event, utils common.UtilsInterface, side string, eventID string, redisClient *metrics.RedisClient) *Producer {
-	// Initialize sender with Redis client
-	var senderInstance sender.EventSender
-	if redisClient != nil {
-		senderInstance = sender.NewRabbitMQSender(nil, utils, redisClient)
-	} else {
-		senderInstance = &sender.RabbitMQSender{
-			Queue:       nil,
-			Utils:       utils,
-			RedisClient: nil,
-		}
-	}
-
 	return &Producer{
 		BatchSize:   batchSize,
 		Batch:       make([]api.DataFile, 0, batchSize),
@@ -62,19 +50,18 @@ func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event
 		Side:        side,
 		EventID:     eventID,
 		RedisClient: redisClient,
-		Sender:      senderInstance,
 	}
 }
 
 var starlight app.StarlightInterface = &app.Starlight{
 	Utils: &common.Utils{},
 }
-
+var send sender.EventSender = &sender.RabbitMQSender{}
 func (p *Producer) CreateEvent(appName string, side string, q queue.QueueInterface) {
 	go func() {
 		for event := range p.EventQueue {
 			log.Printf("Sending event (ID: %s) with %d files\n", p.EventID, len(event.Files))
-			p.Sender.SendEvent(event, appName, side, q)
+			send.SendEvent(event, appName, side, q)
 		}
 	}()
 
@@ -112,12 +99,12 @@ func (p *Producer) SendBatch(appName string) {
 			p.Batch = starlight.RemoveInFileFromBatch(p.Batch)
 		}
 
-		//p.DeleteProcessedFiles()
+		p.DeleteProcessedFiles()
 		p.Batch = make([]api.DataFile, 0, p.BatchSize)
 	}
 }
 
-/* func (p *Producer) DeleteProcessedFiles() {
+func (p *Producer) DeleteProcessedFiles() {
 	for _, file := range p.Batch {
 		err := p.FileSource.DeleteFile(file.Name)
 		if err != nil {
@@ -125,7 +112,7 @@ func (p *Producer) SendBatch(appName string) {
 		}  
 	}
 }
- */
+ 
 
 func (p *Producer) ProcessFiles(appName string) {
 	files, err := p.FileSource.ListFiles()
