@@ -360,11 +360,6 @@ function FileUpload({ isCollapsed = false, onToggleCollapse, processorType, onDa
                   <option key={dataset} value={dataset}>{dataset}</option>
                 ))}
               </select>
-              {currentDataset && (
-                <div className="dataset-info">
-                  <span className="dataset-path">📁 {getProcessorConfig(processorType).paths.input}/{currentDataset}</span>
-                </div>
-              )}
             </div>
             
             {/* Create Dataset Button */}
@@ -389,7 +384,7 @@ function FileUpload({ isCollapsed = false, onToggleCollapse, processorType, onDa
                     <input
                       type="text"
                       className="new-dataset-input"
-                      placeholder="Enter dataset name (e.g., NGC7025)"
+                      placeholder="NGC7025"
                       value={newDatasetName}
                       onChange={(e) => setNewDatasetName(e.target.value)}
                       onKeyDown={(e) => {
@@ -401,11 +396,6 @@ function FileUpload({ isCollapsed = false, onToggleCollapse, processorType, onDa
                       }}
                     />
                   </div>
-                  {newDatasetName.trim() && (
-                    <div className="dataset-preview">
-                      📁 {getProcessorConfig(processorType).paths.input}/{newDatasetName.trim().replace(/[^a-zA-Z0-9_-]/g, '')}
-                    </div>
-                  )}
                   
                   {/* Action buttons side-by-side */}
                   <div className="dataset-form-actions">
