@@ -48,6 +48,9 @@ func (s *Server) setupRoutes() {
 	// Delete dataset endpoint
 	http.HandleFunc("/api/datasets/delete", s.fileUploadHandler.DeleteDataset)
 
+	// Process dataset endpoint
+	http.HandleFunc("/api/datasets/process", s.fileUploadHandler.ProcessDataset)
+
 	// Delete file endpoint
 	http.HandleFunc("/api/files/delete", s.fileUploadHandler.DeleteFile)
 
@@ -87,6 +90,7 @@ func (s *Server) Start() {
 	log.Printf("Delete dataset endpoint: http://localhost:%s/api/datasets/delete", port)
 	log.Printf("Delete file endpoint: http://localhost:%s/api/files/delete", port)
 	log.Printf("Download file endpoint: http://localhost:%s/api/files/download", port)
+	log.Printf("Process dataset endpoint: http://localhost:%s/api/datasets/process", port)
 	log.Printf("Progress tracking endpoints: http://localhost:%s/api/progress/*", port)
 	log.Printf("Health check endpoint: http://localhost:%s/api/health", port)
 

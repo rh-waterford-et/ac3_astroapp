@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1035,4 +1036,67 @@ func (h *FileUploadHandler) DownloadFile(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		log.Printf("Error writing file content: %v", err)
 	}
+}
+
+type ProcessDatasetRequest struct {
+	Dataset       string `json:"dataset"`
+	ProcessorType string `json:"processorType"`
+}
+
+type ProcessDatasetResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+func (h *FileUploadHandler) ProcessDataset(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req ProcessDatasetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Processing request for dataset: %s, processor: %s", req.Dataset, req.ProcessorType)
+
+	appType := strings.ToUpper(req.ProcessorType)
+	log.Printf("Processing trigger received for batch: %s, app: %s", req.Dataset, appType)
+
+	// Make HTTP call to watcher container to trigger processing
+	triggerURL := "http://localhost:8081/trigger-processing"
+	triggerData := map[string]string{
+		"dataset":   req.Dataset,
+		"processor": req.ProcessorType,
+	}
+
+	jsonData, _ := json.Marshal(triggerData)
+	resp, err := http.Post(triggerURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Error triggering processing: %v", err)
+		http.Error(w, "Failed to trigger processing", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	log.Printf("Successfully triggered processing for batch: %s", req.Dataset)
+
+	response := ProcessDatasetResponse{
+		Message: fmt.Sprintf("Processing started for dataset %s", req.Dataset),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }

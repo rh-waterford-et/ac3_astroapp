@@ -24,7 +24,7 @@ func NewWatcher() *Watcher {
 	return &Watcher{}
 }
 
-func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
+func (w *Watcher) RunForBatch(appName string, batchName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
 
 	inputDirEnv := "EXPLORED_" + appName
 	outputDirEnv := "OUTPUT_" + appName
@@ -52,6 +52,7 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, 
 			AppName:   appName,
 			InputDir:  inputDir,
 			OutputDir: outputDir,
+			BatchName: batchName,
 		}
 		files, err := fileSource.ListFiles()
 		if err != nil {
@@ -113,5 +114,5 @@ func (w *Watcher) Run(appName string, side string, utils common.UtilsInterface, 
 			standardProducer := producer.NewProducer(batchSize, fileSource, eventQueue, utils, side, eventID, redisClient)
 			standardProducer.CreateEvent(appName, side, queue)
 		}
-	} 
+	}
 }
