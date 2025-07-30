@@ -19,6 +19,7 @@ type S3FileSource struct {
 	AppName   string
 	InputDir  string // S3 prefix
 	OutputDir string // S3 prefix
+	BatchName string // Optional batch filter
 }
 
 func NewS3FileSource(bucket s3bucket.S3BucketInterface, appName, inputDir, outputDir string) *S3FileSource {
@@ -31,7 +32,31 @@ func NewS3FileSource(bucket s3bucket.S3BucketInterface, appName, inputDir, outpu
 }
 
 func (s *S3FileSource) ListFiles() ([]string, error) {
+	if s.BatchName != "" {
+		// Scan specific batch directory only
+		return s.ListFilesForBatch(s.BatchName)
+	}
+	// Scan all directories (fallback)
 	return s.Bucket.GetNewAssets(s.InputDir)
+}
+
+// ListFilesForBatch scans files in a specific batch directory
+func (s *S3FileSource) ListFilesForBatch(batchName string) ([]string, error) {
+	batchPath := s.InputDir + "/" + batchName
+	files, err := s.Bucket.GetS3Objects(batchPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add batch directory prefix to each file
+	var batchFiles []string
+	for _, file := range files {
+		if !strings.HasSuffix(file, "/") { // Skip directory markers
+			batchFiles = append(batchFiles, batchName+"/"+file)
+		}
+	}
+	log.Printf("Found %d files in batch directory %s", len(batchFiles), batchName)
+	return batchFiles, nil
 }
 
 func (s *S3FileSource) ReadFile(filename string) ([]byte, error) {
@@ -56,7 +81,6 @@ func (s *S3FileSource) ReadFile(filename string) ([]byte, error) {
 func (s *S3FileSource) DeleteFile(filename string) error {
 	s3Client := s.Bucket.GetS3Client()
 	bucketName := s.Bucket.GetBucketName()
-
 
 	// Construct source and destination keys
 	sourceKey := filepath.Join(s.InputDir, filename)

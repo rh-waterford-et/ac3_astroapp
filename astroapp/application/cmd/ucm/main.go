@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
@@ -139,14 +142,55 @@ func LaunchProducer(side string) error {
 		}
 	}
 
-	apps := []string{"PPXF", "STARLIGHT", "STECKMAP"}
-
 	appRunner := &watcher.Watcher{}
-	for {
-		for _, app := range apps {
-			appRunner.Run(app, side, utils, queue, redis)
+	if side == "processor" {
+		// Only processor side runs continuously (for monitoring completed files)
+		for {
+			apps := []string{"PPXF", "STARLIGHT", "STECKMAP"}
+			for _, app := range apps {
+				appRunner.RunForBatch(app, "", side, utils, queue, redis)
+			}
+			log.Println("Checking for completed files...")
+			time.Sleep(10 * time.Second)
 		}
-		log.Println("Checking for new files...")
-		time.Sleep(10 * time.Second)
+	} else {
+		// Producer side starts HTTP server to receive processing triggers
+		log.Println("Producer watcher starting HTTP trigger server on :8081...")
+
+		http.HandleFunc("/trigger-processing", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+
+			var triggerData struct {
+				Dataset   string `json:"dataset"`
+				Processor string `json:"processor"`
+			}
+
+			if err := json.NewDecoder(r.Body).Decode(&triggerData); err != nil {
+				http.Error(w, "Invalid request body", http.StatusBadRequest)
+				return
+			}
+
+			batchName := triggerData.Dataset
+			processorType := triggerData.Processor
+			appType := strings.ToUpper(processorType)
+
+			log.Printf("HTTP trigger received: batch=%s, processor=%s", batchName, processorType)
+
+			// Run the watcher for this specific batch
+			go func() {
+				appRunner.RunForBatch(appType, batchName, side, utils, queue, redis)
+				log.Printf("Completed processing for batch: %s", batchName)
+			}()
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"status": "triggered"})
+		})
+
+		log.Fatal(http.ListenAndServe(":8081", nil))
 	}
+
+	return nil
 }
