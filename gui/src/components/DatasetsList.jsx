@@ -71,6 +71,7 @@ function DatasetsList({ processorType }) {
   // Simple refresh tracking
   const refreshTimer = useRef(null);
   const isRefreshing = useRef(false);
+  const fileUploadRef = useRef(null);
 
   // Clear all data when processor type changes
   useEffect(() => {
@@ -92,6 +93,11 @@ function DatasetsList({ processorType }) {
     setOutputFilesLoading(false);
     setInputFilesLoaded(false);
     isRefreshing.current = false;
+    
+    // Clear file upload queue
+    if (fileUploadRef.current) {
+      fileUploadRef.current.clearAll();
+    }
     
          // Start fresh
      loadDatasets();
@@ -237,21 +243,27 @@ function DatasetsList({ processorType }) {
       clearInterval(refreshTimer.current);
     }
 
-    // Start new timer - sequential refresh (input files, then output files)
+    // Start new timer - refresh all three panes (datasets, input files, then output files)
     refreshTimer.current = setInterval(async () => {
-      if (!loading && !isRefreshing.current && selectedDataset && !inputFilesLoading && !outputFilesLoading) {
-        console.log('🔄 5s refresh cycle - loading input files');
-        await loadInputFiles(true); // Silent background refresh
+      if (!loading && !isRefreshing.current && !inputFilesLoading && !outputFilesLoading) {
+        console.log('🔄 3s refresh cycle - refreshing all panes');
         
-        // After input files load, refresh output files
-        setTimeout(() => {
-          if (!isRefreshing.current) {
-            console.log('🔄 5s refresh cycle - loading output files');
-            loadOutputFiles(true);
-          }
-        }, 100);
+        // First refresh datasets (silent)
+        await loadDatasets(true);
+        
+        // Then refresh files if we have a selected dataset
+        if (selectedDataset) {
+          await loadInputFiles(true); // Silent background refresh
+          
+          // After input files load, refresh output files
+          setTimeout(() => {
+            if (!isRefreshing.current) {
+              loadOutputFiles(true);
+            }
+          }, 100);
+        }
       }
-    }, 5000);
+    }, 3000);
 
     // Cleanup on unmount
     return () => {
@@ -366,6 +378,33 @@ function DatasetsList({ processorType }) {
   const selectedDatasetInfo = datasets.find(dataset => dataset.id === selectedDataset);
   const datasetName = selectedDatasetInfo ? selectedDatasetInfo.name : 'Unknown';
 
+  // Calculate expected output files based on processor type
+  const getExpectedOutputCount = (inputCount, processorType) => {
+    if (processorType === 'starlight') {
+      return inputCount; // 1:1 ratio
+    } else if (processorType === 'ppxf') {
+      return inputCount * 5; // 1:5 ratio
+    }
+    return inputCount; // Default 1:1
+  };
+
+  // Check if processing is complete for a dataset
+  const isProcessingComplete = (datasetName) => {
+    // Only check if this is the currently selected dataset
+    if (selectedDataset !== datasetName) {
+      return false;
+    }
+    
+    const datasetInputFiles = inputFiles.filter(file => file.name);
+    const datasetOutputFiles = outputFiles.filter(file => file.name);
+    
+    const inputCount = datasetInputFiles.length;
+    const outputCount = datasetOutputFiles.length;
+    const expectedOutputCount = getExpectedOutputCount(inputCount, processorType);
+    
+    return inputCount > 0 && outputCount >= expectedOutputCount && expectedOutputCount > 0;
+  };
+
   // Start processing function
   const handleStartProcessing = async (datasetName) => {
     const confirmed = window.confirm(`Start processing dataset "${datasetName}" with ${processorType}?`);
@@ -405,8 +444,13 @@ function DatasetsList({ processorType }) {
       if (result.success) {
         console.log('Dataset deleted successfully:', datasetId);
         
-        // Handle selection logic before refreshing datasets
+        // Handle selection logic and refresh all panes
         if (selectedDataset === datasetId) {
+          // Clear current files immediately
+          setInputFiles([]);
+          setOutputFiles([]);
+          setInputFilesLoaded(false);
+          
           // Find remaining datasets (excluding the deleted one)
           const remainingDatasets = datasets.filter(d => d.id !== datasetId);
           
@@ -414,12 +458,9 @@ function DatasetsList({ processorType }) {
             // Select the first remaining dataset (alphabetically sorted)
             const nextDataset = remainingDatasets[0];
             setSelectedDataset(nextDataset.id);
-            // File loading will be handled by the useEffect when selectedDataset changes
           } else {
             // No datasets left, clear everything
             setSelectedDataset('');
-            setInputFiles([]);
-            setOutputFiles([]);
             setError(null);
           }
         }
@@ -427,8 +468,14 @@ function DatasetsList({ processorType }) {
         // Refresh datasets list to get updated list
         await loadDatasets();
         
+        // If we have a selected dataset after deletion, refresh its files
+        if (selectedDataset && selectedDataset !== datasetId) {
+          // Force refresh the input files for the currently selected dataset
+          await loadInputFiles();
+        }
+        
         // Give user feedback
-        console.log(`Dataset "${datasetName}" deleted successfully`);
+        console.log(`Dataset "${datasetName}" deleted successfully - all panes refreshed`);
       } else {
         console.error('Failed to delete dataset:', result.message);
       }
@@ -484,6 +531,7 @@ function DatasetsList({ processorType }) {
       {/* File Upload Container */}
       <div style={{ marginBottom: '0.75rem' }}>
         <FileUpload 
+          ref={fileUploadRef}
           isCollapsed={isUploadCollapsed} 
           onToggleCollapse={toggleUploadCollapsed} 
           processorType={processorType}
@@ -522,9 +570,9 @@ function DatasetsList({ processorType }) {
               </div>
               <div className="pane-content">
               {loading ? (
-                <div className="astro-loading-container">
-                  <div className="astro-loader-galaxy"></div>
-                  <div className="astro-loading-text">Loading datasets...</div>
+                <div className="astro-loading-compact" style={{ minHeight: '150px' }}>
+                  <div className="astro-loader-galaxy" style={{ width: '20px', height: '20px' }}></div>
+                  <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading datasets...</div>
                 </div>
               ) : error ? (
                 <div className="empty-pane">
@@ -533,35 +581,46 @@ function DatasetsList({ processorType }) {
                   <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{error}</p>
                 </div>
               ) : datasets.length > 0 ? (
-                datasets.map(dataset => (
-                  <div key={dataset.id} className={`dataset-item-container ${selectedDataset === dataset.id ? 'active' : ''}`}>
-                    <button
-                      className="dataset-item"
-                      onClick={() => setSelectedDataset(dataset.id)}
-                    >
-                      <div className="dataset-info">
-                        <div className="dataset-name">{dataset.name}</div>
-                        <div className="dataset-stage">{dataset.stage}</div>
-                      </div>
-                      <div className="dataset-status">
-                        <span 
-                          className="status-dot"
-                          style={{ backgroundColor: getDatasetStatusColor(dataset.status) }}
-                          title={dataset.status}
-                        ></span>
-                      </div>
-                    </button>
-                    <div className="dataset-actions">
+                datasets.map(dataset => {
+                  const processingComplete = isProcessingComplete(dataset.name);
+                  
+                  return (
+                    <div key={dataset.id} className={`dataset-item-container ${selectedDataset === dataset.id ? 'active' : ''}`}>
                       <button
-                        className="dataset-process-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartProcessing(dataset.name);
-                        }}
-                        title={`Start processing "${dataset.name}"`}
+                        className="dataset-item"
+                        onClick={() => setSelectedDataset(dataset.id)}
                       >
-                        ▶
+                        <div className="dataset-info">
+                          <div className="dataset-name">{dataset.name}</div>
+                        </div>
+                        <div className="dataset-status">
+                          <span 
+                            className="status-dot"
+                            style={{ 
+                              backgroundColor: processingComplete ? '#4FD1C5' : getDatasetStatusColor(dataset.status)
+                            }}
+                            title={processingComplete ? 'Processing complete' : dataset.status}
+                          ></span>
+                        </div>
                       </button>
+                      <div className="dataset-actions">
+                        <button
+                          className="dataset-process-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!processingComplete) {
+                              handleStartProcessing(dataset.name);
+                            }
+                          }}
+                          disabled={processingComplete}
+                          title={processingComplete ? 'Processing complete' : `Start processing "${dataset.name}"`}
+                          style={{
+                            opacity: processingComplete ? 0.6 : 1,
+                            cursor: processingComplete ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          ▶
+                        </button>
                       <button
                         className="dataset-delete-btn"
                         onClick={(e) => {
@@ -574,7 +633,8 @@ function DatasetsList({ processorType }) {
                       </button>
                     </div>
                   </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="empty-pane">
                   <div className="empty-icon">📊</div>
