@@ -675,52 +675,64 @@ func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// List objects in the specific batch's processed folder
-	folderPath := fmt.Sprintf("%s/processed/%s", appType, batchName)
-	log.Printf("DEBUG: Listing objects in processed folder: %s", folderPath)
-	objects, err := h.S3Bucket.GetS3Objects(folderPath)
-	if err != nil {
-		log.Printf("Error listing S3 objects for batch %s processed in app %s: %v", batchName, appType, err)
-		response := ListDatasetFilesResponse{
-			Success: false,
-			Files:   []DatasetFile{},
-			Message: "Failed to list batch processed files",
-		}
-		json.NewEncoder(w).Encode(response)
-		return
+	// List objects from both input and processed folders to show complete file list
+	var allFiles []DatasetFile
+	fileSeen := make(map[string]bool) // Track filenames to avoid duplicates
+
+	// Check both input and processed folders
+	folders := []struct {
+		path string
+		name string
+	}{
+		{fmt.Sprintf("%s/input/%s", appType, batchName), "input"},
+		{fmt.Sprintf("%s/processed/%s", appType, batchName), "processed"},
 	}
-	log.Printf("DEBUG: Found %d objects in processed folder %s", len(objects), folderPath)
 
-	// Convert objects to DatasetFile structs
-	files := make([]DatasetFile, 0)
-	for _, object := range objects {
-		// GetS3Objects returns just the filename (without the full path)
-		filename := object
-
-		// Get file metadata from S3
-		fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
-		metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
+	for _, folder := range folders {
+		log.Printf("DEBUG: Listing objects in %s folder: %s", folder.name, folder.path)
+		objects, err := h.S3Bucket.GetS3Objects(folder.path)
 		if err != nil {
-			log.Printf("Warning: Could not get metadata for %s: %v", filename, err)
-			// Still include the file with basic info
-			files = append(files, DatasetFile{
+			log.Printf("Warning: Error listing S3 objects in %s folder %s: %v", folder.name, folder.path, err)
+			continue // Continue with other folder
+		}
+		log.Printf("DEBUG: Found %d objects in %s folder %s", len(objects), folder.name, folder.path)
+
+		// Convert objects to DatasetFile structs
+		for _, object := range objects {
+			filename := object
+
+			// Skip if we've already seen this file (avoid duplicates)
+			if fileSeen[filename] {
+				continue
+			}
+			fileSeen[filename] = true
+
+			// Get file metadata from S3
+			fullObjectKey := fmt.Sprintf("%s/%s", folder.path, filename)
+			metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
+			if err != nil {
+				log.Printf("Warning: Could not get metadata for %s: %v", filename, err)
+				// Still include the file with basic info
+				allFiles = append(allFiles, DatasetFile{
+					Name:      filename,
+					Size:      0,
+					Timestamp: "Unknown",
+					Key:       fullObjectKey,
+				})
+				continue
+			}
+
+			allFiles = append(allFiles, DatasetFile{
 				Name:      filename,
-				Size:      0,
-				Timestamp: "Unknown",
+				Size:      metadata.Size,
+				Timestamp: metadata.LastModified.Format("2006-01-02 15:04:05"),
 				Key:       fullObjectKey,
 			})
-			continue
 		}
-
-		files = append(files, DatasetFile{
-			Name:      filename,
-			Size:      metadata.Size,
-			Timestamp: metadata.LastModified.Format("2006-01-02 15:04:05"),
-			Key:       fullObjectKey,
-		})
 	}
 
-	log.Printf("Found %d processed files in batch %s for app %s", len(files), batchName, appType)
+	files := allFiles
+	log.Printf("Found %d total files (input + processed) in batch %s for app %s", len(files), batchName, appType)
 
 	response := ListDatasetFilesResponse{
 		Success: true,

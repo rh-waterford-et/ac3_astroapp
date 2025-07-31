@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import PropTypes from 'prop-types';
 import { uploadFiles as apiUploadFiles, getDatasets, createDataset } from '../services/api';
 import { getProcessorConfig } from '../config/processorConfig';
 
-function FileUpload({ isCollapsed = false, onToggleCollapse, processorType, onDatasetCreated }) {
+const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processorType, onDatasetCreated }, ref) => {
   const [dragActive, setDragActive] = useState(false);
   const [uploadQueue, setUploadQueue] = useState([]);
   const fileInputRef = useRef(null);
@@ -210,6 +210,11 @@ function FileUpload({ isCollapsed = false, onToggleCollapse, processorType, onDa
     setUploadQueue([]);
   };
 
+  // Expose clearAll function to parent components
+  useImperativeHandle(ref, () => ({
+    clearAll
+  }));
+
   const handleNewDatasetCreate = async () => {
     if (newDatasetName.trim()) {
       const sanitizedName = newDatasetName.trim().replace(/[^a-zA-Z0-9_-]/g, '');
@@ -334,15 +339,15 @@ function FileUpload({ isCollapsed = false, onToggleCollapse, processorType, onDa
           <div className="section-header">
             <h4>Select Dataset</h4>
             {loadingDatasets && (
-              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
-                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
-                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading datasets...</div>
+              <div className="astro-loading-compact">
+                <div className="astro-loader-galaxy" style={{ width: '18px', height: '18px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '11px' }}>Loading datasets...</div>
               </div>
             )}
             {datasetError && (
-              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
-                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
-                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading datasets...</div>
+              <div className="astro-loading-compact">
+                <div className="astro-loader-galaxy" style={{ width: '18px', height: '18px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '11px' }}>Loading datasets...</div>
               </div>
             )}
           </div>
@@ -360,11 +365,6 @@ function FileUpload({ isCollapsed = false, onToggleCollapse, processorType, onDa
                   <option key={dataset} value={dataset}>{dataset}</option>
                 ))}
               </select>
-              {currentDataset && (
-                <div className="dataset-info">
-                  <span className="dataset-path">📁 {getProcessorConfig(processorType).paths.input}/{currentDataset}</span>
-                </div>
-              )}
             </div>
             
             {/* Create Dataset Button */}
@@ -389,7 +389,7 @@ function FileUpload({ isCollapsed = false, onToggleCollapse, processorType, onDa
                     <input
                       type="text"
                       className="new-dataset-input"
-                      placeholder="Enter dataset name (e.g., NGC7025)"
+                      placeholder="NGC7025"
                       value={newDatasetName}
                       onChange={(e) => setNewDatasetName(e.target.value)}
                       onKeyDown={(e) => {
@@ -401,11 +401,6 @@ function FileUpload({ isCollapsed = false, onToggleCollapse, processorType, onDa
                       }}
                     />
                   </div>
-                  {newDatasetName.trim() && (
-                    <div className="dataset-preview">
-                      📁 {getProcessorConfig(processorType).paths.input}/{newDatasetName.trim().replace(/[^a-zA-Z0-9_-]/g, '')}
-                    </div>
-                  )}
                   
                   {/* Action buttons side-by-side */}
                   <div className="dataset-form-actions">
@@ -529,7 +524,7 @@ function FileUpload({ isCollapsed = false, onToggleCollapse, processorType, onDa
       )}
     </div>
   );
-}
+});
 
 FileUpload.propTypes = {
   isCollapsed: PropTypes.bool,

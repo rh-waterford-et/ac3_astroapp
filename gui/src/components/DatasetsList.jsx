@@ -63,11 +63,15 @@ function DatasetsList({ processorType }) {
   const [inputFiles, setInputFiles] = useState([]);
   const [outputFiles, setOutputFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [inputFilesLoading, setInputFilesLoading] = useState(false);
+  const [outputFilesLoading, setOutputFilesLoading] = useState(false);
+  const [inputFilesLoaded, setInputFilesLoaded] = useState(false);
   const [error, setError] = useState(null);
 
   // Simple refresh tracking
   const refreshTimer = useRef(null);
   const isRefreshing = useRef(false);
+  const fileUploadRef = useRef(null);
 
   // Clear all data when processor type changes
   useEffect(() => {
@@ -85,7 +89,15 @@ function DatasetsList({ processorType }) {
     setOutputFiles([]);
     setSelectedDataset('');
     setError(null);
+    setInputFilesLoading(false);
+    setOutputFilesLoading(false);
+    setInputFilesLoaded(false);
     isRefreshing.current = false;
+    
+    // Clear file upload queue
+    if (fileUploadRef.current) {
+      fileUploadRef.current.clearAll();
+    }
     
          // Start fresh
      loadDatasets();
@@ -137,23 +149,20 @@ function DatasetsList({ processorType }) {
     }
   }, [processorType]);
 
-  // Load files for current dataset
-  const loadFiles = useCallback(async (silent = false) => {
+  // Load input files for current dataset
+  const loadInputFiles = useCallback(async (silent = false) => {
     if (!selectedDataset || isRefreshing.current) return;
     
-    console.log(silent ? '🔄 Background refresh files for' : '🔄 Loading files for', selectedDataset);
+    console.log(silent ? '🔄 Background refresh input files for' : '🔄 Loading input files for', selectedDataset);
     isRefreshing.current = true;
     
     // Only show loading spinner for user actions, not background refreshes
     if (!silent) {
-      setLoading(true);
+      setInputFilesLoading(true);
     }
     
     try {
-      const [inputFilesData, outputFilesData] = await Promise.all([
-        getDatasetFiles(selectedDataset, processorType),
-        getDatasetOutputFiles(selectedDataset, processorType)
-      ]);
+      const inputFilesData = await getDatasetFiles(selectedDataset, processorType);
 
       // Process input files
       const inputFiles = inputFilesData
@@ -167,6 +176,38 @@ function DatasetsList({ processorType }) {
         }))
         .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
+      setInputFiles(inputFiles);
+      setInputFilesLoaded(true);
+    } catch (err) {
+      console.error('❌ Failed to load input files:', err);
+      // Only show error for user actions, not background refreshes
+      if (!silent) {
+        setError(err.message || 'Failed to load input files');
+      }
+    } finally {
+      // Only hide loading spinner if we showed it
+      if (!silent) {
+        setInputFilesLoading(false);
+      }
+      isRefreshing.current = false;
+    }
+  }, [selectedDataset, processorType]);
+
+  // Load output files for current dataset
+  const loadOutputFiles = useCallback(async (silent = false) => {
+    if (!selectedDataset || isRefreshing.current) return;
+    
+    console.log(silent ? '🔄 Background refresh output files for' : '🔄 Loading output files for', selectedDataset);
+    isRefreshing.current = true;
+    
+    // Only show loading spinner for user actions, not background refreshes
+    if (!silent) {
+      setOutputFilesLoading(true);
+    }
+    
+    try {
+      const outputFilesData = await getDatasetOutputFiles(selectedDataset, processorType);
+
       // Process output files
       const outputFiles = outputFilesData
         .filter(file => isValidFile(file.name))
@@ -179,18 +220,17 @@ function DatasetsList({ processorType }) {
         }))
         .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
-      setInputFiles(inputFiles);
       setOutputFiles(outputFiles);
     } catch (err) {
-      console.error('❌ Failed to load files:', err);
+      console.error('❌ Failed to load output files:', err);
       // Only show error for user actions, not background refreshes
       if (!silent) {
-        setError(err.message || 'Failed to load files');
+        setError(err.message || 'Failed to load output files');
       }
     } finally {
       // Only hide loading spinner if we showed it
       if (!silent) {
-        setLoading(false);
+        setOutputFilesLoading(false);
       }
       isRefreshing.current = false;
     }
@@ -203,13 +243,27 @@ function DatasetsList({ processorType }) {
       clearInterval(refreshTimer.current);
     }
 
-    // Start new timer - only refresh files
-    refreshTimer.current = setInterval(() => {
-      if (!loading && !isRefreshing.current && selectedDataset) {
-        console.log('🔄 5s refresh cycle');
-        loadFiles(true); // Silent background refresh
+    // Start new timer - refresh all three panes (datasets, input files, then output files)
+    refreshTimer.current = setInterval(async () => {
+      if (!loading && !isRefreshing.current && !inputFilesLoading && !outputFilesLoading) {
+        console.log('🔄 3s refresh cycle - refreshing all panes');
+        
+        // First refresh datasets (silent)
+        await loadDatasets(true);
+        
+        // Then refresh files if we have a selected dataset
+        if (selectedDataset) {
+          await loadInputFiles(true); // Silent background refresh
+          
+          // After input files load, refresh output files
+          setTimeout(() => {
+            if (!isRefreshing.current) {
+              loadOutputFiles(true);
+            }
+          }, 100);
+        }
       }
-    }, 5000);
+    }, 3000);
 
     // Cleanup on unmount
     return () => {
@@ -217,17 +271,28 @@ function DatasetsList({ processorType }) {
         clearInterval(refreshTimer.current);
       }
     };
-  }, [loadFiles, loading, selectedDataset]);
+  }, [loadInputFiles, loadOutputFiles, loading, selectedDataset, inputFilesLoading, outputFilesLoading]);
 
-     // Load files when dataset selection changes
-   useEffect(() => {
-     if (selectedDataset) {
-       loadFiles();
-     } else {
-       setInputFiles([]);
-       setOutputFiles([]);
-     }
-   }, [selectedDataset, loadFiles]);
+  // Load input files when dataset selection changes
+  useEffect(() => {
+    if (selectedDataset) {
+      setInputFilesLoaded(false);
+      setOutputFiles([]); // Clear output files when changing datasets
+      loadInputFiles();
+    } else {
+      setInputFiles([]);
+      setOutputFiles([]);
+      setInputFilesLoaded(false);
+    }
+  }, [selectedDataset, loadInputFiles]);
+
+  // Load output files after input files have loaded
+  useEffect(() => {
+    if (inputFilesLoaded && selectedDataset) {
+      console.log('✅ Input files loaded, now loading output files');
+      loadOutputFiles();
+    }
+  }, [inputFilesLoaded, selectedDataset, loadOutputFiles]);
 
    // Handle dataset creation callback
    const handleDatasetCreated = useCallback((datasetName) => {
@@ -313,6 +378,33 @@ function DatasetsList({ processorType }) {
   const selectedDatasetInfo = datasets.find(dataset => dataset.id === selectedDataset);
   const datasetName = selectedDatasetInfo ? selectedDatasetInfo.name : 'Unknown';
 
+  // Calculate expected output files based on processor type
+  const getExpectedOutputCount = (inputCount, processorType) => {
+    if (processorType === 'starlight') {
+      return inputCount; // 1:1 ratio
+    } else if (processorType === 'ppxf') {
+      return inputCount * 5; // 1:5 ratio
+    }
+    return inputCount; // Default 1:1
+  };
+
+  // Check if processing is complete for a dataset
+  const isProcessingComplete = (datasetName) => {
+    // Only check if this is the currently selected dataset
+    if (selectedDataset !== datasetName) {
+      return false;
+    }
+    
+    const datasetInputFiles = inputFiles.filter(file => file.name);
+    const datasetOutputFiles = outputFiles.filter(file => file.name);
+    
+    const inputCount = datasetInputFiles.length;
+    const outputCount = datasetOutputFiles.length;
+    const expectedOutputCount = getExpectedOutputCount(inputCount, processorType);
+    
+    return inputCount > 0 && outputCount >= expectedOutputCount && expectedOutputCount > 0;
+  };
+
   // Start processing function
   const handleStartProcessing = async (datasetName) => {
     const confirmed = window.confirm(`Start processing dataset "${datasetName}" with ${processorType}?`);
@@ -352,8 +444,13 @@ function DatasetsList({ processorType }) {
       if (result.success) {
         console.log('Dataset deleted successfully:', datasetId);
         
-        // Handle selection logic before refreshing datasets
+        // Handle selection logic and refresh all panes
         if (selectedDataset === datasetId) {
+          // Clear current files immediately
+          setInputFiles([]);
+          setOutputFiles([]);
+          setInputFilesLoaded(false);
+          
           // Find remaining datasets (excluding the deleted one)
           const remainingDatasets = datasets.filter(d => d.id !== datasetId);
           
@@ -361,12 +458,9 @@ function DatasetsList({ processorType }) {
             // Select the first remaining dataset (alphabetically sorted)
             const nextDataset = remainingDatasets[0];
             setSelectedDataset(nextDataset.id);
-            // File loading will be handled by the useEffect when selectedDataset changes
           } else {
             // No datasets left, clear everything
             setSelectedDataset('');
-            setInputFiles([]);
-            setOutputFiles([]);
             setError(null);
           }
         }
@@ -374,8 +468,14 @@ function DatasetsList({ processorType }) {
         // Refresh datasets list to get updated list
         await loadDatasets();
         
+        // If we have a selected dataset after deletion, refresh its files
+        if (selectedDataset && selectedDataset !== datasetId) {
+          // Force refresh the input files for the currently selected dataset
+          await loadInputFiles();
+        }
+        
         // Give user feedback
-        console.log(`Dataset "${datasetName}" deleted successfully`);
+        console.log(`Dataset "${datasetName}" deleted successfully - all panes refreshed`);
       } else {
         console.error('Failed to delete dataset:', result.message);
       }
@@ -431,6 +531,7 @@ function DatasetsList({ processorType }) {
       {/* File Upload Container */}
       <div style={{ marginBottom: '0.75rem' }}>
         <FileUpload 
+          ref={fileUploadRef}
           isCollapsed={isUploadCollapsed} 
           onToggleCollapse={toggleUploadCollapsed} 
           processorType={processorType}
@@ -440,238 +541,272 @@ function DatasetsList({ processorType }) {
       
       {/* Three-pane layout Container */}
       <div className="pipeline-container" style={{ marginBottom: '0.75rem' }}>
-        <div className={`pipeline-panes ${isDatasetsCollapsed ? 'datasets-collapsed' : ''}`}>
+        {/* Parent Header for 3-pane section */}
+        <div className="pane-header">
+          <div className="pane-header-left">
+            <button 
+              className="collapse-toggle"
+              onClick={toggleDatasetsCollapsed}
+              title={isDatasetsCollapsed ? "Expand Dataset Management" : "Collapse Dataset Management"}
+            >
+              <span className={`toggle-icon ${isDatasetsCollapsed ? 'collapsed' : ''}`}>
+                {isDatasetsCollapsed ? '▲' : '▼'}
+              </span>
+            </button>
+            <h3>Dataset Management</h3>
+          </div>
+        </div>
         
-        {/* Left Pane - Dataset Selection */}
-        <div className="pipeline-pane datasets-pane">
-          <div className="pane-header">
-            <div className="pane-header-left">
-              <button 
-                className="collapse-toggle"
-                onClick={toggleDatasetsCollapsed}
-                title={isDatasetsCollapsed ? "Expand Datasets" : "Collapse Datasets"}
-              >
-                <span className={`toggle-icon ${isDatasetsCollapsed ? 'collapsed' : ''}`}>
-                  {isDatasetsCollapsed ? '▲' : '▼'}
-                </span>
-              </button>
-              <h3>Datasets</h3>
-            </div>
-            <div className="pane-count">{datasets.length}</div>
-          </div>
-          {!isDatasetsCollapsed && (
-            <div className="pane-content">
-            {loading ? (
-              <div className="astro-loading-container">
-                <div className="astro-loader-galaxy"></div>
-                <div className="astro-loading-text">Loading datasets...</div>
-              </div>
-            ) : error ? (
-              <div className="empty-pane">
-                <div className="empty-icon">❌</div>
-                <p>Error loading datasets</p>
-                <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{error}</p>
-              </div>
-            ) : datasets.length > 0 ? (
-              datasets.map(dataset => (
-                <div key={dataset.id} className={`dataset-item-container ${selectedDataset === dataset.id ? 'active' : ''}`}>
-                  <button
-                    className="dataset-item"
-                    onClick={() => setSelectedDataset(dataset.id)}
-                  >
-                    <div className="dataset-info">
-                      <div className="dataset-name">{dataset.name}</div>
-                      <div className="dataset-stage">{dataset.stage}</div>
-                    </div>
-                    <div className="dataset-status">
-                      <span 
-                        className="status-dot"
-                        style={{ backgroundColor: getDatasetStatusColor(dataset.status) }}
-                        title={dataset.status}
-                      ></span>
-                    </div>
-                  </button>
-                  <div className="dataset-actions">
-                    <button
-                      className="dataset-process-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleStartProcessing(dataset.name);
-                      }}
-                      title={`Start processing "${dataset.name}"`}
-                    >
-                      ▶
-                    </button>
-                    <button
-                      className="dataset-delete-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteDataset(dataset.id, dataset.name);
-                      }}
-                      title={`Delete dataset "${dataset.name}"`}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="empty-pane">
-                <div className="empty-icon">📊</div>
-                <p>No datasets found</p>
-              </div>
-            )}
-          </div>
-          )}
-        </div>
-
         {!isDatasetsCollapsed && (
-          <>
-        {/* Middle Pane - Input Files */}
-        <div className="pipeline-pane files-pane">
-          <div className="pane-header">
-            <h3>Input Files - {datasetName}</h3>
-            <div className="pane-count">{inputFiles.length}</div>
-          </div>
-          <div className="pane-content">
-            {(() => {
-              console.log('Input files render check:', {
-                loading,
-                error,
-                inputFilesLength: inputFiles.length,
-                renderCondition: !loading && !error && inputFiles.length === 0 ? 'empty' : 
-                                 loading ? 'loading' : 
-                                 error ? 'error' : 
-                                 inputFiles.length > 0 ? 'show-files' : 'fallback-empty'
-              });
-              return null;
-            })()}
-            {!loading && !error && inputFiles.length === 0 ? (
-              <div className="empty-pane">
-                <div className="empty-icon">📁</div>
-                <p>No input files available</p>
+          <div className="pipeline-panes">
+            
+            {/* Left Pane - Dataset Selection */}
+            <div className="pipeline-pane datasets-pane">
+              <div className="pane-header">
+                <div className="pane-header-left">
+                  <h3>Datasets</h3>
+                </div>
+                <div className="pane-count">{datasets.length}</div>
               </div>
-            ) : loading ? (
-              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
-                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
-                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading files...</div>
+              <div className="pane-content">
+              {loading ? (
+                <div className="astro-loading-compact" style={{ minHeight: '150px' }}>
+                  <div className="astro-loader-galaxy" style={{ width: '20px', height: '20px' }}></div>
+                  <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading datasets...</div>
+                </div>
+              ) : error ? (
+                <div className="empty-pane">
+                  <div className="empty-icon">❌</div>
+                  <p>Error loading datasets</p>
+                  <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{error}</p>
+                </div>
+              ) : datasets.length > 0 ? (
+                datasets.map(dataset => {
+                  const processingComplete = isProcessingComplete(dataset.name);
+                  
+                  return (
+                    <div key={dataset.id} className={`dataset-item-container ${selectedDataset === dataset.id ? 'active' : ''}`}>
+                      <button
+                        className="dataset-item"
+                        onClick={() => setSelectedDataset(dataset.id)}
+                      >
+                        <div className="dataset-info">
+                          <div className="dataset-name">{dataset.name}</div>
+                        </div>
+                        <div className="dataset-status">
+                          <span 
+                            className="status-dot"
+                            style={{ 
+                              backgroundColor: processingComplete ? '#4FD1C5' : getDatasetStatusColor(dataset.status)
+                            }}
+                            title={processingComplete ? 'Processing complete' : dataset.status}
+                          ></span>
+                        </div>
+                      </button>
+                      <div className="dataset-actions">
+                        <button
+                          className="dataset-process-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!processingComplete) {
+                              handleStartProcessing(dataset.name);
+                            }
+                          }}
+                          disabled={processingComplete}
+                          title={processingComplete ? 'Processing complete' : `Start processing "${dataset.name}"`}
+                          style={{
+                            opacity: processingComplete ? 0.6 : 1,
+                            cursor: processingComplete ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          ▶
+                        </button>
+                      <button
+                        className="dataset-delete-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteDataset(dataset.id, dataset.name);
+                        }}
+                        title={`Delete dataset "${dataset.name}"`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                  );
+                })
+              ) : (
+                <div className="empty-pane">
+                  <div className="empty-icon">📊</div>
+                  <p>No datasets found</p>
+                </div>
+              )}
+            </div>
+            </div>
+
+            {/* Middle Pane - Input Files */}
+            <div className="pipeline-pane files-pane">
+              <div className="pane-header">
+                <h3>Input Files - {datasetName}</h3>
+                <div className="pane-count">{inputFiles.length}</div>
               </div>
-            ) : error ? (
-              <div className="empty-pane">
-                <div className="empty-icon">❌</div>
-                <p>Error loading input files</p>
-                <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{error}</p>
-              </div>
-            ) : inputFiles.length > 0 ? (
-              inputFiles.map((file, index) => (
-                <div key={index} className="file-item-container">
-                  <div className="file-item">
-                    <div className="file-info">
-                      <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
-                      <div className="file-details">
-                        <div className="file-size">{file.size}</div>
+              <div className="pane-content">
+                {(() => {
+                  console.log('Input files render check:', {
+                    inputFilesLoading,
+                    error,
+                    inputFilesLength: inputFiles.length,
+                    renderCondition: !inputFilesLoading && !error && inputFiles.length === 0 ? 'empty' : 
+                                     inputFilesLoading ? 'loading' : 
+                                     error ? 'error' : 
+                                     inputFiles.length > 0 ? 'show-files' : 'fallback-empty'
+                  });
+                  return null;
+                })()}
+                {!inputFilesLoading && !error && inputFiles.length === 0 && selectedDataset ? (
+                  <div className="empty-pane">
+                    <div className="empty-icon">📁</div>
+                    <p>No input files available</p>
+                  </div>
+                ) : !selectedDataset ? (
+                  <div className="empty-pane">
+                    <div className="empty-icon">📂</div>
+                    <p>Select a dataset to view input files</p>
+                  </div>
+                ) : inputFilesLoading ? (
+                  <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                    <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                    <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading input files...</div>
+                  </div>
+                ) : error ? (
+                  <div className="empty-pane">
+                    <div className="empty-icon">❌</div>
+                    <p>Error loading input files</p>
+                    <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{error}</p>
+                  </div>
+                ) : inputFiles.length > 0 ? (
+                  inputFiles.map((file, index) => (
+                    <div key={index} className="file-item-container">
+                      <div className="file-item">
+                        <div className="file-info">
+                          <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
+                          <div className="file-details">
+                            <div className="file-size">{file.size}</div>
+                          </div>
+                        </div>
+                        <div className="file-status">
+                          <span className="status-dot" style={{ backgroundColor: getFileStatusColor(file.status) }}></span>
+                        </div>
                       </div>
+                      <button 
+                        className="file-delete-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteFile(file.key, file.name, true);
+                        }}
+                        title={`Delete file "${file.name}"`}
+                      >
+                        ×
+                      </button>
                     </div>
-                    <div className="file-status">
-                      <span className="status-dot" style={{ backgroundColor: getFileStatusColor(file.status) }}></span>
-                    </div>
+                  ))
+                ) : (
+                  <div className="empty-pane">
+                    <div className="empty-icon">📁</div>
+                    <p>No processed input files</p>
                   </div>
-                  <button 
-                    className="file-delete-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteFile(file.key, file.name, true);
-                    }}
-                    title={`Delete file "${file.name}"`}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))
-            ) : (
-              <div className="empty-pane">
-                <div className="empty-icon">📁</div>
-                <p>No processed input files</p>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
 
-        {/* Right Pane - Output Files */}
-        <div className="pipeline-pane files-pane">
-          <div className="pane-header">
-            <h3>Output Files - {datasetName}</h3>
-            <div className="pane-count">{outputFiles.length}</div>
-          </div>
-          <div className="pane-content">
-            {(() => {
-              console.log('Output files render check:', {
-                loading,
-                error,
-                outputFilesLength: outputFiles.length,
-                renderCondition: !loading && !error && outputFiles.length === 0 ? 'empty' : 
-                                 loading ? 'loading' : 
-                                 error ? 'error' : 
-                                 outputFiles.length > 0 ? 'show-files' : 'fallback-empty'
-              });
-              return null;
-            })()}
-            {!loading && !error && outputFiles.length === 0 ? (
-              <div className="empty-pane">
-                <div className="empty-icon">📁</div>
-                <p>No output files available</p>
+            {/* Right Pane - Output Files */}
+            <div className="pipeline-pane files-pane">
+              <div className="pane-header">
+                <h3>Output Files - {datasetName}</h3>
+                <div className="pane-count">{outputFiles.length}</div>
               </div>
-            ) : loading ? (
-              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
-                <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
-                <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading files...</div>
-              </div>
-            ) : error ? (
-              <div className="empty-pane">
-                <div className="empty-icon">❌</div>
-                <p>Error loading output files</p>
-                <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{error}</p>
-              </div>
-            ) : outputFiles.length > 0 ? (
-              outputFiles.map((file, index) => (
-                <div key={index} className="file-item-container">
-                  <div className="file-item">
-                    <div className="file-info">
-                      <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
-                    </div>
-                    <div className="file-status" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span className="file-size">{file.size}</span>
-                      <span 
-                        className="status-dot"
-                        style={{ backgroundColor: getFileStatusColor(file.status) }}
-                        title={file.status}
-                      ></span>
+              <div className="pane-content">
+                {(() => {
+                  console.log('Output files render check:', {
+                    outputFilesLoading,
+                    inputFilesLoaded,
+                    error,
+                    outputFilesLength: outputFiles.length,
+                    renderCondition: !outputFilesLoading && !error && outputFiles.length === 0 ? 'empty' : 
+                                     outputFilesLoading ? 'loading' : 
+                                     error ? 'error' : 
+                                     outputFiles.length > 0 ? 'show-files' : 'fallback-empty'
+                  });
+                  return null;
+                })()}
+                {!outputFilesLoading && !error && outputFiles.length === 0 && inputFilesLoaded ? (
+                  <div className="empty-pane">
+                    <div className="empty-icon">📁</div>
+                    <p>No output files available</p>
+                  </div>
+                ) : !selectedDataset ? (
+                  <div className="empty-pane">
+                    <div className="empty-icon">📂</div>
+                    <p>Select a dataset to view output files</p>
+                  </div>
+                ) : !inputFilesLoaded ? (
+                  <div className="empty-pane">
+                    <div className="cyber-hourglass">
+                      <div className="hourglass-top"></div>
+                      <div className="hourglass-bottom"></div>
+                      <div className="sand-particle"></div>
                     </div>
                   </div>
-                  <button
-                    className="file-delete-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteFile(file.key, file.name, false);
-                    }}
-                    title={`Delete file "${file.name}"`}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))
-            ) : (
-              <div className="empty-pane">
-                <div className="empty-icon">📁</div>
-                <p>No processed output files</p>
+                ) : outputFilesLoading ? (
+                  <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                    <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                    <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading output files...</div>
+                  </div>
+                ) : error ? (
+                  <div className="empty-pane">
+                    <div className="empty-icon">❌</div>
+                    <p>Error loading output files</p>
+                    <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{error}</p>
+                  </div>
+                ) : outputFiles.length > 0 ? (
+                  outputFiles.map((file, index) => (
+                    <div key={index} className="file-item-container">
+                      <div className="file-item">
+                        <div className="file-info">
+                          <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{truncateFileName(file.name)}</div>
+                        </div>
+                        <div className="file-status" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span className="file-size">{file.size}</span>
+                          <span 
+                            className="status-dot"
+                            style={{ backgroundColor: getFileStatusColor(file.status) }}
+                            title={file.status}
+                          ></span>
+                        </div>
+                      </div>
+                      <button
+                        className="file-delete-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteFile(file.key, file.name, false);
+                        }}
+                        title={`Delete file "${file.name}"`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="empty-pane">
+                    <div className="empty-icon">📁</div>
+                    <p>No processed output files</p>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
           </div>
-        </div>
-        </>
         )}
-
-        </div>
       </div>
       
       {/* Pipeline Progress Monitor */}
