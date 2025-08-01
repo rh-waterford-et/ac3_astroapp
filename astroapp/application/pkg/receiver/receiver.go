@@ -39,7 +39,7 @@ type Receiver struct {
 
 func NewReceiver(queue queue.QueueInterface, utils common.UtilsInterface, bucket s3bucket.S3BucketInterface, redisClient *metrics.RedisClient) *Receiver {
 	metricsStore := metrics.NewMetricsStore(redisClient, 168*time.Hour)
-	aggregationService := metrics.NewAggregationService(metricsStore)
+	aggregationService := metrics.NewAggregationService(metricsStore, 5*time.Minute)
 
 	return &Receiver{
 		Queue:              queue,
@@ -65,7 +65,7 @@ func (r *Receiver) Start(side string) {
 			// Wait a bit before starting aggregation to let the system initialize
 			time.Sleep(30 * time.Second)
 			// Run aggregation every 5 minutes
-			r.AggregationService.RunPeriodicAggregation(ctx, 5*time.Minute)
+			r.AggregationService.Run(ctx)
 		}()
 		log.Printf("🔄 Started event metrics aggregation service (5-minute intervals)")
 	}
@@ -176,7 +176,7 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 			metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
 
 			// Check if metric already exists
-			key := metricsStore.GetBatchKey(eventID)
+			key := metricsStore.GetBatchKey(eventID, batchID)
 			log.Printf("│ DEBUG: Redis key = %s", key)
 			exists, err := r.RedisClient.Exists(ctx, key)
 			if err != nil {
@@ -186,7 +186,8 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 				log.Printf("│ DEBUG: Creating new metric record")
 				err = metricsStore.RecordMetric(ctx, &metrics.MetricRecord{
 					EventID:               eventID,
-					QueueFirstReceiveTime: time.Now(),
+					BatchID:               batchID,
+					QueueStartTime:        time.Now(),
 				})
 				if err != nil {
 					log.Printf("│ ✗ Failed to record queue first receive time: %v", err)
@@ -204,7 +205,7 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 					log.Printf("│ DEBUG: Current queue_first_receive_time = '%s'", currentTime)
 					if currentTime == "" || currentTime == "0001-01-01T00:00:00Z" {
 						err = metricsStore.UpdateMetricField(ctx, eventID,
-							"queue_first_receive_time", time.Now())
+							"queue_first_receive_time", batchID, time.Now())
 						if err != nil {
 							log.Printf("│ ✗ Failed to update queue first receive time: %v", err)
 						} else {
@@ -437,7 +438,7 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		if side == "producer" && r.RedisClient != nil {
 			// Use the event ID from headers for batch end time tracking
 			metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
-			err = metricsStore.UpdateMetricField(context.Background(), eventID, "batch_end_time", time.Now())
+			err = metricsStore.UpdateMetricField(context.Background(), eventID, "batch_end_time", batchID, time.Now())
 			if err != nil {
 				log.Printf("│ ✗ Failed to record batch end time: %v", err)
 			} else {

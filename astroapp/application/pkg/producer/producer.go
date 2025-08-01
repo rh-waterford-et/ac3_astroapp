@@ -98,7 +98,7 @@ func (p *Producer) SendBatch(appName string) {
 		// Update the .in file before sending the batch
 		if appName == "STARLIGHT" && p.Side == "producer" {
 			inFileName, content := starlight.UpdateInFile(p.Batch)
-			println(content)
+			//println(content)
 			if inFileName != "" && content != "" {
 				p.Batch = append(p.Batch, api.DataFile{Name: inFileName, Content: content})
 			}
@@ -129,9 +129,7 @@ func (p *Producer) DeleteProcessedFiles() {
 		err := p.FileSource.DeleteFile(file.Name)
 		if err != nil {
 			log.Printf("Error deleting file %s: %v\n", file.Name, err)
-		} /* else {
-			log.Printf("Successfully moved file %s to processed dir", file.Name)
-		} */
+		} 
 	}
 }
 

@@ -87,7 +87,7 @@ func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string,
 		metricsStore := metrics.NewMetricsStore(s.RedisClient, 168*time.Hour)
 
 		// Record queue start time for this specific batch
-		err = metricsStore.UpdateMetricField(ctx, event.ID, "queue_start_time", time.Now())
+		err = metricsStore.UpdateMetricField(ctx, event.ID, "queue_start_time", event.BatchID, time.Now())
 		if err != nil {
 			log.Printf("Failed to record queue start time: %v", err)
 		} /* else {

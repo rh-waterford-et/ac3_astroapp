@@ -155,6 +155,12 @@ spec:
           value: "/processing_data/starlight/config_files_starlight/grid_example.in"
         - name: "IN_FILE_OUTPUT_PATH"
           value: "/processing_data/starlight/runtime/infiles/"
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          value: ""
         volumeMounts:
         - mountPath: /processing_data/
           name: ucm-pv-storage

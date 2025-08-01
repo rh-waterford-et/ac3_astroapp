@@ -85,6 +85,14 @@ func (w *Watcher) RunForBatch(appName string, batchName string, side string, uti
 			return
 		}
 		length = len(files)
+		if length > 0 {
+			for _, file := range files {
+				parts := strings.Split(file, "/")
+				if len(parts) >= 2 {
+					eventID = parts[1]
+				}
+			}
+		}
 		log.Printf("Found %d files in %s: %v", length, inputDir, files)
 	default:
 		log.Printf("Invalid side: %s\n", side)
@@ -109,7 +117,7 @@ func (w *Watcher) RunForBatch(appName string, batchName string, side string, uti
 			binaryProducer := producer.NewBinaryProducer(batchSize, fileSource, binaryEventQueue, utils, side, eventID)
 			binaryProducer.CreateBinaryEvent(appName, side, queue, binaryEventQueue)
 		} else {
-			log.Printf("Using standard text processing for %s", appName)
+			//log.Printf("Using standard text processing for %s", appName)
 			eventQueue := make(chan api.Event, 10)
 			standardProducer := producer.NewProducer(batchSize, fileSource, eventQueue, utils, side, eventID, redisClient)
 			standardProducer.CreateEvent(appName, side, queue)
