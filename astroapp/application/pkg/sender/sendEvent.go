@@ -69,6 +69,7 @@ func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string,
 	headers["batch_size"] = len(event.Files)
 	headers["app_name"] = appName
 	headers["event_id"] = event.ID
+	headers["batch_id"] = event.BatchID
 
 	filenames := []string{}
 	for _, f := range event.Files {

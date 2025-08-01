@@ -155,9 +155,15 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		return
 	}
 
-	batchID := fmt.Sprintf("%s-%d", appName, d.DeliveryTag)
+	batchN := fmt.Sprintf("%s-%d", appName, d.DeliveryTag)
+	batchID, ok := d.Headers["batch_id"].(string)
+	if !ok {
+		log.Printf("│ ERROR: 'batch_id' header missing or invalid")
+		r.requeueWithLog(d, "unknown-batch")
+		return
+	}
 
-	log.Printf("\n■■■ BATCH START [%s] ■■■", batchID)
+	log.Printf("\n■■■ BATCH START [%s] ■■■", batchN)
 	log.Printf("│ App:        %s", appName)
 	log.Printf("│ Event ID:   %s", eventID)
 	log.Printf("│ Batch ID:   %s", batchID)

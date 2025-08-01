@@ -92,6 +92,7 @@ type BinaryMessageBody struct {
 
 type Event struct {
 	ID      string     `json:"ID"`
+	BatchID string     `json:"BatchID"`
 	Files   []DataFile `json:"Files"`
 }
 

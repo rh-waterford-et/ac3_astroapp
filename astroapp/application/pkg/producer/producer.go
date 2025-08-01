@@ -77,7 +77,7 @@ var starlight app.StarlightInterface = &app.Starlight{
 func (p *Producer) CreateEvent(appName string, side string, q queue.QueueInterface) {
 	go func() {
 		for event := range p.EventQueue {
-			log.Printf("Sending event (ID: %s) with %d files\n", p.EventID, len(event.Files))
+			log.Printf("Sending event (ID: %s, BatchID: %s) with %d files\n", p.EventID, event.BatchID, len(event.Files))
 			p.Sender.SendEvent(event, appName, side, q)
 		}
 	}()
@@ -107,8 +107,10 @@ func (p *Producer) SendBatch(appName string) {
 		// Update progress to queued stage
 		p.updateProgress(appName, api.StageQueued, 10.0)
 
+		batchID := p.Utils.GenerateUUID()
 		event := api.Event{
 			ID:    p.EventID,
+			BatchID: batchID,
 			Files: p.Batch,
 		}
 		p.EventQueue <- event
