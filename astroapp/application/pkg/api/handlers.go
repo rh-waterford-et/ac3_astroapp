@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -53,6 +55,17 @@ type ListDatasetFilesResponse struct {
 	Success bool          `json:"success"`
 	Files   []DatasetFile `json:"files"`
 	Message string        `json:"message,omitempty"`
+}
+
+type PaginatedDatasetFilesResponse struct {
+	Success bool          `json:"success"`
+	Files   []DatasetFile `json:"files"`
+	Message string        `json:"message,omitempty"`
+	// Pagination metadata
+	Total   int  `json:"total"`
+	Offset  int  `json:"offset"`
+	Limit   int  `json:"limit"`
+	HasMore bool `json:"hasMore"`
 }
 
 func NewFileUploadHandler(s3Bucket s3bucket.S3BucketInterface, progressTracker *ProgressTracker) *FileUploadHandler {
@@ -861,6 +874,208 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 	response := ListDatasetFilesResponse{
 		Success: true,
 		Files:   files,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+// extractCellNumber extracts the numeric cell number from a PDF filename
+// e.g., "0/NGC7025_LR-V_final_cube_voronoi_cell_0_pPXF_fitting.pdf" -> 0
+func extractCellNumber(filename string) int {
+	// Extract cell directory number from path like "0/filename.pdf"
+	if parts := strings.Split(filename, "/"); len(parts) > 0 {
+		if cellNum, err := strconv.Atoi(parts[0]); err == nil {
+			return cellNum
+		}
+	}
+	return 0 // fallback
+}
+
+// ListDatasetOutputFilesPaginated returns a paginated list of files in a dataset's output folder
+func (h *FileUploadHandler) ListDatasetOutputFilesPaginated(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get batch name from URL query parameter
+	batchName := r.URL.Query().Get("dataset")
+	if batchName == "" {
+		batchName = r.URL.Query().Get("batch") // also support 'batch' parameter
+	}
+
+	if batchName == "" {
+		response := PaginatedDatasetFilesResponse{
+			Success: false,
+			Files:   []DatasetFile{},
+			Message: "Dataset name parameter is required",
+			Total:   0,
+			Offset:  0,
+			Limit:   0,
+			HasMore: false,
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Get application type from query parameter (default to starlight)
+	appType := r.URL.Query().Get("app")
+	if appType == "" {
+		appType = "starlight" // default
+	}
+
+	// Validate application type
+	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	isValidApp := false
+	for _, app := range allowedApps {
+		if strings.ToLower(appType) == app {
+			appType = app
+			isValidApp = true
+			break
+		}
+	}
+
+	if !isValidApp {
+		response := PaginatedDatasetFilesResponse{
+			Success: false,
+			Files:   []DatasetFile{},
+			Message: fmt.Sprintf("Invalid application type. Allowed: %s", strings.Join(allowedApps, ", ")),
+			Total:   0,
+			Offset:  0,
+			Limit:   0,
+			HasMore: false,
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Parse pagination parameters
+	limit := 50 // default
+	offset := 0 // default
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
+			limit = l
+		}
+	}
+
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
+	// Validate batch name
+	if strings.Contains(batchName, "/") || strings.Contains(batchName, "\\") {
+		response := PaginatedDatasetFilesResponse{
+			Success: false,
+			Files:   []DatasetFile{},
+			Message: "Invalid batch name",
+			Total:   0,
+			Offset:  offset,
+			Limit:   limit,
+			HasMore: false,
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// List objects in the specific batch's output folder
+	folderPath := fmt.Sprintf("%s/output/%s", appType, batchName)
+
+	// Collect all PDF files first, then paginate the PDF list
+	allPdfFiles := []DatasetFile{}
+	continuationToken := ""
+
+	// Get all S3 objects and filter for PDFs
+	for {
+		page, err := h.S3Bucket.GetS3ObjectsPaginated(folderPath, 1000, continuationToken) // Large batch to get all files
+		if err != nil {
+			log.Printf("Error listing S3 objects for batch %s output in app %s: %v", batchName, appType, err)
+			response := PaginatedDatasetFilesResponse{
+				Success: false,
+				Files:   []DatasetFile{},
+				Message: "Failed to list batch output files",
+				Total:   0,
+				Offset:  offset,
+				Limit:   limit,
+				HasMore: false,
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Filter and collect PDF files from this S3 page
+		for _, object := range page.Objects {
+			filename := object
+
+			// Filter for PDF files in cell subdirectories (contain "/")
+			if strings.Contains(filename, "/") && strings.HasSuffix(strings.ToLower(filename), ".pdf") {
+				fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
+
+				allPdfFiles = append(allPdfFiles, DatasetFile{
+					Name:      filename,
+					Size:      0,        // Size not critical for pagination
+					Timestamp: "Recent", // Timestamp not critical for pagination
+					Key:       fullObjectKey,
+				})
+			}
+		}
+
+		// Check if there are more S3 pages
+		if !page.IsTruncated {
+			break
+		}
+		continuationToken = page.NextContinuationToken
+	}
+
+	// Sort PDFs by cell number (numeric sort)
+	sort.Slice(allPdfFiles, func(i, j int) bool {
+		cellA := extractCellNumber(allPdfFiles[i].Name)
+		cellB := extractCellNumber(allPdfFiles[j].Name)
+		return cellA < cellB
+	})
+
+	// Apply pagination to the PDF list
+	totalPdfs := len(allPdfFiles)
+	startIndex := offset
+	endIndex := offset + limit
+
+	if startIndex >= totalPdfs {
+		startIndex = totalPdfs
+	}
+	if endIndex > totalPdfs {
+		endIndex = totalPdfs
+	}
+
+	paginatedPdfs := []DatasetFile{}
+	if startIndex < totalPdfs {
+		paginatedPdfs = allPdfFiles[startIndex:endIndex]
+	}
+
+	hasMore := endIndex < totalPdfs
+
+	log.Printf("Smart PDF pagination for batch %s (%s): returning %d PDFs (offset: %d, limit: %d, total PDFs: %d, hasMore: %t)",
+		batchName, appType, len(paginatedPdfs), offset, limit, totalPdfs, hasMore)
+
+	response := PaginatedDatasetFilesResponse{
+		Success: true,
+		Files:   paginatedPdfs,
+		Total:   totalPdfs,
+		Offset:  offset,
+		Limit:   limit,
+		HasMore: hasMore,
 	}
 	json.NewEncoder(w).Encode(response)
 }

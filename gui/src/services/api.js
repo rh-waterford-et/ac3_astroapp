@@ -339,6 +339,66 @@ export const getDatasetOutputFiles = async (datasetName, processorType) => {
   }
 };
 
+/**
+ * Get output files for a dataset with pagination for progressive loading
+ * @param {string} datasetName - Name of the dataset
+ * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
+ * @param {number} limit - Number of files to return (default: 50)
+ * @param {number} offset - Starting offset for pagination (default: 0)
+ * @returns {Promise<Object>} - Object with files array, total, hasMore, offset, limit
+ */
+export const getDatasetOutputFilesPaginated = async (datasetName, processorType, limit = 50, offset = 0) => {
+  if (!processorType) {
+    throw new Error('getDatasetOutputFilesPaginated: processorType is required');
+  }
+  
+  console.log(`📄 Fetching paginated output files for dataset: ${datasetName}, processor: ${processorType}, limit: ${limit}, offset: ${offset}`);
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/datasets/output-files-paginated?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}&limit=${limit}&offset=${offset}`);
+    
+    console.log('Dataset paginated output files response status:', response.status);
+    console.log('Dataset paginated output files response ok:', response.ok);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch paginated output files: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('Dataset paginated output files response data:', data);
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch paginated output files');
+    }
+    
+    // Filter for PDF files that are in cell subdirectories (contain "/")
+    const pdfFiles = data.files.filter(file => 
+      file.name.includes('/') && 
+      file.name.toLowerCase().endsWith('.pdf')
+    );
+    
+    // Sort PDF files by cell number (numeric sort)
+    pdfFiles.sort((a, b) => {
+      const cellA = parseInt(a.name.split('/')[0]);
+      const cellB = parseInt(b.name.split('/')[0]);
+      return cellA - cellB;
+    });
+    
+    console.log(`📄 Returning ${pdfFiles.length} PDF files (${offset}-${offset + pdfFiles.length - 1} of ${data.total} total)`);
+    
+    return {
+      files: pdfFiles,
+      total: data.total,
+      hasMore: data.hasMore,
+      offset: offset,
+      limit: limit
+    };
+  } catch (error) {
+    console.error('❌ Failed to fetch paginated output files:', error);
+    throw error;
+  }
+};
+
 // Pipeline Progress API functions
 export const getAllPipelineProgress = async () => {
   try {
