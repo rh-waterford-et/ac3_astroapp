@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // LocalFileSource handles local filesystem operations
@@ -39,7 +40,10 @@ func (l *LocalFileSource) ListFiles() ([]string, error) {
 				continue
 			}
 
-			files = append(files, filename)
+			// Only include files that are "stable" (older than 5 seconds) to prevent race conditions
+			if l.isFileStable(filename) {
+				files = append(files, filename)
+			}
 		}
 	}
 	return files, nil
@@ -132,4 +136,18 @@ func (l *LocalFileSource) isSystemFile(filename string) bool {
 	}
 
 	return false
+}
+
+// isFileStable checks if a file has been stable (unmodified) for at least 5 seconds
+// This prevents race conditions where the watcher picks up files before they're fully written
+func (l *LocalFileSource) isFileStable(filename string) bool {
+	filePath := filepath.Join(l.InputDir, filename)
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return false
+	}
+
+	// File must be older than 5 seconds to be considered "stable"
+	// This ensures processing scripts have time to write and validate files
+	return time.Since(fileInfo.ModTime()) > 5*time.Second
 }

@@ -16,11 +16,14 @@ build:
 	podman build --platform linux/amd64 -t $(IMAGE_NAME) -f $(DOCKERFILE) .
 	@echo "✅ Build completed!"
 
+
 # Push the container image to registry
 push:
 	@echo "📤 Pushing backend container to registry..."
 	podman push $(IMAGE_NAME)
 	@echo "✅ Push completed!"
+
+
 
 # Restart the deployments in OpenShift
 deploy:
@@ -52,8 +55,8 @@ clean:
 help:
 	@echo "UC3 Backend Build and Deploy Commands:"
 	@echo ""
-	@echo "  make build    - Build the container image"
-	@echo "  make push     - Push image to registry"
+	@echo "  make build    - Build the backend container image"
+	@echo "  make push     - Push backend image to registry"
 	@echo "  make deploy   - Restart OpenShift deployments"
 	@echo "  make rebuild  - Full rebuild (build + push + deploy)"
 	@echo "  make status   - Check deployment status"
