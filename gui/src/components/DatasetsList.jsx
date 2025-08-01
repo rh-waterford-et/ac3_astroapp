@@ -73,9 +73,10 @@ function DatasetsList({ processorType }) {
   const isRefreshing = useRef(false);
   const fileUploadRef = useRef(null);
 
-  // Clear all data when processor type changes
+    // Clear all data when processor type changes
   useEffect(() => {
     console.log('🔄 ProcessorType changed to:', processorType, '- clearing all state');
+    console.log('🔍 Current selectedDataset before clearing:', selectedDataset);
     
     // Stop any existing refresh timer
     if (refreshTimer.current) {
@@ -94,20 +95,24 @@ function DatasetsList({ processorType }) {
     setInputFilesLoaded(false);
     isRefreshing.current = false;
     
+    console.log('🧹 State cleared, selectedDataset set to empty string');
+    
     // Clear file upload queue
     if (fileUploadRef.current) {
       fileUploadRef.current.clearAll();
     }
     
-         // Start fresh
-     loadDatasets();
-   }, [processorType]);
+    // Start fresh - force auto-select first dataset on processor switch
+    console.log('🔄 Loading datasets for processor:', processorType);
+    loadDatasets(false, true); // forceAutoSelect = true
+  }, [processorType]);
 
   // Load datasets only
-  const loadDatasets = useCallback(async (silent = false) => {
+  const loadDatasets = useCallback(async (silent = false, forceAutoSelect = false) => {
     if (isRefreshing.current) return;
     
     console.log(silent ? '🔄 Background refresh datasets for' : '🔄 Loading datasets for', processorType);
+    console.log('🔧 loadDatasets called with forceAutoSelect:', forceAutoSelect, 'selectedDataset:', selectedDataset);
     isRefreshing.current = true;
     
     // Only show loading spinner for user actions
@@ -129,10 +134,12 @@ function DatasetsList({ processorType }) {
 
       setDatasets(datasetObjects);
 
-      // Auto-select first dataset if none selected
-      if (!selectedDataset && datasetObjects.length > 0) {
-        console.log('🎯 Auto-selecting first dataset:', datasetObjects[0].id);
+      // Auto-select first dataset if none selected, on processor switch, or forced
+      if ((forceAutoSelect || !selectedDataset || selectedDataset === '') && datasetObjects.length > 0) {
+        console.log('🎯 Auto-selecting first dataset:', datasetObjects[0].id, 'Reason: forceAutoSelect =', forceAutoSelect, 'selectedDataset =', selectedDataset);
         setSelectedDataset(datasetObjects[0].id);
+      } else {
+        console.log('❌ Not auto-selecting. forceAutoSelect:', forceAutoSelect, 'selectedDataset:', selectedDataset, 'datasetObjects.length:', datasetObjects.length);
       }
     } catch (err) {
       console.error('❌ Failed to load datasets:', err);
@@ -248,8 +255,8 @@ function DatasetsList({ processorType }) {
       if (!loading && !isRefreshing.current && !inputFilesLoading && !outputFilesLoading) {
         console.log('🔄 3s refresh cycle - refreshing all panes');
         
-        // First refresh datasets (silent)
-        await loadDatasets(true);
+        // First refresh datasets (silent, no force auto-select)
+        await loadDatasets(true, false);
         
         // Then refresh files if we have a selected dataset
         if (selectedDataset) {
@@ -297,7 +304,7 @@ function DatasetsList({ processorType }) {
    // Handle dataset creation callback
    const handleDatasetCreated = useCallback((datasetName) => {
      console.log('✅ Dataset created:', datasetName, '- refreshing...');
-     loadDatasets(true); // Silent reload since upload already showed loading
+     loadDatasets(true, false); // Silent reload, no force auto-select
    }, [loadDatasets]);
 
   const formatFileSize = (bytes) => {
@@ -466,7 +473,10 @@ function DatasetsList({ processorType }) {
         }
         
         // Refresh datasets list to get updated list
-        await loadDatasets();
+        // Force auto-selection if no dataset is currently selected
+        const shouldForceAutoSelect = !selectedDataset || selectedDataset === '';
+        console.log('🔧 Dataset deletion - shouldForceAutoSelect:', shouldForceAutoSelect, 'selectedDataset:', selectedDataset);
+        await loadDatasets(false, shouldForceAutoSelect);
         
         // If we have a selected dataset after deletion, refresh its files
         if (selectedDataset && selectedDataset !== datasetId) {
