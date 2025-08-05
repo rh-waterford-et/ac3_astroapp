@@ -127,12 +127,14 @@ func (w *Watcher) processBatchFile(filePath string, side string, utils common.Ut
 
 	inputDir := strings.TrimSpace(scanner.Text())
 	parts := strings.Split(inputDir, "/")
-    var appName string
+    var appName, eventID string
     if len(parts) > 0 {
         appName = parts[0]
+		eventID = parts[len(parts)-1]
     } else {
         return fmt.Errorf("invalid inputDir format: %s", inputDir)
     }
+	
 	if !scanner.Scan() {
 		return fmt.Errorf("file list is missing")
 	}
@@ -173,15 +175,6 @@ func (w *Watcher) processBatchFile(filePath string, side string, utils common.Ut
 			return fmt.Errorf("error reading input directory: %w", err)
 		}
 		length := len(files)
-		var eventID string
-		if length > 0 {
-			for _, file := range files {
-				parts := strings.Split(file, "/")
-				if len(parts) >= 2 {
-					eventID = parts[1]
-				}
-			}
-		}
 		log.Printf("Found %d files in %s: %v", length, inputDir, files)
 
 		

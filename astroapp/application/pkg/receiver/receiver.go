@@ -163,7 +163,7 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	r.processStandardMessage(d, side, appName, eventID, batchID, batchN)
 }
 
-func (r *Receiver) createBatchInfoFile(appName, batchID, filenamesHeader string) error {
+func (r *Receiver) createBatchInfoFile(appName, eventID, batchID, filenamesHeader string) error {
 
 	filePath := filepath.Join(os.Getenv("BATCH_INFO_DIR"), batchID+".txt")
 
@@ -180,8 +180,9 @@ func (r *Receiver) createBatchInfoFile(appName, batchID, filenamesHeader string)
 		cleanFilenames = append(cleanFilenames, "output_"+cleanName)
 	}
 
-	content := fmt.Sprintf("%s/data/output\n%s",
+	content := fmt.Sprintf("%s/data/output/%s\n%s",
 		strings.ToLower(appName),
+		eventID,
 		strings.Join(cleanFilenames, ", "))
 
 	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
@@ -538,11 +539,11 @@ func (r *Receiver) finalizeBatchProcessing(d amqp.Delivery, side, appName, event
 			r.recordBatchEndTime(eventID, batchID)
 		}
 		if side == "processor" {
-            if filenamesHeader, ok := d.Headers["filenames"].(string); ok {
-                if err := r.createBatchInfoFile(appName, batchID, filenamesHeader); err != nil {
-                    log.Printf("│ ⚠ Failed to create batch info file: %v", err)
-                }
-            }
+			if filenamesHeader, ok := d.Headers["filenames"].(string); ok {
+				if err := r.createBatchInfoFile(appName, eventID, batchID, filenamesHeader); err != nil {
+					log.Printf("│ ⚠ Failed to create batch info file: %v", err)
+				}
+			}
 		}
 		r.updateProgress(appName, batchID, api.StageComplete, 100.0)
 	} else {
@@ -553,7 +554,7 @@ func (r *Receiver) finalizeBatchProcessing(d amqp.Delivery, side, appName, event
 		}
 		r.updateProgress(appName, batchID, api.StageError, 0.0)
 	}
-	
+
 	log.Printf("■■■ BATCH COMPLETE [%s] ■■■", batchID)
 }
 
