@@ -184,10 +184,11 @@ func (w *Watcher) processBatchFile(filePath string, side string, utils common.Ut
 		}
 		log.Printf("Found %d files in %s: %v", length, inputDir, files)
 
-		os.RemoveAll(processDir)
+		
 		if length > 0 {
 			w.ProcessBatch(appName, side, utils, queue, redisClient, fileSource, eventID)
 		}
+		os.RemoveAll(processDir)
 	}
 
 	return nil
