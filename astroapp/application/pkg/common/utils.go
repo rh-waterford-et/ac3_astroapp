@@ -66,6 +66,7 @@ func (u *Utils) EnsureDirectoriesExist() error {
 		os.Getenv("PROCESSED_STECKMAP"),
 		os.Getenv("PROCESSED_STARLIGHT"),
 		os.Getenv("PROCESSED_PPXF"),
+		os.Getenv("BATCH_INFO_DIR"),
 	}
 
 	for _, dir := range requiredDirs {

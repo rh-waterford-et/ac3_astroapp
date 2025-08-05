@@ -139,97 +139,186 @@ func (r *Receiver) ProcessMessages(queueName string, side string) {
 }
 
 func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
-	// Get the app_name from headers to determine processing logic
-	appName, ok := d.Headers["app_name"].(string)
+	// Initial validation and setup
+	appName, eventID, batchID, batchN, ok := r.validateHeaders(d)
 	if !ok {
-		log.Printf("│ ERROR: 'app_name' header missing or invalid")
-		r.requeueWithLog(d, "unknown-app")
 		return
 	}
 
-	// Get event_id and batch_id from headers
-	eventID, ok := d.Headers["event_id"].(string)
-	if !ok {
-		log.Printf("│ ERROR: 'event_id' header missing or invalid")
-		r.requeueWithLog(d, "unknown-event")
-		return
-	}
+	// Log batch start information
+	r.logBatchStart(batchN, appName, eventID, batchID)
 
-	batchN := fmt.Sprintf("%s-%d", appName, d.DeliveryTag)
-	batchID, ok := d.Headers["batch_id"].(string)
-	if !ok {
-		log.Printf("│ ERROR: 'batch_id' header missing or invalid")
-		r.requeueWithLog(d, "unknown-batch")
-		return
-	}
-
-	log.Printf("\n■■■ BATCH START [%s] ■■■", batchN)
-	log.Printf("│ App:        %s", appName)
-	log.Printf("│ Event ID:   %s", eventID)
-	log.Printf("│ Batch ID:   %s", batchID)
-
-	// Record queue first receive time (when first batch is received)
+	// Handle queue metrics for processor side
 	if side == "processor" {
-		log.Printf("│ DEBUG: Recording QueueFirstReceiveTime for processor side")
-		if r.RedisClient != nil {
-			ctx := context.Background()
-			metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
-
-			// Check if metric already exists
-			key := metricsStore.GetBatchKey(eventID, batchID)
-			log.Printf("│ DEBUG: Redis key = %s", key)
-			exists, err := r.RedisClient.Exists(ctx, key)
-			if err != nil {
-				log.Printf("│ ✗ Failed to check metric existence: %v", err)
-			} else if exists == 0 {
-				// Create new metric record with queue first receive time
-				log.Printf("│ DEBUG: Creating new metric record")
-				err = metricsStore.RecordMetric(ctx, &metrics.MetricRecord{
-					EventID:               eventID,
-					BatchID:               batchID,
-					QueueStartTime:        time.Now(),
-				})
-				if err != nil {
-					log.Printf("│ ✗ Failed to record queue first receive time: %v", err)
-				} else {
-					log.Printf("│ ✓ Recorded queue first receive time for event %s, batch %s", eventID, batchID)
-				}
-			} else {
-				log.Printf("│ DEBUG: Metric already exists, checking if queue_first_receive_time is set")
-				// Check if queue_first_receive_time is already set by getting all fields
-				allFields, err := r.RedisClient.HGetAll(ctx, key)
-				if err != nil {
-					log.Printf("│ ✗ Failed to get metric fields: %v", err)
-				} else {
-					currentTime := allFields["queue_first_receive_time"]
-					log.Printf("│ DEBUG: Current queue_first_receive_time = '%s'", currentTime)
-					if currentTime == "" || currentTime == "0001-01-01T00:00:00Z" {
-						err = metricsStore.UpdateMetricField(ctx, eventID,
-							"queue_first_receive_time", batchID, time.Now())
-						if err != nil {
-							log.Printf("│ ✗ Failed to update queue first receive time: %v", err)
-						} else {
-							log.Printf("│ ✓ Updated queue first receive time for event %s", eventID)
-						}
-					}
-				}
-			}
-		}
+		r.recordQueueFirstReceiveTime(eventID, batchID)
 	}
 
-	// Check if this is a binary event (PPXF .fits files)
-	isBinary, _ := d.Headers["is_binary"].(bool)
-	if isBinary {
-		log.Printf("│ Processing binary event for %s", appName)
+	// Process binary messages separately
+	if isBinary, _ := d.Headers["is_binary"].(bool); isBinary {
 		r.ProcessBinaryMessage(d, side, appName, batchID)
 		return
 	}
 
-	log.Printf("│ Processing standard text event for %s", appName)
+	// Process standard text message
+	r.processStandardMessage(d, side, appName, eventID, batchID, batchN)
+}
 
-	// Update progress to processing stage
+func (r *Receiver) createBatchInfoFile(appName, batchID, filenamesHeader string) error {
+
+	filePath := filepath.Join(os.Getenv("BATCH_INFO_DIR"), batchID+".txt")
+
+	filenames := strings.Split(filenamesHeader, ",")
+	var cleanFilenames []string
+	for _, f := range filenames {
+
+		cleanName := filepath.Base(f)
+
+		if strings.HasSuffix(cleanName, ".in") {
+			continue
+		}
+
+		cleanFilenames = append(cleanFilenames, "output_"+cleanName)
+	}
+
+	content := fmt.Sprintf("%s/data/output\n%s",
+		strings.ToLower(appName),
+		strings.Join(cleanFilenames, ", "))
+
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write batch info file: %v", err)
+	}
+
+	log.Printf("│ ✓ Created batch info file: %s", filePath)
+	return nil
+}
+
+// Helper methods broken down by logical functionality
+func (r *Receiver) validateHeaders(d amqp.Delivery) (string, string, string, string, bool) {
+	appName, ok := d.Headers["app_name"].(string)
+	if !ok {
+		log.Printf("│ ERROR: 'app_name' header missing or invalid")
+		r.requeueWithLog(d, "unknown-app")
+		return "", "", "", "", false
+	}
+
+	eventID, ok := d.Headers["event_id"].(string)
+	if !ok {
+		log.Printf("│ ERROR: 'event_id' header missing or invalid")
+		r.requeueWithLog(d, "unknown-event")
+		return "", "", "", "", false
+	}
+
+	batchID, ok := d.Headers["batch_id"].(string)
+	if !ok {
+		log.Printf("│ ERROR: 'batch_id' header missing or invalid")
+		r.requeueWithLog(d, "unknown-batch")
+		return "", "", "", "", false
+	}
+
+	batchN := fmt.Sprintf("%s-%d", appName, d.DeliveryTag)
+	return appName, eventID, batchID, batchN, true
+}
+
+func (r *Receiver) logBatchStart(batchN, appName, eventID, batchID string) {
+	log.Printf("\n■■■ BATCH START [%s] ■■■", batchN)
+	log.Printf("│ App:        %s", appName)
+	log.Printf("│ Event ID:   %s", eventID)
+	log.Printf("│ Batch ID:   %s", batchID)
+}
+
+func (r *Receiver) recordQueueFirstReceiveTime(eventID, batchID string) {
+	if r.RedisClient == nil {
+		return
+	}
+
+	log.Printf("│ DEBUG: Recording QueueFirstReceiveTime for processor side")
+	ctx := context.Background()
+	metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
+
+	key := metricsStore.GetBatchKey(eventID, batchID)
+	log.Printf("│ DEBUG: Redis key = %s", key)
+
+	exists, err := r.RedisClient.Exists(ctx, key)
+	if err != nil {
+		log.Printf("│ ✗ Failed to check metric existence: %v", err)
+		return
+	}
+
+	if exists == 0 {
+		r.createNewMetricRecord(metricsStore, ctx, eventID, batchID)
+	} else {
+		r.updateExistingMetricRecord(metricsStore, ctx, eventID, batchID, key)
+	}
+}
+
+func (r *Receiver) createNewMetricRecord(metricsStore *metrics.MetricsStore, ctx context.Context, eventID, batchID string) {
+	log.Printf("│ DEBUG: Creating new metric record")
+	err := metricsStore.RecordMetric(ctx, &metrics.MetricRecord{
+		EventID:        eventID,
+		BatchID:        batchID,
+		QueueStartTime: time.Now(),
+	})
+	if err != nil {
+		log.Printf("│ ✗ Failed to record queue first receive time: %v", err)
+	} else {
+		log.Printf("│ ✓ Recorded queue first receive time for event %s, batch %s", eventID, batchID)
+	}
+}
+
+func (r *Receiver) updateExistingMetricRecord(metricsStore *metrics.MetricsStore, ctx context.Context, eventID, batchID, key string) {
+	log.Printf("│ DEBUG: Metric already exists, checking if queue_first_receive_time is set")
+	allFields, err := r.RedisClient.HGetAll(ctx, key)
+	if err != nil {
+		log.Printf("│ ✗ Failed to get metric fields: %v", err)
+		return
+	}
+
+	currentTime := allFields["queue_first_receive_time"]
+	log.Printf("│ DEBUG: Current queue_first_receive_time = '%s'", currentTime)
+	if currentTime == "" || currentTime == "0001-01-01T00:00:00Z" {
+		err = metricsStore.UpdateMetricField(ctx, eventID, "queue_first_receive_time", batchID, time.Now())
+		if err != nil {
+			log.Printf("│ ✗ Failed to update queue first receive time: %v", err)
+		} else {
+			log.Printf("│ ✓ Updated queue first receive time for event %s", eventID)
+		}
+	}
+}
+
+func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, eventID, batchID, batchN string) {
+	log.Printf("│ Processing standard text event for %s", appName)
 	r.updateProgress(appName, batchID, api.StageProcessing, 20.0)
 
+	// Validate batch metadata
+	batchSize, _, ok := r.validateBatchMetadata(d, batchID)
+	if !ok {
+		return
+	}
+
+	// Process message body
+	msgBody, ok := r.processMessageBody(d, batchID, batchSize)
+	if !ok {
+		return
+	}
+
+	// Determine output path based on side and app
+	outputPath := r.getOutputPath(side, appName, batchID)
+	if outputPath == "" {
+		return
+	}
+
+	// Process files
+	successCount, inFileName, inFileContent, spectrumFiles := r.processFiles(msgBody, side, appName, outputPath, batchSize)
+
+	// Handle application-specific processing
+	r.handleApplicationProcessing(side, appName, batchID, successCount, batchSize, inFileName, inFileContent, spectrumFiles)
+
+	// Finalize batch processing
+	r.finalizeBatchProcessing(d, side, appName, eventID, batchID, batchN, successCount, batchSize)
+}
+
+func (r *Receiver) validateBatchMetadata(d amqp.Delivery, batchID string) (int32, []string, bool) {
+	// Log headers if present
 	if len(d.Headers) > 0 {
 		headers, err := json.Marshal(d.Headers)
 		if err != nil {
@@ -242,21 +331,21 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	if !ok {
 		log.Printf("│ ERROR: 'batch_size' header missing or invalid")
 		r.requeueWithLog(d, batchID)
-		return
+		return 0, nil, false
 	}
 
 	filenamesHeader, ok := d.Headers["filenames"].(string)
 	if !ok {
 		log.Printf("│ ERROR: 'filenames' header missing or invalid")
 		r.requeueWithLog(d, batchID)
-		return
+		return 0, nil, false
 	}
 
 	filenames := strings.Split(filenamesHeader, ",")
 	if len(filenames) != int(batchSize) {
 		log.Printf("│ ERROR: Filenames count doesn't match batch_size")
 		r.requeueWithLog(d, batchID)
-		return
+		return 0, nil, false
 	}
 
 	log.Printf("│ Processing batch of %d files:", batchSize)
@@ -264,6 +353,28 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		log.Printf("│ %d. %s", i+1, filename)
 	}
 
+	return batchSize, filenames, true
+}
+
+func (r *Receiver) processMessageBody(d amqp.Delivery, batchID string, batchSize int32) (api.MessageBody, bool) {
+	var msgBody api.MessageBody
+	err := json.Unmarshal(d.Body, &msgBody)
+	if err != nil {
+		log.Printf("│ ERROR parsing message body: %v", err)
+		r.requeueWithLog(d, batchID)
+		return api.MessageBody{}, false
+	}
+
+	if len(msgBody.Files) != int(batchSize) {
+		log.Printf("│ ERROR: Files count in body doesn't match batch_size")
+		r.requeueWithLog(d, batchID)
+		return api.MessageBody{}, false
+	}
+
+	return msgBody, true
+}
+
+func (r *Receiver) getOutputPath(side, appName, batchID string) string {
 	var outputPath string
 	if side == "producer" {
 		switch appName {
@@ -275,8 +386,7 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 			outputPath = os.Getenv("OUTPUT_BUCKET_STECKMAP")
 		default:
 			log.Printf("│ ERROR: Unknown app: %s", appName)
-			r.requeueWithLog(d, batchID)
-			return
+			return ""
 		}
 	} else {
 		switch appName {
@@ -288,34 +398,22 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 			outputPath = os.Getenv("EXPLORED_DIR_STECKMAP")
 		default:
 			log.Printf("│ ERROR: Unknown app: %s", appName)
-			r.requeueWithLog(d, batchID)
-			return
+			return ""
 		}
 	}
+	return outputPath
+}
 
-	var msgBody api.MessageBody
-	err := json.Unmarshal(d.Body, &msgBody)
-	if err != nil {
-		log.Printf("│ ERROR parsing message body: %v", err)
-		r.requeueWithLog(d, batchID)
-		return
-	}
-
-	if len(msgBody.Files) != int(batchSize) {
-		log.Printf("│ ERROR: Files count in body doesn't match batch_size")
-		r.requeueWithLog(d, batchID)
-		return
-	}
-
+func (r *Receiver) processFiles(msgBody api.MessageBody, side, appName, outputPath string, batchSize int32) (int, string, string, []api.DataFile) {
 	successCount := 0
 	var inFileName string
 	var inFileContent string
 	var spectrumFiles []api.DataFile
 
-	starlight := app.NewStarlight([]api.DataFile{}, r.Utils)
+	// starlight := app.NewStarlight([]api.DataFile{}, r.Utils)
 	ppxf := app.NewPPXF(r.Utils)
+
 	for _, file := range msgBody.Files {
-		// Skip hidden files (files starting with .)
 		if strings.HasPrefix(filepath.Base(file.Name), ".") {
 			log.Printf("│ ⚠ Skipping hidden file: %s", file.Name)
 			successCount++
@@ -323,7 +421,6 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		}
 
 		if strings.HasSuffix(file.Name, ".in") {
-			// Store the .in file name but don't process it yet
 			inFileName = file.Name
 			inFileContent = string(file.Content)
 			log.Printf("│ ✓ Found .in file: %s", file.Name)
@@ -331,102 +428,105 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 			continue
 		}
 
-		// Collect spectrum files for later .in file generation (exclude hidden files and .in files)
 		if !strings.HasSuffix(file.Name, ".in") && !strings.HasPrefix(filepath.Base(file.Name), ".") {
 			spectrumFiles = append(spectrumFiles, file)
 		}
+
 		if side == "producer" {
-			// Handle bucket upload for producer side
-			// Extract batch name from filename (e.g., NGC7025 from output_NGC7025_LR-V_final_cube_voronoi_cell_0.txt)
-			batchName := r.extractBatchNameFromFilename(file.Name)
-			var uploadPath string
-			if batchName != "" {
-				// Include batch name in the upload path: starlight/output/NGC7025/filename.txt
-				uploadPath = filepath.Join(outputPath, batchName, file.Name)
-			} else {
-				// Fallback to original path if batch name cannot be extracted
-				uploadPath = filepath.Join(outputPath, file.Name)
-			}
-
-			// Split uploadPath into folder and filename for S3 upload
-			folderPath := filepath.Dir(uploadPath)
-			fileName := filepath.Base(uploadPath)
-
-			// Handle root path case
-			if folderPath == "." {
-				folderPath = ""
-			}
-
-			log.Printf("│ DEBUG: S3 upload - folderPath: '%s', fileName: '%s'", folderPath, fileName)
-
-			// Upload file content to bucket
-			err := r.Bucket.UploadFileToBucket(folderPath, fileName, []byte(file.Content))
-			if err != nil {
-				log.Printf("│ ✗ Error uploading file %s to bucket: %v", uploadPath, err)
-			} else {
-				log.Printf("│ ✓ Uploaded file to bucket: %s", uploadPath)
-				successCount++
-			}
-
+			successCount += r.handleProducerFile(file, outputPath, appName)
 		} else {
-			// Handle local file write for processor side
-			// Store files flat using just the basename to match .in file references
-			filename := filepath.Base(file.Name)
-			filePath := filepath.Join(outputPath, filename)
-
-			err := os.WriteFile(filePath, []byte(file.Content), 0644)
-			if err != nil {
-				log.Printf("│ ✗ Error writing file %s: %v", filePath, err)
-			} else {
-				log.Printf("│ ✓ Wrote file: %s to %s", file.Name, filePath)
-				successCount++
-
-				// For pPXF, add each .fits file to the process list immediately
-				if appName == "PPXF" && strings.HasSuffix(file.Name, ".fits") {
-					ppxf.AddToProcessList(filename)
-					log.Printf("│ ✓ Added pPXF file to process list: %s", filename)
-				}
-			}
+			successCount += r.handleProcessorFile(file, outputPath, appName, ppxf)
 		}
 	}
 
-	// Generate and process .in file after all files are written (for STARLIGHT processor side)
-	// Only generate .in files from spectrum files, NOT when receiving .in files from input side
-	if successCount == int(batchSize) && appName == "STARLIGHT" && side == "processor" && len(spectrumFiles) > 0 && inFileName == "" {
-		// Use only the spectrum files from the current message batch, not all files in the directory
-		// This prevents the continuous loop where .in files keep growing with previously processed files
-		if len(spectrumFiles) > 0 {
-			// Generate new .in file with only the spectrum files from this batch
-			newInFileName, newInContent := starlight.UpdateInFile(spectrumFiles)
-			if newInFileName != "" && newInContent != "" {
-				// Add the newly generated .in file to the processlist
-				starlight.UpdateToProcessList(newInFileName, []byte(newInContent))
-				log.Printf("│ ✓ Generated and added .in file to processlist: %s with %d spectrum files from current batch", newInFileName, len(spectrumFiles))
+	return successCount, inFileName, inFileContent, spectrumFiles
+}
 
-				// Update progress to analysis stage when .in file is processed
-				r.updateProgress(appName, batchID, api.StageAnalysis, 70.0)
-			} else {
-				log.Printf("│ ⚠ Failed to generate .in file content")
-			}
-		} else {
-			log.Printf("│ ⚠ No spectrum files found in current batch")
-		}
-	} else if successCount == int(batchSize) && appName == "STARLIGHT" && side == "processor" && inFileName != "" {
-		// If we received a .in file from input side, ADD it to processlist - this is the work to be done
-		starlight.UpdateToProcessList(inFileName, []byte(inFileContent))
-		log.Printf("│ ✓ Added .in file from input side to processlist: %s", inFileName)
+func (r *Receiver) handleProducerFile(file api.DataFile, outputPath, appName string) int {
+	batchName := r.extractBatchNameFromFilename(file.Name)
+	var uploadPath string
 
-		// Update progress to analysis stage when .in file is processed
-		r.updateProgress(appName, batchID, api.StageAnalysis, 70.0)
+	if batchName != "" {
+		uploadPath = filepath.Join(outputPath, batchName, file.Name)
+	} else {
+		uploadPath = filepath.Join(outputPath, file.Name)
 	}
 
-	// Handle pPXF processing (individual files, no .in file generation needed)
+	folderPath := filepath.Dir(uploadPath)
+	fileName := filepath.Base(uploadPath)
+
+	if folderPath == "." {
+		folderPath = ""
+	}
+
+	log.Printf("│ DEBUG: S3 upload - folderPath: '%s', fileName: '%s'", folderPath, fileName)
+
+	err := r.Bucket.UploadFileToBucket(folderPath, fileName, []byte(file.Content))
+	if err != nil {
+		log.Printf("│ ✗ Error uploading file %s to bucket: %v", uploadPath, err)
+		return 0
+	}
+
+	log.Printf("│ ✓ Uploaded file to bucket: %s", uploadPath)
+	return 1
+}
+
+func (r *Receiver) handleProcessorFile(file api.DataFile, outputPath, appName string, ppxf *app.PPXF) int {
+	filename := filepath.Base(file.Name)
+	filePath := filepath.Join(outputPath, filename)
+
+	err := os.WriteFile(filePath, []byte(file.Content), 0644)
+	if err != nil {
+		log.Printf("│ ✗ Error writing file %s: %v", filePath, err)
+		return 0
+	}
+
+	log.Printf("│ ✓ Wrote file: %s to %s", file.Name, filePath)
+
+	if appName == "PPXF" && strings.HasSuffix(file.Name, ".fits") {
+		ppxf.AddToProcessList(filename)
+		log.Printf("│ ✓ Added pPXF file to process list: %s", filename)
+	}
+
+	return 1
+}
+
+func (r *Receiver) handleApplicationProcessing(side, appName, batchID string, successCount int, batchSize int32, inFileName, inFileContent string, spectrumFiles []api.DataFile) {
+	starlight := app.NewStarlight([]api.DataFile{}, r.Utils)
+
+	if successCount == int(batchSize) && appName == "STARLIGHT" && side == "processor" {
+		if len(spectrumFiles) > 0 && inFileName == "" {
+			r.handleStarlightGeneratedInFile(starlight, spectrumFiles, batchID)
+		} else if inFileName != "" {
+			r.handleStarlightReceivedInFile(starlight, inFileName, inFileContent, batchID)
+		}
+	}
+
 	if successCount == int(batchSize) && appName == "PPXF" && side == "processor" {
 		log.Printf("│ ✓ All pPXF files processed and added to process list")
-		// Update progress to analysis stage for pPXF
 		r.updateProgress(appName, batchID, api.StageAnalysis, 70.0)
 	}
+}
 
+func (r *Receiver) handleStarlightGeneratedInFile(starlight *app.Starlight, spectrumFiles []api.DataFile, batchID string) {
+	newInFileName, newInContent := starlight.UpdateInFile(spectrumFiles)
+	if newInFileName != "" && newInContent != "" {
+		starlight.UpdateToProcessList(newInFileName, []byte(newInContent))
+		log.Printf("│ ✓ Generated and added .in file to processlist: %s with %d spectrum files from current batch",
+			newInFileName, len(spectrumFiles))
+		r.updateProgress("STARLIGHT", batchID, api.StageAnalysis, 70.0)
+	} else {
+		log.Printf("│ ⚠ Failed to generate .in file content")
+	}
+}
+
+func (r *Receiver) handleStarlightReceivedInFile(starlight *app.Starlight, inFileName, inFileContent, batchID string) {
+	starlight.UpdateToProcessList(inFileName, []byte(inFileContent))
+	log.Printf("│ ✓ Added .in file from input side to processlist: %s", inFileName)
+	r.updateProgress("STARLIGHT", batchID, api.StageAnalysis, 70.0)
+}
+
+func (r *Receiver) finalizeBatchProcessing(d amqp.Delivery, side, appName, eventID, batchID, batchN string, successCount int, batchSize int32) {
 	if successCount == int(batchSize) {
 		err := d.Ack(false)
 		if err != nil {
@@ -434,19 +534,16 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		}
 		log.Printf("│ ✔ Successfully processed all %d files", batchSize)
 
-		// Record batch end time when entire batch processing is complete (on producer side)
 		if side == "producer" && r.RedisClient != nil {
-			// Use the event ID from headers for batch end time tracking
-			metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
-			err = metricsStore.UpdateMetricField(context.Background(), eventID, "batch_end_time", batchID, time.Now())
-			if err != nil {
-				log.Printf("│ ✗ Failed to record batch end time: %v", err)
-			} else {
-				log.Printf("│ ✓ Recorded batch end time for event %s", eventID)
-			}
+			r.recordBatchEndTime(eventID, batchID)
 		}
-
-		// Update progress to completion if all files processed
+		if side == "processor" {
+            if filenamesHeader, ok := d.Headers["filenames"].(string); ok {
+                if err := r.createBatchInfoFile(appName, batchID, filenamesHeader); err != nil {
+                    log.Printf("│ ⚠ Failed to create batch info file: %v", err)
+                }
+            }
+		}
 		r.updateProgress(appName, batchID, api.StageComplete, 100.0)
 	} else {
 		log.Printf("│ ⚠ Processed %d/%d files successfully", successCount, batchSize)
@@ -454,27 +551,20 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 		if err != nil {
 			log.Printf("│ ERROR nack: %v", err)
 		}
-
-		// Update progress to error state
 		r.updateProgress(appName, batchID, api.StageError, 0.0)
 	}
-
+	
 	log.Printf("■■■ BATCH COMPLETE [%s] ■■■", batchID)
+}
 
-	// Remove Redis entry for this batch after completion
-	// COMMENTED OUT - Keep Redis entries for debugging
-	/*
-		if r.RedisClient != nil {
-			metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
-			key := metricsStore.GetBatchKey(eventID, batchID)
-			err := r.RedisClient.Del(context.Background(), key)
-			if err != nil {
-				log.Printf("│ ⚠ Failed to remove Redis entry for batch %s: %v", batchID, err)
-			} else {
-				log.Printf("│ ✓ Removed Redis entry for batch %s", batchID)
-			}
-		}
-	*/
+func (r *Receiver) recordBatchEndTime(eventID, batchID string) {
+	metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
+	err := metricsStore.UpdateMetricField(context.Background(), eventID, "batch_end_time", batchID, time.Now())
+	if err != nil {
+		log.Printf("│ ✗ Failed to record batch end time: %v", err)
+	} else {
+		log.Printf("│ ✓ Recorded batch end time for event %s", eventID)
+	}
 }
 
 func (r *Receiver) requeueWithLog(d amqp.Delivery, batchID string) {

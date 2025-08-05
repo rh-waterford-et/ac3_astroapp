@@ -92,6 +92,8 @@ spec:
           value: "/processing_data/starlight/data/output"
         - name: OUTPUT_STARLIGHT
           value: "/processing_data/starlight/data/output"
+        - name : BATCH_INFO_DIR
+          value: "/processing_data/batch_info"
         # Redis configuration for metrics tracking
         - name: REDIS_HOST
           value: "redis"
@@ -161,6 +163,8 @@ spec:
           value: "6379"
         - name: REDIS_PASSWORD
           value: ""
+        - name : BATCH_INFO_DIR
+          value: "/processing_data/batch_info"
         volumeMounts:
         - mountPath: /processing_data/
           name: ucm-pv-storage

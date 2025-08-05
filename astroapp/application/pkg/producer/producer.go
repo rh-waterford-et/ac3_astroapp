@@ -40,8 +40,6 @@ type Producer struct {
 	Sender      sender.EventSender
 }
 
-
-
 func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event, utils common.UtilsInterface, side string, eventID string, redisClient *metrics.RedisClient) *Producer {
 	// Initialize sender with Redis client
 	var senderInstance sender.EventSender
@@ -68,8 +66,6 @@ func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event
 	}
 }
 
-
-
 var starlight app.StarlightInterface = &app.Starlight{
 	Utils: &common.Utils{},
 }
@@ -92,7 +88,6 @@ func (p *Producer) AddFile(file api.DataFile, appName string) {
 	}
 }
 
-
 func (p *Producer) SendBatch(appName string) {
 	if len(p.Batch) > 0 {
 		// Update the .in file before sending the batch
@@ -108,10 +103,14 @@ func (p *Producer) SendBatch(appName string) {
 		p.updateProgress(appName, api.StageQueued, 10.0)
 
 		batchID := p.Utils.GenerateUUID()
+		if p.Side == "processor" {
+			// Set batchID to match the directory name
+			batchID = p.FileSource.(*LocalFileSource).GetBaseInputDir() 
+		}
 		event := api.Event{
-			ID:    p.EventID,
+			ID:      p.EventID,
 			BatchID: batchID,
-			Files: p.Batch,
+			Files:   p.Batch,
 		}
 		p.EventQueue <- event
 
@@ -129,7 +128,7 @@ func (p *Producer) DeleteProcessedFiles() {
 		err := p.FileSource.DeleteFile(file.Name)
 		if err != nil {
 			log.Printf("Error deleting file %s: %v\n", file.Name, err)
-		} 
+		}
 	}
 }
 
@@ -199,4 +198,3 @@ func (p *Producer) updateProgress(appName string, stage api.PipelineStage, progr
 		}
 	}()
 }
-
