@@ -88,11 +88,39 @@ function DatasetsList({ processorType }) {
   // Simple refresh tracking (no auto-refresh timer)
   const isRefreshing = useRef(false);
   const fileUploadRef = useRef(null);
+  
+  // AbortController refs for cancelling requests
+  const inputFilesAbortController = useRef(null);
+  const outputFilesAbortController = useRef(null);
+  const datasetsAbortController = useRef(null);
+
+  // Helper function to cancel all pending requests
+  const cancelAllRequests = useCallback(() => {
+    console.log('🚫 Cancelling all pending requests');
+    
+    if (inputFilesAbortController.current) {
+      inputFilesAbortController.current.abort();
+      inputFilesAbortController.current = null;
+    }
+    
+    if (outputFilesAbortController.current) {
+      outputFilesAbortController.current.abort();
+      outputFilesAbortController.current = null;
+    }
+    
+    if (datasetsAbortController.current) {
+      datasetsAbortController.current.abort();
+      datasetsAbortController.current = null;
+    }
+  }, []);
 
     // Clear all data when processor type changes
   useEffect(() => {
     console.log('🔄 ProcessorType changed to:', processorType, '- clearing all state');
     console.log('🔍 Current selectedDataset before clearing:', selectedDataset);
+    
+    // Cancel any pending requests first
+    cancelAllRequests();
     
     // Clear all state immediately
     setDatasets([]);
@@ -104,6 +132,7 @@ function DatasetsList({ processorType }) {
     setOutputFilesLoading(false);
     setInputFilesLoaded(false);
     setOutputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 });
+    setInputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 });
     isRefreshing.current = false;
     
     console.log('🧹 State cleared, selectedDataset set to empty string');
@@ -174,13 +203,21 @@ function DatasetsList({ processorType }) {
     console.log('🔄 Loading input files for:', selectedDataset);
     isRefreshing.current = true;
     
+    // Cancel any existing input files request
+    if (inputFilesAbortController.current) {
+      inputFilesAbortController.current.abort();
+    }
+    
+    // Create new AbortController for this request
+    inputFilesAbortController.current = new AbortController();
+    
     // Only show loading spinner for user actions, not background refreshes
     if (!silent) {
       setInputFilesLoading(true);
     }
     
     try {
-      const response = await getDatasetFilesListPaginated(selectedDataset, processorType, 0, 50);
+      const response = await getDatasetFilesListPaginated(selectedDataset, processorType, 0, 50, inputFilesAbortController.current.signal);
 
       // Process input files
       const inputFiles = response.files
@@ -203,6 +240,12 @@ function DatasetsList({ processorType }) {
       });
       setInputFilesLoaded(true);
     } catch (err) {
+      // Handle request cancellation gracefully
+      if (err.name === 'AbortError') {
+        console.log('🚫 Input files request cancelled');
+        return;
+      }
+      
       console.error('❌ Failed to load input files:', err);
       // Only show error for user actions, not background refreshes
       if (!silent) {
@@ -259,6 +302,47 @@ function DatasetsList({ processorType }) {
     }
   }, [selectedDataset, processorType, inputFilesPagination.page, inputFilesPagination.loading, inputFilesPagination.hasMore]);
 
+  // Silent background refresh for input files (refresh current loaded pages)
+  const refreshInputFilesInBackground = useCallback(async () => {
+    if (!selectedDataset || isRefreshing.current || inputFilesPagination.loading) return;
+    
+    try {
+      // Calculate how many pages we currently have loaded
+      const currentlyLoadedPages = Math.max(1, inputFilesPagination.page);
+      const filesPerPage = 50;
+      const limit = currentlyLoadedPages * filesPerPage;
+      
+      console.log(`🔄 Silent refresh: loading ${limit} input files (${currentlyLoadedPages} pages)`);
+      
+      const response = await getDatasetFilesListPaginated(selectedDataset, processorType, 0, limit);
+
+      // Process input files
+      const refreshedInputFiles = response.files
+        .filter(file => isValidFile(file.name))
+        .map(file => ({
+          name: file.name,
+          size: formatFileSize(file.size),
+          uploaded: file.timestamp,
+          status: 'processed',
+          key: file.key
+        }))
+        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
+      // Update files and pagination state
+      setInputFiles(refreshedInputFiles);
+      setInputFilesPagination(prev => ({
+        ...prev,
+        total: response.total,
+        hasMore: response.hasMore
+      }));
+      
+      console.log(`✅ Silent refresh complete: ${refreshedInputFiles.length} input files loaded, total: ${response.total}`);
+    } catch (err) {
+      console.error('❌ Silent refresh failed for input files:', err);
+      // Don't show error to user for background refresh
+    }
+  }, [selectedDataset, processorType, inputFilesPagination.page, inputFilesPagination.loading]);
+
   // Load initial output files with pagination
   const loadOutputFiles = useCallback(async (silent = false) => {
     if (!selectedDataset || isRefreshing.current) return;
@@ -266,13 +350,21 @@ function DatasetsList({ processorType }) {
     console.log('🔄 Loading output files for:', selectedDataset);
     isRefreshing.current = true;
     
+    // Cancel any existing output files request
+    if (outputFilesAbortController.current) {
+      outputFilesAbortController.current.abort();
+    }
+    
+    // Create new AbortController for this request
+    outputFilesAbortController.current = new AbortController();
+    
     // Only show loading spinner for user actions, not background refreshes
     if (!silent) {
       setOutputFilesLoading(true);
     }
     
     try {
-      const response = await getDatasetOutputFilesListPaginated(selectedDataset, processorType, 0, 50);
+      const response = await getDatasetOutputFilesListPaginated(selectedDataset, processorType, 0, 50, outputFilesAbortController.current.signal);
 
       // Process output files
       const outputFiles = response.files
@@ -294,6 +386,12 @@ function DatasetsList({ processorType }) {
         total: response.total
       });
     } catch (err) {
+      // Handle request cancellation gracefully
+      if (err.name === 'AbortError') {
+        console.log('🚫 Output files request cancelled');
+        return;
+      }
+      
       console.error('❌ Failed to load output files:', err);
       if (!silent) {
         setError(err.message || 'Failed to load output files');
@@ -349,7 +447,85 @@ function DatasetsList({ processorType }) {
     }
   }, [selectedDataset, processorType, outputFilesPagination.page, outputFilesPagination.loading, outputFilesPagination.hasMore]);
 
-  // No auto-refresh timer - load once on page load
+  // Silent background refresh for output files (refresh current loaded pages)
+  const refreshOutputFilesInBackground = useCallback(async () => {
+    if (!selectedDataset || isRefreshing.current || outputFilesPagination.loading) return;
+    
+    try {
+      // Calculate how many pages we currently have loaded
+      const currentlyLoadedPages = Math.max(1, outputFilesPagination.page);
+      const filesPerPage = 50;
+      const limit = currentlyLoadedPages * filesPerPage;
+      
+      console.log(`🔄 Silent refresh: loading ${limit} output files (${currentlyLoadedPages} pages)`);
+      
+      const response = await getDatasetOutputFilesListPaginated(selectedDataset, processorType, 0, limit);
+
+      // Process output files
+      const refreshedOutputFiles = response.files
+        .filter(file => isValidFile(file.name))
+        .map(file => ({
+          name: file.name,
+          size: formatFileSize(file.size),
+          uploaded: file.timestamp,
+          status: 'completed',
+          key: file.key
+        }))
+        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
+      // Update files and pagination state
+      setOutputFiles(refreshedOutputFiles);
+      setOutputFilesPagination(prev => ({
+        ...prev,
+        total: response.total,
+        hasMore: response.hasMore
+      }));
+      
+      console.log(`✅ Silent refresh complete: ${refreshedOutputFiles.length} output files loaded, total: ${response.total}`);
+    } catch (err) {
+      console.error('❌ Silent refresh failed for output files:', err);
+      // Don't show error to user for background refresh
+    }
+  }, [selectedDataset, processorType, outputFilesPagination.page, outputFilesPagination.loading]);
+
+  // Combined background refresh function
+  const performBackgroundRefresh = useCallback(async () => {
+    if (!selectedDataset || isRefreshing.current) return;
+    
+    console.log('🔄 Performing silent background refresh...');
+    
+    // Refresh both input and output files in parallel
+    await Promise.all([
+      refreshInputFilesInBackground(),
+      refreshOutputFilesInBackground()
+    ]);
+    
+    console.log('✅ Background refresh completed');
+  }, [selectedDataset, refreshInputFilesInBackground, refreshOutputFilesInBackground]);
+
+  // Auto-refresh timer - silent background updates every 5 seconds
+  useEffect(() => {
+    if (!selectedDataset) return;
+    
+    console.log('🔧 Setting up background refresh timer for dataset:', selectedDataset);
+    
+    const interval = setInterval(() => {
+      performBackgroundRefresh();
+    }, 5000); // Refresh every 5 seconds
+
+    return () => {
+      console.log('🧹 Clearing background refresh timer');
+      clearInterval(interval);
+    };
+  }, [selectedDataset, performBackgroundRefresh]);
+
+  // Cleanup: cancel all requests when component unmounts
+  useEffect(() => {
+    return () => {
+      console.log('🧹 DatasetsList unmounting - cancelling all requests');
+      cancelAllRequests();
+    };
+  }, [cancelAllRequests]);
 
   // Load input files when dataset selection changes
   useEffect(() => {

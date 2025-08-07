@@ -310,9 +310,10 @@ export const getDatasetFiles = async (datasetName, processorType) => {
  * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
  * @param {number} page - Page number (0-based)
  * @param {number} limit - Number of files to return per page
+ * @param {AbortSignal} signal - Optional AbortSignal for request cancellation
  * @returns {Promise<Object>} - Object with files array, hasMore, total, page, limit
  */
-export const getDatasetFilesListPaginated = async (datasetName, processorType, page = 0, limit = 50) => {
+export const getDatasetFilesListPaginated = async (datasetName, processorType, page = 0, limit = 50, signal = null) => {
   if (!processorType) {
     throw new Error('getDatasetFilesListPaginated: processorType is required');
   }
@@ -324,6 +325,7 @@ export const getDatasetFilesListPaginated = async (datasetName, processorType, p
     headers: {
       'Content-Type': 'application/json',
     },
+    signal: signal,
   });
 
   console.log('Paginated dataset input files list response status:', response.status);
@@ -402,9 +404,10 @@ export const getDatasetOutputFiles = async (datasetName, processorType) => {
  * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
  * @param {number} page - Page number (0-based)
  * @param {number} limit - Number of files to return per page
+ * @param {AbortSignal} signal - Optional AbortSignal for request cancellation
  * @returns {Promise<Object>} - Object with files array, hasMore, total, page, limit
  */
-export const getDatasetOutputFilesListPaginated = async (datasetName, processorType, page = 0, limit = 50) => {
+export const getDatasetOutputFilesListPaginated = async (datasetName, processorType, page = 0, limit = 50, signal = null) => {
   if (!processorType) {
     throw new Error('getDatasetOutputFilesListPaginated: processorType is required');
   }
@@ -416,6 +419,7 @@ export const getDatasetOutputFilesListPaginated = async (datasetName, processorT
     headers: {
       'Content-Type': 'application/json',
     },
+    signal: signal,
   });
 
   console.log('Paginated dataset output files list response status:', response.status);
