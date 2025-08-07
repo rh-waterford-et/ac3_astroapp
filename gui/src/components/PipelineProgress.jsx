@@ -197,11 +197,25 @@ function PipelineProgress({ datasets, inputFiles, inputFilesTotalCount, outputFi
     if (status === 'error') return 'Error occurred';
     
     if (status === 'processing' && filesProcessed > 0 && filesTotal > 0) {
-      const remainingFiles = filesTotal - filesProcessed;
-      if (remainingFiles === 0) return 'Finalizing...';
+      // Calculate remaining files correctly based on processor type
+      let remainingFiles;
+      let actualFilesProcessed;
+      
+      if (processorType === 'ppxf') {
+        // For pPXF: filesTotal = input files, filesProcessed = output files
+        // Each input file produces 5 output files, so divide by 5 to get input files processed
+        actualFilesProcessed = Math.floor(filesProcessed / 5);
+        remainingFiles = filesTotal - actualFilesProcessed;
+      } else {
+        // For STARLIGHT: 1:1 ratio, so use as-is
+        actualFilesProcessed = filesProcessed;
+        remainingFiles = filesTotal - filesProcessed;
+      }
+      
+      if (remainingFiles <= 0) return 'Finalizing...';
       
       // Debug logging
-      console.log(`Time estimation for ${filesTotal} total files, ${filesProcessed} processed, ${remainingFiles} remaining`);
+      console.log(`Time estimation for ${processorType}: ${filesTotal} input files, ${filesProcessed} output files, ${actualFilesProcessed} input files processed, ${remainingFiles} remaining`);
       console.log(`Processing history available:`, processingHistory.length, 'entries');
       
       // Use actual processing history if available
@@ -370,6 +384,14 @@ function PipelineProgress({ datasets, inputFiles, inputFilesTotalCount, outputFi
                     <div className="pipeline-progress-processing-info">
                       <span>
                         {currentProgress.filesProcessed} of {currentProgress.filesTotal} files processed
+                      </span>
+                    </div>
+                  )}
+                  
+                  {(currentProgress.status === 'processing' || currentProgress.status === 'completed') && processorType === 'ppxf' && (
+                    <div className="pipeline-progress-processing-info">
+                      <span>
+                        {Math.floor(currentProgress.filesProcessed / 5)} of {currentProgress.filesTotal} input files processed ({currentProgress.filesProcessed} output files)
                       </span>
                     </div>
                   )}
