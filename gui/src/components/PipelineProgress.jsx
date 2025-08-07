@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { mean, median, standardDeviation } from 'simple-statistics';
 import DatasetProgressBar from './DatasetProgressBar';
 
-function PipelineProgress({ datasets, inputFiles, outputFiles, processorType, isCollapsed = false, onToggleCollapse }) {
+function PipelineProgress({ datasets, inputFiles, inputFilesTotalCount, outputFiles, outputFilesTotalCount, processorType, isCollapsed = false, onToggleCollapse }) {
   const [progressData, setProgressData] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   
@@ -101,14 +101,16 @@ function PipelineProgress({ datasets, inputFiles, outputFiles, processorType, is
   useEffect(() => {
     console.log('PipelineProgress calculating progress from props');
     console.log('Datasets:', datasets);
-    console.log('Input files:', inputFiles.length);
-    console.log('Output files:', outputFiles.length);
+    console.log('Input files loaded:', inputFiles.length);
+    console.log('Input files total:', inputFilesTotalCount);
+    console.log('Output files loaded:', outputFiles.length);
+    console.log('Output files total:', outputFilesTotalCount);
     
     const progressMap = {};
     
     datasets.forEach(dataset => {
-      const processedCount = inputFiles.length;
-      const outputCount = outputFiles.length;
+      const processedCount = inputFilesTotalCount || inputFiles.length;
+      const outputCount = outputFilesTotalCount || outputFiles.length;
       
       // Use the dataset status that's already calculated in the parent component
       let progress = dataset.progress || 0;
@@ -165,7 +167,7 @@ function PipelineProgress({ datasets, inputFiles, outputFiles, processorType, is
     console.log('Final progress map:', progressMap);
     setProgressData(progressMap);
     
-  }, [datasets, inputFiles, outputFiles, processingHistory, processorType]);
+  }, [datasets, inputFiles, inputFilesTotalCount, outputFiles, outputFilesTotalCount, processingHistory, processorType]);
 
   // Periodic refresh indicator
   useEffect(() => {
@@ -434,7 +436,9 @@ PipelineProgress.propTypes = {
     })
   ).isRequired,
   inputFiles: PropTypes.array.isRequired,
+  inputFilesTotalCount: PropTypes.number,
   outputFiles: PropTypes.array.isRequired,
+  outputFilesTotalCount: PropTypes.number,
   processorType: PropTypes.string,
   isCollapsed: PropTypes.bool,
   onToggleCollapse: PropTypes.func.isRequired,

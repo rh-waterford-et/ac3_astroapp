@@ -4,7 +4,7 @@ import PropTypes from 'prop-types';
 import FileUpload from './FileUpload';
 import PipelineProgress from './PipelineProgress';
 import VirtualizedFileList from './VirtualizedFileList';
-import { getDatasets, getDatasetFiles, getDatasetOutputFiles, getDatasetOutputFilesListPaginated, deleteDataset, deleteFile, startProcessing } from '../services/api';
+import { getDatasets, getDatasetFiles, getDatasetFilesListPaginated, getDatasetOutputFiles, getDatasetOutputFilesListPaginated, deleteDataset, deleteFile, startProcessing } from '../services/api';
 import { getProcessorConfig } from '../config/processorConfig';
 
 function DatasetsList({ processorType }) {
@@ -71,6 +71,14 @@ function DatasetsList({ processorType }) {
 
   // Pagination state for output files
   const [outputFilesPagination, setOutputFilesPagination] = useState({
+    page: 0,
+    hasMore: false,
+    loading: false,
+    total: 0
+  });
+
+  // Pagination state for input files
+  const [inputFilesPagination, setInputFilesPagination] = useState({
     page: 0,
     hasMore: false,
     loading: false,
@@ -159,11 +167,11 @@ function DatasetsList({ processorType }) {
     }
   }, [processorType]);
 
-  // Load input files for current dataset
+  // Load initial input files with pagination
   const loadInputFiles = useCallback(async (silent = false) => {
     if (!selectedDataset || isRefreshing.current) return;
     
-    console.log(silent ? '🔄 Background refresh input files for' : '🔄 Loading input files for', selectedDataset);
+    console.log('🔄 Loading input files for:', selectedDataset);
     isRefreshing.current = true;
     
     // Only show loading spinner for user actions, not background refreshes
@@ -172,10 +180,10 @@ function DatasetsList({ processorType }) {
     }
     
     try {
-      const inputFilesData = await getDatasetFiles(selectedDataset, processorType);
+      const response = await getDatasetFilesListPaginated(selectedDataset, processorType, 0, 50);
 
       // Process input files
-      const inputFiles = inputFilesData
+      const inputFiles = response.files
         .filter(file => isValidFile(file.name))
         .map(file => ({
           name: file.name,
@@ -187,6 +195,12 @@ function DatasetsList({ processorType }) {
         .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
       setInputFiles(inputFiles);
+      setInputFilesPagination({
+        page: 1, // Next page to load
+        hasMore: response.hasMore,
+        loading: false,
+        total: response.total
+      });
       setInputFilesLoaded(true);
     } catch (err) {
       console.error('❌ Failed to load input files:', err);
@@ -194,6 +208,7 @@ function DatasetsList({ processorType }) {
       if (!silent) {
         setError(err.message || 'Failed to load input files');
       }
+      setInputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 });
     } finally {
       // Only hide loading spinner if we showed it
       if (!silent) {
@@ -202,6 +217,47 @@ function DatasetsList({ processorType }) {
       isRefreshing.current = false;
     }
   }, [selectedDataset, processorType]);
+
+  // Load more input files for infinite scrolling
+  const loadMoreInputFiles = useCallback(async () => {
+    if (!selectedDataset || inputFilesPagination.loading || !inputFilesPagination.hasMore) return;
+
+    console.log('🔄 Loading more input files, page:', inputFilesPagination.page);
+    
+    setInputFilesPagination(prev => ({ ...prev, loading: true }));
+
+    try {
+      const response = await getDatasetFilesListPaginated(
+        selectedDataset, 
+        processorType, 
+        inputFilesPagination.page, 
+        50
+      );
+
+      // Process new input files
+      const newInputFiles = response.files
+        .filter(file => isValidFile(file.name))
+        .map(file => ({
+          name: file.name,
+          size: formatFileSize(file.size),
+          uploaded: file.timestamp,
+          status: 'processed',
+          key: file.key
+        }));
+
+      // Append to existing files
+      setInputFiles(prev => [...prev, ...newInputFiles]);
+      setInputFilesPagination({
+        page: inputFilesPagination.page + 1,
+        hasMore: response.hasMore,
+        loading: false,
+        total: response.total
+      });
+    } catch (err) {
+      console.error('❌ Failed to load more input files:', err);
+      setInputFilesPagination(prev => ({ ...prev, loading: false }));
+    }
+  }, [selectedDataset, processorType, inputFilesPagination.page, inputFilesPagination.loading, inputFilesPagination.hasMore]);
 
   // Load initial output files with pagination
   const loadOutputFiles = useCallback(async (silent = false) => {
@@ -299,13 +355,16 @@ function DatasetsList({ processorType }) {
   useEffect(() => {
     if (selectedDataset) {
       setInputFilesLoaded(false);
+      setInputFiles([]); // Clear input files when changing datasets
+      setInputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 }); // Reset input pagination
       setOutputFiles([]); // Clear output files when changing datasets
-      setOutputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 }); // Reset pagination
+      setOutputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 }); // Reset output pagination
       loadInputFiles();
     } else {
       setInputFiles([]);
       setOutputFiles([]);
       setInputFilesLoaded(false);
+      setInputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 });
       setOutputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 });
     }
   }, [selectedDataset, loadInputFiles]);
@@ -675,7 +734,9 @@ function DatasetsList({ processorType }) {
             <div className="pipeline-pane files-pane">
               <div className="pane-header">
                 <h3>Input Files - {datasetName}</h3>
-                <div className="pane-count">{inputFiles.length}</div>
+                <div className="pane-count">
+                  {inputFilesPagination.total > 0 ? inputFilesPagination.total : inputFiles.length}
+                </div>
               </div>
               <div className="pane-content">
                 {(() => {
@@ -721,9 +782,9 @@ function DatasetsList({ processorType }) {
                     selectedDataset={selectedDataset}
                     onDelete={handleDeleteFile}
                     loadingMessage="Loading input files..."
-                    onLoadMore={null}
-                    hasNextPage={false}
-                    isLoadingMore={false}
+                    onLoadMore={loadMoreInputFiles}
+                    hasNextPage={inputFilesPagination.hasMore}
+                    isLoadingMore={inputFilesPagination.loading}
                     itemHeight={48}
                     truncateFileName={truncateFileName}
                     getFileStatusColor={getFileStatusColor}
@@ -780,7 +841,9 @@ function DatasetsList({ processorType }) {
       <PipelineProgress 
         datasets={datasets} 
         inputFiles={inputFiles}
+        inputFilesTotalCount={inputFilesPagination.total}
         outputFiles={outputFiles}
+        outputFilesTotalCount={outputFilesPagination.total}
         processorType={processorType}
         isCollapsed={isPipelineProgressCollapsed}
         onToggleCollapse={togglePipelineProgressCollapsed}

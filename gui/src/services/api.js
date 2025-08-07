@@ -305,6 +305,63 @@ export const getDatasetFiles = async (datasetName, processorType) => {
 };
 
 /**
+ * Get input files for a dataset with pagination - specifically for file lists (not image gallery)
+ * @param {string} datasetName - Name of the dataset
+ * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
+ * @param {number} page - Page number (0-based)
+ * @param {number} limit - Number of files to return per page
+ * @returns {Promise<Object>} - Object with files array, hasMore, total, page, limit
+ */
+export const getDatasetFilesListPaginated = async (datasetName, processorType, page = 0, limit = 50) => {
+  if (!processorType) {
+    throw new Error('getDatasetFilesListPaginated: processorType is required');
+  }
+  
+  console.log(`📄 Fetching paginated input files list for dataset: ${datasetName}, processor: ${processorType}, page: ${page}, limit: ${limit}`);
+  
+  const response = await fetch(`${API_BASE_URL}/datasets/files?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}&page=${page}&limit=${limit}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  console.log('Paginated dataset input files list response status:', response.status);
+  console.log('Paginated dataset input files list response ok:', response.ok);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch paginated dataset input files list: ${response.status}`);
+  }
+
+  const data = await response.json();
+  console.log('Paginated dataset input files list response data:', data);
+  
+  if (data.success) {
+    // Backend now supports pagination on the regular endpoint
+    if (data.pagination) {
+      return {
+        files: data.files || [],
+        hasMore: data.pagination.hasMore || false,
+        total: data.pagination.total || 0,
+        page: data.pagination.page || page,
+        limit: data.pagination.limit || limit
+      };
+    } else {
+      // No pagination requested, return all files
+      return {
+        files: data.files || [],
+        hasMore: false,
+        total: data.files?.length || 0,
+        page,
+        limit
+      };
+    }
+  } else {
+    throw new Error(data.message || 'Failed to fetch paginated dataset input files list');
+  }
+};
+
+/**
  * Get list of output files in a specific dataset
  * @param {string} datasetName - The name of the dataset
  * @returns {Promise<Array>} - Array of output file objects

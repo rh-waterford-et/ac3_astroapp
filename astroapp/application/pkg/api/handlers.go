@@ -656,6 +656,22 @@ func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Requ
 		appType = "starlight" // default
 	}
 
+	// Parse pagination parameters
+	page := 0  // default
+	limit := 0 // default (0 means no pagination)
+
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 0 {
+			page = p
+		}
+	}
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
+			limit = l
+		}
+	}
+
 	// Validate application type
 	allowedApps := []string{"starlight", "ppxf", "steckmap"}
 	isValidApp := false
@@ -744,14 +760,68 @@ func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	files := allFiles
-	log.Printf("Found %d total files (input + processed) in batch %s for app %s", len(files), batchName, appType)
+	var files []DatasetFile
+	totalFiles := len(allFiles)
 
-	response := ListDatasetFilesResponse{
-		Success: true,
-		Files:   files,
+	if limit > 0 {
+		// Apply pagination
+		startIndex := page * limit
+		endIndex := startIndex + limit
+
+		// Ensure we don't go out of bounds
+		if startIndex > totalFiles {
+			startIndex = totalFiles
+		}
+		if endIndex > totalFiles {
+			endIndex = totalFiles
+		}
+
+		// Get the paginated slice
+		if startIndex < totalFiles {
+			files = allFiles[startIndex:endIndex]
+		}
+
+		log.Printf("Paginated input files for batch %s (%s): returning %d files (page: %d, limit: %d, total: %d)",
+			batchName, appType, len(files), page, limit, totalFiles)
+
+		// Return paginated response
+		paginatedResponse := struct {
+			Success    bool          `json:"success"`
+			Files      []DatasetFile `json:"files"`
+			Message    string        `json:"message,omitempty"`
+			Pagination struct {
+				Page    int  `json:"page"`
+				Limit   int  `json:"limit"`
+				Total   int  `json:"total"`
+				HasMore bool `json:"hasMore"`
+			} `json:"pagination"`
+		}{
+			Success: true,
+			Files:   files,
+			Pagination: struct {
+				Page    int  `json:"page"`
+				Limit   int  `json:"limit"`
+				Total   int  `json:"total"`
+				HasMore bool `json:"hasMore"`
+			}{
+				Page:    page,
+				Limit:   limit,
+				Total:   totalFiles,
+				HasMore: endIndex < totalFiles,
+			},
+		}
+		json.NewEncoder(w).Encode(paginatedResponse)
+	} else {
+		// No pagination requested, return all files
+		files = allFiles
+		log.Printf("Found %d total files (input + processed) in batch %s for app %s", len(files), batchName, appType)
+
+		response := ListDatasetFilesResponse{
+			Success: true,
+			Files:   files,
+		}
+		json.NewEncoder(w).Encode(response)
 	}
-	json.NewEncoder(w).Encode(response)
 }
 
 func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *http.Request) {
