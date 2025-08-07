@@ -794,6 +794,22 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 		appType = "starlight" // default
 	}
 
+	// Parse pagination parameters
+	page := 0  // default
+	limit := 0 // default (0 means no pagination)
+
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 0 {
+			page = p
+		}
+	}
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
+			limit = l
+		}
+	}
+
 	// Validate application type
 	allowedApps := []string{"starlight", "ppxf", "steckmap"}
 	isValidApp := false
@@ -828,49 +844,135 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 
 	// List objects in the specific batch's output folder
 	folderPath := fmt.Sprintf("%s/output/%s", appType, batchName)
-	objects, err := h.S3Bucket.GetS3Objects(folderPath)
-	if err != nil {
-		log.Printf("Error listing S3 objects for batch %s output in app %s: %v", batchName, appType, err)
-		response := ListDatasetFilesResponse{
-			Success: false,
-			Files:   []DatasetFile{},
-			Message: "Failed to list batch output files",
-		}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
 
-	// Convert objects to DatasetFile structs
-	files := make([]DatasetFile, 0)
-	for _, object := range objects {
-		// GetS3Objects returns just the filename (without the full path)
-		filename := object
+	var files []DatasetFile
 
-		// Get file metadata from S3
-		fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
-		metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
+	if limit > 0 {
+		// Use true server-side pagination - get all objects first to know total count
+		allObjects, err := h.S3Bucket.GetS3Objects(folderPath)
 		if err != nil {
-			log.Printf("Warning: Could not get metadata for %s: %v", filename, err)
-			// Still include the file with basic info
+			log.Printf("Error listing S3 objects for batch %s output in app %s: %v", batchName, appType, err)
+			response := ListDatasetFilesResponse{
+				Success: false,
+				Files:   []DatasetFile{},
+				Message: "Failed to list batch output files",
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Calculate pagination boundaries
+		totalFiles := len(allObjects)
+		startIndex := page * limit
+		endIndex := startIndex + limit
+
+		// Ensure we don't go out of bounds
+		if startIndex > totalFiles {
+			startIndex = totalFiles
+		}
+		if endIndex > totalFiles {
+			endIndex = totalFiles
+		}
+
+		// Only get metadata for the files we need for this page
+		paginatedObjects := allObjects[startIndex:endIndex]
+
+		for _, object := range paginatedObjects {
+			filename := object
+			fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
+			metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
+			if err != nil {
+				log.Printf("Warning: Could not get metadata for %s: %v", filename, err)
+				files = append(files, DatasetFile{
+					Name:      filename,
+					Size:      0,
+					Timestamp: "Unknown",
+					Key:       fullObjectKey,
+				})
+				continue
+			}
+
 			files = append(files, DatasetFile{
 				Name:      filename,
-				Size:      0,
-				Timestamp: "Unknown",
+				Size:      metadata.Size,
+				Timestamp: metadata.LastModified.Format("2006-01-02 15:04:05"),
 				Key:       fullObjectKey,
 			})
-			continue
 		}
 
-		files = append(files, DatasetFile{
-			Name:      filename,
-			Size:      metadata.Size,
-			Timestamp: metadata.LastModified.Format("2006-01-02 15:04:05"),
-			Key:       fullObjectKey,
-		})
+		log.Printf("Found %d output files in batch %s for app %s (showing %d-%d of %d)",
+			len(files), batchName, appType, startIndex+1, endIndex, totalFiles)
+
+		// Return paginated response
+		paginatedResponse := struct {
+			Success    bool          `json:"success"`
+			Files      []DatasetFile `json:"files"`
+			Message    string        `json:"message,omitempty"`
+			Pagination struct {
+				Page    int  `json:"page"`
+				Limit   int  `json:"limit"`
+				Total   int  `json:"total"`
+				HasMore bool `json:"hasMore"`
+			} `json:"pagination"`
+		}{
+			Success: true,
+			Files:   files,
+			Pagination: struct {
+				Page    int  `json:"page"`
+				Limit   int  `json:"limit"`
+				Total   int  `json:"total"`
+				HasMore bool `json:"hasMore"`
+			}{
+				Page:    page,
+				Limit:   limit,
+				Total:   totalFiles,
+				HasMore: endIndex < totalFiles,
+			},
+		}
+		json.NewEncoder(w).Encode(paginatedResponse)
+		return
+	} else {
+		// Get all objects for backward compatibility
+		objects, err := h.S3Bucket.GetS3Objects(folderPath)
+		if err != nil {
+			log.Printf("Error listing S3 objects for batch %s output in app %s: %v", batchName, appType, err)
+			response := ListDatasetFilesResponse{
+				Success: false,
+				Files:   []DatasetFile{},
+				Message: "Failed to list batch output files",
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Convert all objects to DatasetFile structs
+		for _, object := range objects {
+			filename := object
+			fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
+			metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
+			if err != nil {
+				log.Printf("Warning: Could not get metadata for %s: %v", filename, err)
+				files = append(files, DatasetFile{
+					Name:      filename,
+					Size:      0,
+					Timestamp: "Unknown",
+					Key:       fullObjectKey,
+				})
+				continue
+			}
+
+			files = append(files, DatasetFile{
+				Name:      filename,
+				Size:      metadata.Size,
+				Timestamp: metadata.LastModified.Format("2006-01-02 15:04:05"),
+				Key:       fullObjectKey,
+			})
+		}
 	}
 
 	log.Printf("Found %d output files in batch %s for app %s", len(files), batchName, appType)
 
+	// Return regular response (backward compatibility)
 	response := ListDatasetFilesResponse{
 		Success: true,
 		Files:   files,

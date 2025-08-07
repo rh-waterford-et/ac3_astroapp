@@ -340,6 +340,63 @@ export const getDatasetOutputFiles = async (datasetName, processorType) => {
 };
 
 /**
+ * Get output files for a dataset with pagination - specifically for file lists (not image gallery)
+ * @param {string} datasetName - Name of the dataset
+ * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
+ * @param {number} page - Page number (0-based)
+ * @param {number} limit - Number of files to return per page
+ * @returns {Promise<Object>} - Object with files array, hasMore, total, page, limit
+ */
+export const getDatasetOutputFilesListPaginated = async (datasetName, processorType, page = 0, limit = 50) => {
+  if (!processorType) {
+    throw new Error('getDatasetOutputFilesListPaginated: processorType is required');
+  }
+  
+  console.log(`📄 Fetching paginated output files list for dataset: ${datasetName}, processor: ${processorType}, page: ${page}, limit: ${limit}`);
+  
+  const response = await fetch(`${API_BASE_URL}/datasets/output-files?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}&page=${page}&limit=${limit}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  console.log('Paginated dataset output files list response status:', response.status);
+  console.log('Paginated dataset output files list response ok:', response.ok);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch paginated dataset output files list: ${response.status}`);
+  }
+
+  const data = await response.json();
+  console.log('Paginated dataset output files list response data:', data);
+  
+  if (data.success) {
+    // Backend now supports pagination on the regular endpoint
+    if (data.pagination) {
+      return {
+        files: data.files || [],
+        hasMore: data.pagination.hasMore || false,
+        total: data.pagination.total || 0,
+        page: data.pagination.page || page,
+        limit: data.pagination.limit || limit
+      };
+    } else {
+      // No pagination requested, return all files
+      return {
+        files: data.files || [],
+        hasMore: false,
+        total: data.files?.length || 0,
+        page,
+        limit
+      };
+    }
+  } else {
+    throw new Error(data.message || 'Failed to fetch paginated dataset output files list');
+  }
+};
+
+/**
  * Get output files for a dataset with pagination for progressive loading
  * @param {string} datasetName - Name of the dataset
  * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
