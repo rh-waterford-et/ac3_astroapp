@@ -35,13 +35,14 @@ func NewBinaryProducer(batchSize int, fileSource FileSource, eventQueue chan api
 		EventID:          eventID,
 	}
 }
+
 // CreateBinaryEvent handles binary event processing for PPXF
 func (bp *BinaryProducer) CreateBinaryEvent(appName string, side string, queue queue.QueueInterface, eventQueue chan api.BinaryEvent) {
 	go func() {
-			for event := range eventQueue {
-					log.Printf("Sending binary event (ID: %s) with %d files\n", event.ID, len(event.Files))
-					bp.SendBinaryEvent(event, appName, side, queue)
-			}
+		for event := range eventQueue {
+			log.Printf("Sending binary event (ID: %s, BatchID: %s) with %d files\n", event.ID, event.BatchID, len(event.Files))
+			bp.SendBinaryEvent(event, appName, side, queue)
+		}
 	}()
 
 	bp.ProcessBinaryFiles(appName)
@@ -53,7 +54,6 @@ func (bp *BinaryProducer) SendBinaryEvent(event api.BinaryEvent, appName string,
 	binarySender.SendBinaryEvent(event, appName, side, queue)
 }
 
-
 // AddBinaryFile handles binary files for PPXF
 func (bp *BinaryProducer) AddBinaryFile(file api.BinaryDataFile, appName string) {
 	bp.BinaryBatch = append(bp.BinaryBatch, file)
@@ -61,15 +61,18 @@ func (bp *BinaryProducer) AddBinaryFile(file api.BinaryDataFile, appName string)
 		bp.SendBinaryBatch(appName)
 	}
 }
+
 // SendBinaryBatch handles binary file batches for PPXF
 func (bp *BinaryProducer) SendBinaryBatch(appName string) {
 	if len(bp.BinaryBatch) > 0 {
 		// Update progress to queued stage
 		bp.updateBinaryProgress(appName, api.StageQueued, 10.0)
 
+		batchID := bp.Utils.GenerateUUID()
 		event := api.BinaryEvent{
-			ID:    bp.EventID,
-			Files: bp.BinaryBatch,
+			ID:      bp.EventID,
+			BatchID: batchID,
+			Files:   bp.BinaryBatch,
 		}
 		bp.BinaryEventQueue <- event
 

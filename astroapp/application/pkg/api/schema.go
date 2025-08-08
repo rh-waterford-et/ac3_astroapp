@@ -98,6 +98,7 @@ type Event struct {
 
 // BinaryEvent for handling binary files
 type BinaryEvent struct {
-	ID    string           `json:"ID"`
-	Files []BinaryDataFile `json:"Files"`
+	ID      string           `json:"ID"`
+	BatchID string           `json:"BatchID"`
+	Files   []BinaryDataFile `json:"Files"`
 }
