@@ -13,7 +13,24 @@ import NGC7025_age_mass_weighted from '../assets/NGC7025_age_mass_weighted.jpg';
 import NGC7025_metallicity from '../assets/NGC7025_metallicity.jpg';
 
 // Import API functions
-import { getDatasetOutputFiles } from '../services/api.js';
+import { getDatasetOutputFiles, getDatasetOutputFilesPaginated } from '../services/api.js';
+
+// Module-level PDF cache for progressive loading
+const pdfCache = new Map();
+
+// Cache helper functions
+const getCacheKey = (objectName, processorType) => `${objectName}-${processorType}`;
+
+const getCachedPdfs = (objectName, processorType) => {
+  const key = getCacheKey(objectName, processorType);
+  return pdfCache.get(key) || { batches: [], total: 0, lastUpdated: 0 };
+};
+
+const setCachedPdfs = (objectName, processorType, data) => {
+  const key = getCacheKey(objectName, processorType);
+  pdfCache.set(key, { ...data, lastUpdated: Date.now() });
+  console.log(`💾 Cached PDFs for ${key}: ${data.batches.length} batches, ${data.total} total files`);
+};
 
 const Gallery = ({ aladinInstance }) => {
   useEffect(() => {
@@ -1191,6 +1208,199 @@ const showEmptyGalleryMessage = () => {
 };
 
 /**
+ * Create and add a single PDF item to the gallery
+ * @param {Object} pdfFile - PDF file object with name and key
+ * @param {string} objectName - The original object name
+ * @returns {number} - 1 if added, 0 if skipped
+ */
+const addPdfToGallery = (pdfFile, objectName) => {
+  const galleryItems = document.getElementById('gallery-items');
+  const cellNumber = pdfFile.name.split('/')[0];
+  const fileName = pdfFile.name.split('/').pop();
+  const displayName = `Cell ${cellNumber} H4`;
+  
+  // Check if this PDF already exists in gallery
+  const existingPdfItem = galleryItems.querySelector(`[data-map-type="h4"][data-cell-number="${cellNumber}"]`);
+  if (existingPdfItem) {
+    console.log(`⏭️ Skipping ${displayName}: already exists`);
+    return 0;
+  }
+  
+  // Create gallery item for PDF
+  const mapItem = document.createElement('div');
+  mapItem.className = 'gallery-item object-map-item pdf-item';
+  mapItem.dataset.mapType = 'h4';
+  mapItem.dataset.objectName = objectName;
+  mapItem.dataset.cellNumber = cellNumber;
+  mapItem.dataset.pdfKey = pdfFile.key; // S3 key for download
+  
+  mapItem.innerHTML = `
+    <div class="gallery-thumbnail">
+      <div class="thumbnail-placeholder pdf-placeholder" id="pdf-thumb-${cellNumber}">
+        <canvas class="pdf-thumbnail-canvas" width="150" height="200" style="display: none;"></canvas>
+        <div class="pdf-loading-indicator">
+          <span class="cell-label">Cell ${cellNumber}</span>
+          <div class="loading-text">Loading preview...</div>
+        </div>
+      </div>
+    </div>
+    <div class="gallery-label">${displayName}</div>
+  `;
+  
+  // Generate PDF thumbnail
+  const thumbnailUrl = `/api/files/download?key=${encodeURIComponent(pdfFile.key)}`;
+  generatePdfThumbnail(thumbnailUrl, cellNumber);
+  
+  // Add click handler for PDF viewing in modal
+  mapItem.addEventListener('click', () => {
+    console.log(`📄 Clicked on ${objectName} H4 PDF: Cell ${cellNumber}`);
+    console.log(`📄 PDF Key: ${pdfFile.key}`);
+    
+    // Create PDF URL for modal display with PDF.js viewer settings
+    const pdfUrl = `/api/files/download?key=${encodeURIComponent(pdfFile.key)}#zoom=100&toolbar=0&navpanes=0`;
+    
+    // Open PDF in modal using existing modal system
+    openImageModal(pdfUrl, `${displayName} PDF`, objectName, mapItem, true); // true indicates it's a PDF
+    
+    // Update status
+    const statusElement = document.getElementById('current-status');
+    if (statusElement) {
+      statusElement.textContent = `Viewing ${objectName} H4 PDF: Cell ${cellNumber}`;
+    }
+    
+    // Toggle selection
+    mapItem.classList.toggle('selected');
+    
+    // Remove selection from other items
+    const otherItems = galleryItems.querySelectorAll('.gallery-item:not([data-cell-number="' + cellNumber + '"])');
+    otherItems.forEach(item => item.classList.remove('selected'));
+  });
+  
+  galleryItems.appendChild(mapItem);
+  console.log(`✅ Added H4 PDF to gallery: Cell ${cellNumber}`);
+  return 1;
+};
+
+/**
+ * Load PDFs progressively with caching (first 50, then background batches)
+ * @param {string} normalizedObjectName - Normalized object name for API calls
+ * @param {string} objectName - Original object name for display
+ * @param {number} totalPdfs - Total number of PDFs available
+ * @returns {Promise<number>} - Number of PDFs loaded in first batch
+ */
+const loadPdfsProgressively = async (normalizedObjectName, objectName, totalPdfs) => {
+  console.log(`📄 Progressive loading for ${normalizedObjectName}: ${totalPdfs || 'unknown'} total PDFs`);
+  
+  // 1. Check cache first - show immediately if available
+  const cached = getCachedPdfs(normalizedObjectName, 'ppxf');
+  let pdfsLoaded = 0;
+  
+  if (cached.batches.length > 0) {
+    console.log(`💨 Loading ${cached.total} cached PDFs immediately`);
+    cached.batches.forEach(batch => {
+      batch.files.forEach(pdfFile => {
+        pdfsLoaded += addPdfToGallery(pdfFile, objectName);
+      });
+    });
+    
+    // If cache is complete and we know the total, return early
+    if (totalPdfs && cached.total === totalPdfs) {
+      console.log(`✅ Cache complete: ${pdfsLoaded} PDFs loaded from cache`);
+      return pdfsLoaded;
+    }
+  }
+  
+  // 2. Load first batch (0-49) using paginated API
+  try {
+    const firstBatch = await getDatasetOutputFilesPaginated(normalizedObjectName, 'ppxf', 50, 0);
+    console.log(`📄 First batch loaded: ${firstBatch.files.length} PDFs (0-${firstBatch.files.length - 1})`);
+    
+    // Add first batch to gallery
+    let firstBatchLoaded = 0;
+    firstBatch.files.forEach(pdfFile => {
+      firstBatchLoaded += addPdfToGallery(pdfFile, objectName);
+    });
+    pdfsLoaded += firstBatchLoaded;
+    
+    // 3. Update cache with first batch
+    setCachedPdfs(normalizedObjectName, 'ppxf', {
+      batches: [{ offset: 0, files: firstBatch.files }],
+      total: firstBatch.total
+    });
+    
+    // 4. Start background loading for remaining batches
+    if (firstBatch.hasMore) {
+      const remainingText = firstBatch.total > 0 ? `${firstBatch.total - firstBatch.files.length} PDFs` : 'additional PDFs';
+      console.log(`🔄 Starting background loading for remaining ${remainingText}`);
+      loadRemainingBatches(normalizedObjectName, objectName, 50);
+    }
+    
+    const backgroundText = firstBatch.total > 0 ? `${firstBatch.total - firstBatch.files.length}` : 'unknown number of';
+    console.log(`🎯 Progressive loading started: ${pdfsLoaded} PDFs loaded immediately, ${backgroundText} loading in background`);
+    return pdfsLoaded;
+    
+  } catch (error) {
+    console.error(`❌ Error in progressive PDF loading:`, error);
+    return pdfsLoaded; // Return any cached PDFs that were loaded
+  }
+};
+
+/**
+ * Load remaining PDF batches in background
+ * @param {string} normalizedObjectName - Normalized object name  
+ * @param {string} objectName - Original object name for display
+ * @param {number} batchSize - Size of each batch (50)
+ */
+const loadRemainingBatches = async (normalizedObjectName, objectName, batchSize) => {
+  let offset = batchSize; // Start from second batch (first batch already loaded)
+  let hasMore = true;
+  let totalLoaded = batchSize; // Track how many we've loaded so far
+  
+  while (hasMore) {
+    try {
+      const batch = await getDatasetOutputFilesPaginated(normalizedObjectName, 'ppxf', batchSize, offset);
+      console.log(`📄 Background batch loaded: ${batch.files.length} PDFs (${offset}-${offset + batch.files.length - 1})`);
+      
+      // Add to gallery
+      batch.files.forEach(pdfFile => {
+        addPdfToGallery(pdfFile, objectName);
+      });
+      
+      // Update cache
+      const cached = getCachedPdfs(normalizedObjectName, 'ppxf');
+      cached.batches.push({ offset, files: batch.files });
+      // Update total in cache if we now know it
+      if (batch.total > 0) {
+        cached.total = batch.total;
+      }
+      setCachedPdfs(normalizedObjectName, 'ppxf', cached);
+      
+      totalLoaded += batch.files.length;
+      hasMore = batch.hasMore;
+      
+      const totalText = batch.total > 0 ? `/${batch.total}` : '';
+      console.log(`✅ Background batch complete: ${totalLoaded}${totalText} PDFs loaded`);
+      
+      // Move to next batch
+      offset += batchSize;
+      
+      // Safety break to prevent infinite loops
+      if (offset > 10000) {
+        console.warn('⚠️ Safety break: stopped loading after 10000 offset');
+        break;
+      }
+      
+    } catch (error) {
+      console.error(`❌ Error loading background batch at offset ${offset}:`, error);
+      // Stop loading on error to prevent infinite retries
+      break;
+    }
+  }
+  
+  console.log(`🎉 All background loading complete: ${totalLoaded} PDFs loaded for ${normalizedObjectName}`);
+};
+
+/**
  * Try to load PPXF PDF files for H4 map type
  * @param {string} objectName - The original object name
  * @returns {Promise<number>} - Number of PDFs loaded
@@ -1220,101 +1430,11 @@ const tryLoadPpxfPdfFiles = async (objectName) => {
   console.log(`📁 Normalized object name: "${objectName}" → "${normalizedObjectName}"`);
   
   try {
-    // Get the list of available output files from PPXF for this batch
-    const outputFiles = await getDatasetOutputFiles(normalizedObjectName, 'ppxf');
-    console.log(`📁 Found ${outputFiles.length} total output files for ${normalizedObjectName} in PPXF`);
+    // Skip full file list fetch to avoid 504 timeout - go straight to progressive loading
+    console.log(`📄 Starting progressive PDF loading for ${normalizedObjectName} (bypassing full list to avoid timeout)`);
     
-    // Filter for PDF files that are in cell subdirectories (contain "/")
-    const pdfFiles = outputFiles.filter(file => 
-      file.name.includes('/') && 
-      file.name.toLowerCase().endsWith('.pdf')
-    );
-    console.log(`📄 Found ${pdfFiles.length} PDF files in cell directories:`, pdfFiles.map(f => f.name));
-    
-    // Sort PDF files by cell number (numeric sort, not string sort)
-    pdfFiles.sort((a, b) => {
-      const cellA = parseInt(a.name.split('/')[0]);
-      const cellB = parseInt(b.name.split('/')[0]);
-      return cellA - cellB;
-    });
-    console.log(`📄 Sorted PDF files by cell number:`, pdfFiles.map(f => f.name));
-    
-    if (pdfFiles.length === 0) {
-      console.log(`❌ No H4 PDF files found for ${normalizedObjectName} (searched as: ${objectName})`);
-      return 0;
-    }
-    
-    let pdfsLoaded = 0;
-    for (const pdfFile of pdfFiles) {
-      // Extract cell number from path (e.g., "0/filename.pdf" -> "0")
-      const cellNumber = pdfFile.name.split('/')[0];
-      const fileName = pdfFile.name.split('/').pop();
-      const displayName = `Cell ${cellNumber} H4`;
-      
-      // Check if this PDF already exists in gallery
-      const existingPdfItem = galleryItems.querySelector(`[data-map-type="h4"][data-cell-number="${cellNumber}"]`);
-      if (existingPdfItem) {
-        console.log(`⏭️ Skipping ${displayName}: already exists`);
-        continue;
-      }
-      
-      // Create gallery item for PDF
-      const mapItem = document.createElement('div');
-      mapItem.className = 'gallery-item object-map-item pdf-item';
-      mapItem.dataset.mapType = 'h4';
-      mapItem.dataset.objectName = objectName;
-      mapItem.dataset.cellNumber = cellNumber;
-      mapItem.dataset.pdfKey = pdfFile.key; // S3 key for download
-      
-      mapItem.innerHTML = `
-        <div class="gallery-thumbnail">
-          <div class="thumbnail-placeholder pdf-placeholder" id="pdf-thumb-${cellNumber}">
-            <canvas class="pdf-thumbnail-canvas" width="150" height="200" style="display: none;"></canvas>
-            <div class="pdf-loading-indicator">
-              <span class="cell-label">Cell ${cellNumber}</span>
-              <div class="loading-text">Loading preview...</div>
-            </div>
-          </div>
-        </div>
-        <div class="gallery-label">${displayName}</div>
-      `;
-      
-      // Generate PDF thumbnail - construct URL without viewer parameters for PDF.js
-      const thumbnailUrl = `/api/files/download?key=${encodeURIComponent(pdfFile.key)}`;
-      generatePdfThumbnail(thumbnailUrl, cellNumber);
-      
-      // Add click handler for PDF viewing in modal
-      mapItem.addEventListener('click', () => {
-        console.log(`📄 Clicked on ${objectName} H4 PDF: Cell ${cellNumber}`);
-        console.log(`📄 PDF Key: ${pdfFile.key}`);
-        
-        // Create PDF URL for modal display with PDF.js viewer settings
-        // #zoom=100 sets zoom to 100%, #toolbar=0 hides toolbar, #navpanes=0 hides sidebar
-        const pdfUrl = `/api/files/download?key=${encodeURIComponent(pdfFile.key)}#zoom=100&toolbar=0&navpanes=0`;
-        
-        // Open PDF in modal using existing modal system
-        openImageModal(pdfUrl, `${displayName} PDF`, objectName, mapItem, true); // true indicates it's a PDF
-        
-        // Update status
-        const statusElement = document.getElementById('current-status');
-        if (statusElement) {
-          statusElement.textContent = `Viewing ${objectName} H4 PDF: Cell ${cellNumber}`;
-        }
-        
-        // Toggle selection
-        mapItem.classList.toggle('selected');
-        
-        // Remove selection from other items
-        const otherItems = galleryItems.querySelectorAll('.gallery-item:not([data-cell-number="' + cellNumber + '"])');
-        otherItems.forEach(item => item.classList.remove('selected'));
-      });
-      
-      galleryItems.appendChild(mapItem);
-      pdfsLoaded++;
-      console.log(`✅ Added H4 PDF to gallery: Cell ${cellNumber} for ${normalizedObjectName}`);
-    }
-    
-    console.log(`🎯 Successfully loaded ${pdfsLoaded} H4 PDF files for ${normalizedObjectName} (original: ${objectName})`);
+    // Progressive loading with cache (let it discover the total count)
+    return await loadPdfsProgressively(normalizedObjectName, objectName, null);
     
     // Hide loader if no other loading is happening
     setTimeout(() => hideGalleryLoader(), 100);

@@ -42,6 +42,9 @@ func (s *Server) setupRoutes() {
 	// List dataset output files endpoint
 	http.HandleFunc("/api/datasets/output-files", s.fileUploadHandler.ListDatasetOutputFiles)
 
+	// List dataset output files with pagination endpoint
+	http.HandleFunc("/api/datasets/output-files-paginated", s.fileUploadHandler.ListDatasetOutputFilesPaginated)
+
 	// Create dataset endpoint
 	http.HandleFunc("/api/datasets/create", s.fileUploadHandler.CreateDataset)
 
@@ -50,6 +53,9 @@ func (s *Server) setupRoutes() {
 
 	// Process dataset endpoint
 	http.HandleFunc("/api/datasets/process", s.fileUploadHandler.ProcessDataset)
+
+	// Process single file endpoint
+	http.HandleFunc("/api/files/process", s.fileUploadHandler.ProcessSingleFile)
 
 	// Delete file endpoint
 	http.HandleFunc("/api/files/delete", s.fileUploadHandler.DeleteFile)
@@ -91,6 +97,7 @@ func (s *Server) Start() {
 	log.Printf("Delete file endpoint: http://localhost:%s/api/files/delete", port)
 	log.Printf("Download file endpoint: http://localhost:%s/api/files/download", port)
 	log.Printf("Process dataset endpoint: http://localhost:%s/api/datasets/process", port)
+	log.Printf("Process single file endpoint: http://localhost:%s/api/files/process", port)
 	log.Printf("Progress tracking endpoints: http://localhost:%s/api/progress/*", port)
 	log.Printf("Health check endpoint: http://localhost:%s/api/health", port)
 

@@ -305,6 +305,65 @@ export const getDatasetFiles = async (datasetName, processorType) => {
 };
 
 /**
+ * Get input files for a dataset with pagination - specifically for file lists (not image gallery)
+ * @param {string} datasetName - Name of the dataset
+ * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
+ * @param {number} page - Page number (0-based)
+ * @param {number} limit - Number of files to return per page
+ * @param {AbortSignal} signal - Optional AbortSignal for request cancellation
+ * @returns {Promise<Object>} - Object with files array, hasMore, total, page, limit
+ */
+export const getDatasetFilesListPaginated = async (datasetName, processorType, page = 0, limit = 50, signal = null) => {
+  if (!processorType) {
+    throw new Error('getDatasetFilesListPaginated: processorType is required');
+  }
+  
+  console.log(`📄 Fetching paginated input files list for dataset: ${datasetName}, processor: ${processorType}, page: ${page}, limit: ${limit}`);
+  
+  const response = await fetch(`${API_BASE_URL}/datasets/files?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}&page=${page}&limit=${limit}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    signal: signal,
+  });
+
+  console.log('Paginated dataset input files list response status:', response.status);
+  console.log('Paginated dataset input files list response ok:', response.ok);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch paginated dataset input files list: ${response.status}`);
+  }
+
+  const data = await response.json();
+  console.log('Paginated dataset input files list response data:', data);
+  
+  if (data.success) {
+    // Backend now supports pagination on the regular endpoint
+    if (data.pagination) {
+      return {
+        files: data.files || [],
+        hasMore: data.pagination.hasMore || false,
+        total: data.pagination.total || 0,
+        page: data.pagination.page || page,
+        limit: data.pagination.limit || limit
+      };
+    } else {
+      // No pagination requested, return all files
+      return {
+        files: data.files || [],
+        hasMore: false,
+        total: data.files?.length || 0,
+        page,
+        limit
+      };
+    }
+  } else {
+    throw new Error(data.message || 'Failed to fetch paginated dataset input files list');
+  }
+};
+
+/**
  * Get list of output files in a specific dataset
  * @param {string} datasetName - The name of the dataset
  * @returns {Promise<Array>} - Array of output file objects
@@ -336,6 +395,125 @@ export const getDatasetOutputFiles = async (datasetName, processorType) => {
     return data.files || [];
   } else {
     throw new Error(data.message || 'Failed to fetch dataset output files');
+  }
+};
+
+/**
+ * Get output files for a dataset with pagination - specifically for file lists (not image gallery)
+ * @param {string} datasetName - Name of the dataset
+ * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
+ * @param {number} page - Page number (0-based)
+ * @param {number} limit - Number of files to return per page
+ * @param {AbortSignal} signal - Optional AbortSignal for request cancellation
+ * @returns {Promise<Object>} - Object with files array, hasMore, total, page, limit
+ */
+export const getDatasetOutputFilesListPaginated = async (datasetName, processorType, page = 0, limit = 50, signal = null) => {
+  if (!processorType) {
+    throw new Error('getDatasetOutputFilesListPaginated: processorType is required');
+  }
+  
+  console.log(`📄 Fetching paginated output files list for dataset: ${datasetName}, processor: ${processorType}, page: ${page}, limit: ${limit}`);
+  
+  const response = await fetch(`${API_BASE_URL}/datasets/output-files?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}&page=${page}&limit=${limit}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    signal: signal,
+  });
+
+  console.log('Paginated dataset output files list response status:', response.status);
+  console.log('Paginated dataset output files list response ok:', response.ok);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch paginated dataset output files list: ${response.status}`);
+  }
+
+  const data = await response.json();
+  console.log('Paginated dataset output files list response data:', data);
+  
+  if (data.success) {
+    // Backend now supports pagination on the regular endpoint
+    if (data.pagination) {
+      return {
+        files: data.files || [],
+        hasMore: data.pagination.hasMore || false,
+        total: data.pagination.total || 0,
+        page: data.pagination.page || page,
+        limit: data.pagination.limit || limit
+      };
+    } else {
+      // No pagination requested, return all files
+      return {
+        files: data.files || [],
+        hasMore: false,
+        total: data.files?.length || 0,
+        page,
+        limit
+      };
+    }
+  } else {
+    throw new Error(data.message || 'Failed to fetch paginated dataset output files list');
+  }
+};
+
+/**
+ * Get output files for a dataset with pagination for progressive loading
+ * @param {string} datasetName - Name of the dataset
+ * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
+ * @param {number} limit - Number of files to return (default: 50)
+ * @param {number} offset - Starting offset for pagination (default: 0)
+ * @returns {Promise<Object>} - Object with files array, total, hasMore, offset, limit
+ */
+export const getDatasetOutputFilesPaginated = async (datasetName, processorType, limit = 50, offset = 0) => {
+  if (!processorType) {
+    throw new Error('getDatasetOutputFilesPaginated: processorType is required');
+  }
+  
+  console.log(`📄 Fetching paginated output files for dataset: ${datasetName}, processor: ${processorType}, limit: ${limit}, offset: ${offset}`);
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/datasets/output-files-paginated?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}&limit=${limit}&offset=${offset}`);
+    
+    console.log('Dataset paginated output files response status:', response.status);
+    console.log('Dataset paginated output files response ok:', response.ok);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch paginated output files: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('Dataset paginated output files response data:', data);
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch paginated output files');
+    }
+    
+    // Filter for PDF files that are in cell subdirectories (contain "/")
+    const pdfFiles = data.files.filter(file => 
+      file.name.includes('/') && 
+      file.name.toLowerCase().endsWith('.pdf')
+    );
+    
+    // Sort PDF files by cell number (numeric sort)
+    pdfFiles.sort((a, b) => {
+      const cellA = parseInt(a.name.split('/')[0]);
+      const cellB = parseInt(b.name.split('/')[0]);
+      return cellA - cellB;
+    });
+    
+    console.log(`📄 Returning ${pdfFiles.length} PDF files (${offset}-${offset + pdfFiles.length - 1} of ${data.total} total)`);
+    
+    return {
+      files: pdfFiles,
+      total: data.total,
+      hasMore: data.hasMore,
+      offset: offset,
+      limit: limit
+    };
+  } catch (error) {
+    console.error('❌ Failed to fetch paginated output files:', error);
+    throw error;
   }
 };
 
@@ -459,6 +637,40 @@ export const startProcessing = async (datasetName, processorType) => {
     }
   } catch (error) {
     console.error('Error starting processing:', error);
+    throw error;
+  }
+};
+
+/**
+ * Start processing for a single file
+ * @param {string} datasetName - The name of the dataset containing the file
+ * @param {string} fileName - The name of the specific file to process
+ * @param {string} processorType - The processor type (starlight, ppxf, steckmap)
+ * @returns {Promise<Object>} - Processing response
+ */
+export const startSingleFileProcessing = async (datasetName, fileName, processorType) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/files/process`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        dataset: datasetName,
+        fileName: fileName,
+        processorType: processorType
+      }),
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      return data;
+    } else {
+      throw new Error(data.message || 'Failed to start single file processing');
+    }
+  } catch (error) {
+    console.error('Error starting single file processing:', error);
     throw error;
   }
 }; 

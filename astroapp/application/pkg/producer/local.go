@@ -6,19 +6,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // LocalFileSource handles local filesystem operations
 type LocalFileSource struct {
 	InputDir     string
-	OutputDir    string
 	ProcessedDir string
 }
 
-func NewLocalFileSource(inputDir, outputDir, processedDir string) *LocalFileSource {
+func NewLocalFileSource(inputDir, processedDir string) *LocalFileSource {
 	return &LocalFileSource{
 		InputDir:     inputDir,
-		OutputDir:    outputDir,
+		
 		ProcessedDir: processedDir,
 	}
 }
@@ -39,7 +39,10 @@ func (l *LocalFileSource) ListFiles() ([]string, error) {
 				continue
 			}
 
-			files = append(files, filename)
+			// Only include files that are "stable" (older than 5 seconds) to prevent race conditions
+			if l.isFileStable(filename) {
+				files = append(files, filename)
+			}
 		}
 	}
 	return files, nil
@@ -48,7 +51,9 @@ func (l *LocalFileSource) ListFiles() ([]string, error) {
 func (l *LocalFileSource) ReadFile(filename string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(l.InputDir, filename))
 }
-
+func (l *LocalFileSource) GetBaseInputDir() string {
+	return filepath.Base(l.InputDir)
+}
 // isPPXFFile checks if this is a pPXF input directory
 func (l *LocalFileSource) isPPXFFile() bool {
 	return strings.Contains(l.InputDir, "/ppxf/data/input")
@@ -132,4 +137,18 @@ func (l *LocalFileSource) isSystemFile(filename string) bool {
 	}
 
 	return false
+}
+
+// isFileStable checks if a file has been stable (unmodified) for at least 15 seconds
+// This prevents race conditions where the watcher picks up files before they're fully written
+func (l *LocalFileSource) isFileStable(filename string) bool {
+	filePath := filepath.Join(l.InputDir, filename)
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return false
+	}
+
+	// File must be older than 15 seconds to be considered "stable"
+	// This ensures pPXF has time to write, validate, and complete all files
+	return time.Since(fileInfo.ModTime()) > 15*time.Second
 }

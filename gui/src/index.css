@@ -2654,9 +2654,9 @@ body {
   padding: 0.375rem;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  max-height: 30vh;
-  min-height: 20vh;
+  gap: 0.0625rem;
+  max-height: 400px;
+  min-height: 300px;
 }
 
 /* Dataset items */
@@ -2822,6 +2822,7 @@ body {
   backdrop-filter: blur(8px);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   min-height: 2.5rem;
+  margin-bottom: 0.125rem;
 }
 
 .file-item-container:hover {
@@ -2869,19 +2870,56 @@ body {
   z-index: 2;
 }
 
+.file-process-btn {
+  position: absolute;
+  right: 2rem; /* Positioned to the left of delete button */
+  top: 0;
+  bottom: 0;
+  width: 2rem;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.25) 0%, rgba(56, 142, 60, 0.2) 100%);
+  backdrop-filter: blur(8px);
+  border: none;
+  border-left: 1px solid rgba(76, 175, 80, 0.2);
+  border-radius: 0;
+  color: #4CAF50;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(100%);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  z-index: 2;
+}
+
+.file-item-container:hover .file-process-btn {
+  transform: translateX(0);
+  opacity: 1;
+}
+
 .file-item-container:hover .file-delete-btn {
   transform: translateX(0);
   opacity: 1;
 }
 
 .file-item-container:hover .file-item {
-  margin-right: 2rem;
+  margin-right: 4rem; /* Space for both process and delete buttons */
 }
 
 .file-delete-btn:hover {
   background: linear-gradient(135deg, rgba(79, 209, 197, 0.4) 0%, rgba(56, 178, 172, 0.3) 100%);
   transform: translateX(0) scale(1.05);
   box-shadow: 0 0 0 1px rgba(79, 209, 197, 0.3), 0 0 8px rgba(79, 209, 197, 0.2);
+  color: #ffffff;
+}
+
+.file-process-btn:hover {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.4) 0%, rgba(56, 142, 60, 0.3) 100%);
+  transform: translateX(0) scale(1.05);
+  box-shadow: 0 0 0 1px rgba(76, 175, 80, 0.3), 0 0 8px rgba(76, 175, 80, 0.2);
   color: #ffffff;
 }
 
@@ -2928,7 +2966,34 @@ body {
   margin-left: 0.5rem;
 }
 
+/* File loader (no hover effects) */
+.file-loader-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(79, 209, 197, 0.1);
+  border-radius: 0.25rem;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.2) 0%, rgba(26, 32, 44, 0.2) 100%);
+  backdrop-filter: blur(8px);
+  min-height: 2.5rem;
+  margin-bottom: 0.125rem;
+  /* No transition or hover effects */
+}
 
+.file-loader-item {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  flex: 1;
+  min-width: 0;
+  color: #A0AEC0;
+  width: 100%;
+  /* No transition or hover effects */
+}
 
 .download-btn {
   padding: 0.1875rem 0.375rem;
@@ -4404,4 +4469,44 @@ body {
   justify-content: space-between;
   font-size: 0.625rem;
   color: #4FD1C5;
+}
+
+.file-process-btn {
+  position: absolute;
+  right: 2rem; /* Position it before the delete button */
+  top: 0;
+  bottom: 0;
+  width: 2rem;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(159, 122, 234, 0.25) 0%, rgba(139, 105, 220, 0.2) 100%);
+  backdrop-filter: blur(8px);
+  border: none;
+  border-left: 1px solid rgba(159, 122, 234, 0.2);
+  border-right: 1px solid rgba(159, 122, 234, 0.2);
+  border-radius: 0;
+  color: #9F7AEA;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(100%);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  z-index: 2;
+}
+
+.file-process-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(159, 122, 234, 0.4) 0%, rgba(139, 105, 220, 0.3) 100%);
+  transform: translateX(0) scale(1.05);
+  box-shadow: 0 0 0 1px rgba(159, 122, 234, 0.3), 0 0 8px rgba(159, 122, 234, 0.2);
+  color: #ffffff;
+}
+
+.file-process-btn:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+  transform: translateX(0) !important;
+  box-shadow: none !important;
 }

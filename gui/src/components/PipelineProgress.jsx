@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { mean, median, standardDeviation } from 'simple-statistics';
 import DatasetProgressBar from './DatasetProgressBar';
 
-function PipelineProgress({ datasets, inputFiles, outputFiles, processorType, isCollapsed = false, onToggleCollapse }) {
+function PipelineProgress({ datasets, inputFiles, inputFilesTotalCount, outputFiles, outputFilesTotalCount, processorType, isCollapsed = false, onToggleCollapse }) {
   const [progressData, setProgressData] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   
@@ -101,14 +101,16 @@ function PipelineProgress({ datasets, inputFiles, outputFiles, processorType, is
   useEffect(() => {
     console.log('PipelineProgress calculating progress from props');
     console.log('Datasets:', datasets);
-    console.log('Input files:', inputFiles.length);
-    console.log('Output files:', outputFiles.length);
+    console.log('Input files loaded:', inputFiles.length);
+    console.log('Input files total:', inputFilesTotalCount);
+    console.log('Output files loaded:', outputFiles.length);
+    console.log('Output files total:', outputFilesTotalCount);
     
     const progressMap = {};
     
     datasets.forEach(dataset => {
-      const processedCount = inputFiles.length;
-      const outputCount = outputFiles.length;
+      const processedCount = inputFilesTotalCount || inputFiles.length;
+      const outputCount = outputFilesTotalCount || outputFiles.length;
       
       // Use the dataset status that's already calculated in the parent component
       let progress = dataset.progress || 0;
@@ -165,7 +167,7 @@ function PipelineProgress({ datasets, inputFiles, outputFiles, processorType, is
     console.log('Final progress map:', progressMap);
     setProgressData(progressMap);
     
-  }, [datasets, inputFiles, outputFiles, processingHistory, processorType]);
+  }, [datasets, inputFiles, inputFilesTotalCount, outputFiles, outputFilesTotalCount, processingHistory, processorType]);
 
   // Periodic refresh indicator
   useEffect(() => {
@@ -195,11 +197,25 @@ function PipelineProgress({ datasets, inputFiles, outputFiles, processorType, is
     if (status === 'error') return 'Error occurred';
     
     if (status === 'processing' && filesProcessed > 0 && filesTotal > 0) {
-      const remainingFiles = filesTotal - filesProcessed;
-      if (remainingFiles === 0) return 'Finalizing...';
+      // Calculate remaining files correctly based on processor type
+      let remainingFiles;
+      let actualFilesProcessed;
+      
+      if (processorType === 'ppxf') {
+        // For pPXF: filesTotal = input files, filesProcessed = output files
+        // Each input file produces 5 output files, so divide by 5 to get input files processed
+        actualFilesProcessed = Math.floor(filesProcessed / 5);
+        remainingFiles = filesTotal - actualFilesProcessed;
+      } else {
+        // For STARLIGHT: 1:1 ratio, so use as-is
+        actualFilesProcessed = filesProcessed;
+        remainingFiles = filesTotal - filesProcessed;
+      }
+      
+      if (remainingFiles <= 0) return 'Finalizing...';
       
       // Debug logging
-      console.log(`Time estimation for ${filesTotal} total files, ${filesProcessed} processed, ${remainingFiles} remaining`);
+      console.log(`Time estimation for ${processorType}: ${filesTotal} input files, ${filesProcessed} output files, ${actualFilesProcessed} input files processed, ${remainingFiles} remaining`);
       console.log(`Processing history available:`, processingHistory.length, 'entries');
       
       // Use actual processing history if available
@@ -372,6 +388,14 @@ function PipelineProgress({ datasets, inputFiles, outputFiles, processorType, is
                     </div>
                   )}
                   
+                  {(currentProgress.status === 'processing' || currentProgress.status === 'completed') && processorType === 'ppxf' && (
+                    <div className="pipeline-progress-processing-info">
+                      <span>
+                        {Math.floor(currentProgress.filesProcessed / 5)} of {currentProgress.filesTotal} input files processed ({currentProgress.filesProcessed} output files)
+                      </span>
+                    </div>
+                  )}
+                  
                   {currentProgress.status === 'queued' && currentProgress.filesTotal > 0 && (
                     <div className="pipeline-progress-processing-info">
                       <span>
@@ -434,7 +458,9 @@ PipelineProgress.propTypes = {
     })
   ).isRequired,
   inputFiles: PropTypes.array.isRequired,
+  inputFilesTotalCount: PropTypes.number,
   outputFiles: PropTypes.array.isRequired,
+  outputFilesTotalCount: PropTypes.number,
   processorType: PropTypes.string,
   isCollapsed: PropTypes.bool,
   onToggleCollapse: PropTypes.func.isRequired,

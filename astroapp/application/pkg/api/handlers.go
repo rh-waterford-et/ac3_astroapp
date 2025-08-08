@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -53,6 +55,17 @@ type ListDatasetFilesResponse struct {
 	Success bool          `json:"success"`
 	Files   []DatasetFile `json:"files"`
 	Message string        `json:"message,omitempty"`
+}
+
+type PaginatedDatasetFilesResponse struct {
+	Success bool          `json:"success"`
+	Files   []DatasetFile `json:"files"`
+	Message string        `json:"message,omitempty"`
+	// Pagination metadata
+	Total   int  `json:"total"`
+	Offset  int  `json:"offset"`
+	Limit   int  `json:"limit"`
+	HasMore bool `json:"hasMore"`
 }
 
 func NewFileUploadHandler(s3Bucket s3bucket.S3BucketInterface, progressTracker *ProgressTracker) *FileUploadHandler {
@@ -643,6 +656,22 @@ func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Requ
 		appType = "starlight" // default
 	}
 
+	// Parse pagination parameters
+	page := 0  // default
+	limit := 0 // default (0 means no pagination)
+
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 0 {
+			page = p
+		}
+	}
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
+			limit = l
+		}
+	}
+
 	// Validate application type
 	allowedApps := []string{"starlight", "ppxf", "steckmap"}
 	isValidApp := false
@@ -731,14 +760,68 @@ func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	files := allFiles
-	log.Printf("Found %d total files (input + processed) in batch %s for app %s", len(files), batchName, appType)
+	var files []DatasetFile
+	totalFiles := len(allFiles)
 
-	response := ListDatasetFilesResponse{
-		Success: true,
-		Files:   files,
+	if limit > 0 {
+		// Apply pagination
+		startIndex := page * limit
+		endIndex := startIndex + limit
+
+		// Ensure we don't go out of bounds
+		if startIndex > totalFiles {
+			startIndex = totalFiles
+		}
+		if endIndex > totalFiles {
+			endIndex = totalFiles
+		}
+
+		// Get the paginated slice
+		if startIndex < totalFiles {
+			files = allFiles[startIndex:endIndex]
+		}
+
+		log.Printf("Paginated input files for batch %s (%s): returning %d files (page: %d, limit: %d, total: %d)",
+			batchName, appType, len(files), page, limit, totalFiles)
+
+		// Return paginated response
+		paginatedResponse := struct {
+			Success    bool          `json:"success"`
+			Files      []DatasetFile `json:"files"`
+			Message    string        `json:"message,omitempty"`
+			Pagination struct {
+				Page    int  `json:"page"`
+				Limit   int  `json:"limit"`
+				Total   int  `json:"total"`
+				HasMore bool `json:"hasMore"`
+			} `json:"pagination"`
+		}{
+			Success: true,
+			Files:   files,
+			Pagination: struct {
+				Page    int  `json:"page"`
+				Limit   int  `json:"limit"`
+				Total   int  `json:"total"`
+				HasMore bool `json:"hasMore"`
+			}{
+				Page:    page,
+				Limit:   limit,
+				Total:   totalFiles,
+				HasMore: endIndex < totalFiles,
+			},
+		}
+		json.NewEncoder(w).Encode(paginatedResponse)
+	} else {
+		// No pagination requested, return all files
+		files = allFiles
+		log.Printf("Found %d total files (input + processed) in batch %s for app %s", len(files), batchName, appType)
+
+		response := ListDatasetFilesResponse{
+			Success: true,
+			Files:   files,
+		}
+		json.NewEncoder(w).Encode(response)
 	}
-	json.NewEncoder(w).Encode(response)
 }
 
 func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *http.Request) {
@@ -781,6 +864,22 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 		appType = "starlight" // default
 	}
 
+	// Parse pagination parameters
+	page := 0  // default
+	limit := 0 // default (0 means no pagination)
+
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 0 {
+			page = p
+		}
+	}
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
+			limit = l
+		}
+	}
+
 	// Validate application type
 	allowedApps := []string{"starlight", "ppxf", "steckmap"}
 	isValidApp := false
@@ -815,52 +914,354 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 
 	// List objects in the specific batch's output folder
 	folderPath := fmt.Sprintf("%s/output/%s", appType, batchName)
-	objects, err := h.S3Bucket.GetS3Objects(folderPath)
-	if err != nil {
-		log.Printf("Error listing S3 objects for batch %s output in app %s: %v", batchName, appType, err)
-		response := ListDatasetFilesResponse{
+
+	var files []DatasetFile
+
+	if limit > 0 {
+		// Use true server-side pagination - get all objects first to know total count
+		allObjects, err := h.S3Bucket.GetS3Objects(folderPath)
+		if err != nil {
+			log.Printf("Error listing S3 objects for batch %s output in app %s: %v", batchName, appType, err)
+			response := ListDatasetFilesResponse{
+				Success: false,
+				Files:   []DatasetFile{},
+				Message: "Failed to list batch output files",
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Filter out directory markers (objects ending with "/") - only count actual files
+		var actualFiles []string
+		for _, object := range allObjects {
+			if !strings.HasSuffix(object, "/") {
+				actualFiles = append(actualFiles, object)
+			}
+		}
+
+		// Calculate pagination boundaries using actual file count
+		totalFiles := len(actualFiles)
+		allObjects = actualFiles // Use filtered list for pagination
+		startIndex := page * limit
+		endIndex := startIndex + limit
+
+		// Ensure we don't go out of bounds
+		if startIndex > totalFiles {
+			startIndex = totalFiles
+		}
+		if endIndex > totalFiles {
+			endIndex = totalFiles
+		}
+
+		// Only get metadata for the files we need for this page
+		paginatedObjects := allObjects[startIndex:endIndex]
+
+		for _, object := range paginatedObjects {
+			filename := object
+			fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
+			metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
+			if err != nil {
+				log.Printf("Warning: Could not get metadata for %s: %v", filename, err)
+				files = append(files, DatasetFile{
+					Name:      filename,
+					Size:      0,
+					Timestamp: "Unknown",
+					Key:       fullObjectKey,
+				})
+				continue
+			}
+
+			files = append(files, DatasetFile{
+				Name:      filename,
+				Size:      metadata.Size,
+				Timestamp: metadata.LastModified.Format("2006-01-02 15:04:05"),
+				Key:       fullObjectKey,
+			})
+		}
+
+		log.Printf("Found %d output files in batch %s for app %s (showing %d-%d of %d)",
+			len(files), batchName, appType, startIndex+1, endIndex, totalFiles)
+
+		// Return paginated response
+		paginatedResponse := struct {
+			Success    bool          `json:"success"`
+			Files      []DatasetFile `json:"files"`
+			Message    string        `json:"message,omitempty"`
+			Pagination struct {
+				Page    int  `json:"page"`
+				Limit   int  `json:"limit"`
+				Total   int  `json:"total"`
+				HasMore bool `json:"hasMore"`
+			} `json:"pagination"`
+		}{
+			Success: true,
+			Files:   files,
+			Pagination: struct {
+				Page    int  `json:"page"`
+				Limit   int  `json:"limit"`
+				Total   int  `json:"total"`
+				HasMore bool `json:"hasMore"`
+			}{
+				Page:    page,
+				Limit:   limit,
+				Total:   totalFiles,
+				HasMore: endIndex < totalFiles,
+			},
+		}
+		json.NewEncoder(w).Encode(paginatedResponse)
+		return
+	} else {
+		// Get all objects for backward compatibility
+		objects, err := h.S3Bucket.GetS3Objects(folderPath)
+		if err != nil {
+			log.Printf("Error listing S3 objects for batch %s output in app %s: %v", batchName, appType, err)
+			response := ListDatasetFilesResponse{
+				Success: false,
+				Files:   []DatasetFile{},
+				Message: "Failed to list batch output files",
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Convert all objects to DatasetFile structs, but skip directory markers
+		for _, object := range objects {
+			// Skip directory markers (objects ending with "/")
+			if strings.HasSuffix(object, "/") {
+				continue
+			}
+
+			filename := object
+			fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
+			metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
+			if err != nil {
+				log.Printf("Warning: Could not get metadata for %s: %v", filename, err)
+				files = append(files, DatasetFile{
+					Name:      filename,
+					Size:      0,
+					Timestamp: "Unknown",
+					Key:       fullObjectKey,
+				})
+				continue
+			}
+
+			files = append(files, DatasetFile{
+				Name:      filename,
+				Size:      metadata.Size,
+				Timestamp: metadata.LastModified.Format("2006-01-02 15:04:05"),
+				Key:       fullObjectKey,
+			})
+		}
+	}
+
+	log.Printf("Found %d output files in batch %s for app %s", len(files), batchName, appType)
+
+	// Return regular response (backward compatibility)
+	response := ListDatasetFilesResponse{
+		Success: true,
+		Files:   files,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+// extractCellNumber extracts the numeric cell number from a PDF filename
+// e.g., "0/NGC7025_LR-V_final_cube_voronoi_cell_0_pPXF_fitting.pdf" -> 0
+func extractCellNumber(filename string) int {
+	// Extract cell directory number from path like "0/filename.pdf"
+	if parts := strings.Split(filename, "/"); len(parts) > 0 {
+		if cellNum, err := strconv.Atoi(parts[0]); err == nil {
+			return cellNum
+		}
+	}
+	return 0 // fallback
+}
+
+// ListDatasetOutputFilesPaginated returns a paginated list of files in a dataset's output folder
+func (h *FileUploadHandler) ListDatasetOutputFilesPaginated(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get batch name from URL query parameter
+	batchName := r.URL.Query().Get("dataset")
+	if batchName == "" {
+		batchName = r.URL.Query().Get("batch") // also support 'batch' parameter
+	}
+
+	if batchName == "" {
+		response := PaginatedDatasetFilesResponse{
 			Success: false,
 			Files:   []DatasetFile{},
-			Message: "Failed to list batch output files",
+			Message: "Dataset name parameter is required",
+			Total:   0,
+			Offset:  0,
+			Limit:   0,
+			HasMore: false,
 		}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	// Convert objects to DatasetFile structs
-	files := make([]DatasetFile, 0)
-	for _, object := range objects {
-		// GetS3Objects returns just the filename (without the full path)
-		filename := object
-
-		// Get file metadata from S3
-		fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
-		metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
-		if err != nil {
-			log.Printf("Warning: Could not get metadata for %s: %v", filename, err)
-			// Still include the file with basic info
-			files = append(files, DatasetFile{
-				Name:      filename,
-				Size:      0,
-				Timestamp: "Unknown",
-				Key:       fullObjectKey,
-			})
-			continue
-		}
-
-		files = append(files, DatasetFile{
-			Name:      filename,
-			Size:      metadata.Size,
-			Timestamp: metadata.LastModified.Format("2006-01-02 15:04:05"),
-			Key:       fullObjectKey,
-		})
+	// Get application type from query parameter (default to starlight)
+	appType := r.URL.Query().Get("app")
+	if appType == "" {
+		appType = "starlight" // default
 	}
 
-	log.Printf("Found %d output files in batch %s for app %s", len(files), batchName, appType)
+	// Validate application type
+	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	isValidApp := false
+	for _, app := range allowedApps {
+		if strings.ToLower(appType) == app {
+			appType = app
+			isValidApp = true
+			break
+		}
+	}
 
-	response := ListDatasetFilesResponse{
+	if !isValidApp {
+		response := PaginatedDatasetFilesResponse{
+			Success: false,
+			Files:   []DatasetFile{},
+			Message: fmt.Sprintf("Invalid application type. Allowed: %s", strings.Join(allowedApps, ", ")),
+			Total:   0,
+			Offset:  0,
+			Limit:   0,
+			HasMore: false,
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Parse pagination parameters
+	limit := 50 // default
+	offset := 0 // default
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
+			limit = l
+		}
+	}
+
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
+	// Validate batch name
+	if strings.Contains(batchName, "/") || strings.Contains(batchName, "\\") {
+		response := PaginatedDatasetFilesResponse{
+			Success: false,
+			Files:   []DatasetFile{},
+			Message: "Invalid batch name",
+			Total:   0,
+			Offset:  offset,
+			Limit:   limit,
+			HasMore: false,
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// List objects in the specific batch's output folder
+	folderPath := fmt.Sprintf("%s/output/%s", appType, batchName)
+
+	// Collect all PDF files first, then paginate the PDF list
+	allPdfFiles := []DatasetFile{}
+	continuationToken := ""
+
+	// Get all S3 objects and filter for PDFs
+	for {
+		page, err := h.S3Bucket.GetS3ObjectsPaginated(folderPath, 1000, continuationToken) // Large batch to get all files
+		if err != nil {
+			log.Printf("Error listing S3 objects for batch %s output in app %s: %v", batchName, appType, err)
+			response := PaginatedDatasetFilesResponse{
+				Success: false,
+				Files:   []DatasetFile{},
+				Message: "Failed to list batch output files",
+				Total:   0,
+				Offset:  offset,
+				Limit:   limit,
+				HasMore: false,
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Filter and collect PDF files from this S3 page
+		for _, object := range page.Objects {
+			filename := object
+
+			// Filter for PDF files in cell subdirectories (contain "/")
+			if strings.Contains(filename, "/") && strings.HasSuffix(strings.ToLower(filename), ".pdf") {
+				fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
+
+				allPdfFiles = append(allPdfFiles, DatasetFile{
+					Name:      filename,
+					Size:      0,        // Size not critical for pagination
+					Timestamp: "Recent", // Timestamp not critical for pagination
+					Key:       fullObjectKey,
+				})
+			}
+		}
+
+		// Check if there are more S3 pages
+		if !page.IsTruncated {
+			break
+		}
+		continuationToken = page.NextContinuationToken
+	}
+
+	// Sort PDFs by cell number (numeric sort)
+	sort.Slice(allPdfFiles, func(i, j int) bool {
+		cellA := extractCellNumber(allPdfFiles[i].Name)
+		cellB := extractCellNumber(allPdfFiles[j].Name)
+		return cellA < cellB
+	})
+
+	// Apply pagination to the PDF list
+	totalPdfs := len(allPdfFiles)
+	startIndex := offset
+	endIndex := offset + limit
+
+	if startIndex >= totalPdfs {
+		startIndex = totalPdfs
+	}
+	if endIndex > totalPdfs {
+		endIndex = totalPdfs
+	}
+
+	paginatedPdfs := []DatasetFile{}
+	if startIndex < totalPdfs {
+		paginatedPdfs = allPdfFiles[startIndex:endIndex]
+	}
+
+	hasMore := endIndex < totalPdfs
+
+	log.Printf("Smart PDF pagination for batch %s (%s): returning %d PDFs (offset: %d, limit: %d, total PDFs: %d, hasMore: %t)",
+		batchName, appType, len(paginatedPdfs), offset, limit, totalPdfs, hasMore)
+
+	response := PaginatedDatasetFilesResponse{
 		Success: true,
-		Files:   files,
+		Files:   paginatedPdfs,
+		Total:   totalPdfs,
+		Offset:  offset,
+		Limit:   limit,
+		HasMore: hasMore,
 	}
 	json.NewEncoder(w).Encode(response)
 }
@@ -1107,6 +1508,74 @@ func (h *FileUploadHandler) ProcessDataset(w http.ResponseWriter, r *http.Reques
 
 	response := ProcessDatasetResponse{
 		Message: fmt.Sprintf("Processing started for dataset %s", req.Dataset),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+type ProcessSingleFileRequest struct {
+	Dataset       string `json:"dataset"`
+	FileName      string `json:"fileName"`
+	ProcessorType string `json:"processorType"`
+}
+
+type ProcessSingleFileResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+func (h *FileUploadHandler) ProcessSingleFile(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req ProcessSingleFileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Single file processing request - dataset: %s, file: %s, processor: %s",
+		req.Dataset, req.FileName, req.ProcessorType)
+
+	appType := strings.ToUpper(req.ProcessorType)
+	log.Printf("Single file processing trigger received - batch: %s, file: %s, app: %s",
+		req.Dataset, req.FileName, appType)
+
+	// Make HTTP call to watcher container to trigger single file processing
+	triggerURL := "http://localhost:8081/trigger-single-file"
+	triggerData := map[string]string{
+		"dataset":   req.Dataset,
+		"fileName":  req.FileName,
+		"processor": req.ProcessorType,
+	}
+
+	jsonData, _ := json.Marshal(triggerData)
+	resp, err := http.Post(triggerURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Error triggering single file processing: %v", err)
+		http.Error(w, "Failed to trigger single file processing", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	log.Printf("Successfully triggered single file processing - batch: %s, file: %s", req.Dataset, req.FileName)
+
+	response := ProcessSingleFileResponse{
+		Success: true,
+		Message: fmt.Sprintf("Processing started for file %s in dataset %s", req.FileName, req.Dataset),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -114,5 +115,77 @@ func (w *Watcher) RunForBatch(appName string, batchName string, side string, uti
 			standardProducer := producer.NewProducer(batchSize, fileSource, eventQueue, utils, side, eventID, redisClient)
 			standardProducer.CreateEvent(appName, side, queue)
 		}
+	}
+}
+
+func (w *Watcher) RunForSingleFile(appName string, batchName string, fileName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
+
+	inputDirEnv := "EXPLORED_" + appName
+	outputDirEnv := "OUTPUT_" + appName
+	processedDirEnv := "PROCESSED_" + appName
+
+	inputDir := os.Getenv(inputDirEnv)
+	outputDir := os.Getenv(outputDirEnv)
+	processedDir := os.Getenv(processedDirEnv)
+
+	var fileSource producer.FileSource
+	var eventID string = fmt.Sprintf("%s-%s", batchName, fileName)
+
+	switch side {
+	case "producer":
+		watcher := s3bucket.NewS3Watcher()
+		fileSource = &producer.SingleFileSource{
+			Bucket:       watcher.Bucket,
+			AppName:      appName,
+			InputDir:     inputDir,     // Check input directory first
+			ProcessedDir: processedDir, // Also check processed directory
+			OutputDir:    outputDir,
+			BatchName:    batchName,
+			FileName:     fileName,
+		}
+		files, err := fileSource.ListFiles()
+		if err != nil {
+			log.Printf("Error getting single file for %s: %v", appName, err)
+			return
+		}
+
+		if len(files) == 0 {
+			log.Printf("No file found: %s in batch %s", fileName, batchName)
+			return
+		}
+
+		log.Printf("Processing single file: %s in batch %s", fileName, batchName)
+
+	case "processor":
+		fileSource = &producer.LocalFileSource{
+			InputDir:     inputDir,
+			OutputDir:    outputDir,
+			ProcessedDir: processedDir,
+		}
+		files, err := fileSource.ListFiles()
+		if err != nil {
+			log.Printf("Error reading %s input directory: %v\n", appName, err)
+			return
+		}
+		log.Printf("Found %d files in %s for processing", len(files), inputDir)
+
+	default:
+		log.Printf("Invalid side: %s\n", side)
+		return
+	}
+
+	log.Printf("Processing single %s file...\n", appName)
+
+	// Check if this app needs binary processing (PPXF)
+	if api.IsAppBinary(appName) {
+		log.Printf("Using binary processing for single %s file (prevents .fits corruption)", appName)
+		binaryEventQueue := make(chan api.BinaryEvent, 10)
+		binaryProducer := producer.NewBinaryProducer(1, fileSource, binaryEventQueue, utils, side, eventID)
+		binaryProducer.CreateBinaryEvent(appName, side, queue, binaryEventQueue)
+	} else {
+		log.Printf("Using standard text processing for single %s file", appName)
+		eventQueue := make(chan api.Event, 10)
+		standardProducer := producer.NewProducer(1, fileSource, eventQueue, utils, side, eventID, redisClient)
+		standardProducer.CreateEvent(appName, side, queue)
 	}
 }

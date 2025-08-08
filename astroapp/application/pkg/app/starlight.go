@@ -138,9 +138,9 @@ func (s *Starlight) RemoveInFileFromBatch(batch []api.DataFile) []api.DataFile {
 			inFilePath := filepath.Join(os.Getenv("IN_FILE_OUTPUT_PATH"), file.Name)
 			if err := os.Remove(inFilePath); err != nil {
 				log.Printf("Error removing .in file %s: %v\n", inFilePath, err)
-			} else {
+			} /* else {
 				log.Printf("Successfully removed .in file: %s\n", inFilePath)
-			}
+			} */
 		}
 	}
 	return filteredBatch

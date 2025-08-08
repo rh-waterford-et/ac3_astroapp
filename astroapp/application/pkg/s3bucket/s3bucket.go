@@ -19,10 +19,19 @@ type ObjectMetadata struct {
 	LastModified time.Time
 }
 
+type S3ObjectsPage struct {
+	Objects               []string
+	ContinuationToken     string
+	NextContinuationToken string
+	IsTruncated           bool
+	KeyCount              int64
+}
+
 type S3BucketInterface interface {
 	//InitializeKnownAssets(appName string)
 	GetNewAssets(appName string) ([]string, error)
 	GetS3Objects(appName string) ([]string, error)
+	GetS3ObjectsPaginated(appName string, maxKeys int64, continuationToken string) (*S3ObjectsPage, error)
 	GetBatchDirectories(appName string) ([]string, error)
 	GetS3Client() *s3.S3
 	GetBucketName() string
@@ -198,6 +207,53 @@ func (sb *S3Bucket) GetS3Objects(appName string) ([]string, error) {
 		}
 	}
 	return keys, nil
+}
+
+func (sb *S3Bucket) GetS3ObjectsPaginated(appName string, maxKeys int64, continuationToken string) (*S3ObjectsPage, error) {
+	if appName != "" && !strings.HasSuffix(appName, "/") {
+		appName = appName + "/"
+	}
+
+	input := &s3.ListObjectsV2Input{
+		Bucket:  aws.String(sb.BucketName),
+		Prefix:  aws.String(appName),
+		MaxKeys: aws.Int64(maxKeys),
+	}
+
+	if continuationToken != "" {
+		input.ContinuationToken = aws.String(continuationToken)
+	}
+
+	resp, err := sb.S3Client.ListObjectsV2(input)
+	if err != nil {
+		return nil, fmt.Errorf("error listing objects with pagination: %v", err)
+	}
+
+	var keys []string
+	for _, item := range resp.Contents {
+		key := strings.TrimPrefix(*item.Key, appName)
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+
+	page := &S3ObjectsPage{
+		Objects:           keys,
+		ContinuationToken: continuationToken,
+		IsTruncated:       resp.IsTruncated != nil && *resp.IsTruncated,
+	}
+
+	if resp.KeyCount != nil {
+		page.KeyCount = *resp.KeyCount
+	} else {
+		page.KeyCount = int64(len(keys))
+	}
+
+	if resp.NextContinuationToken != nil {
+		page.NextContinuationToken = *resp.NextContinuationToken
+	}
+
+	return page, nil
 }
 
 func (sb *S3Bucket) UploadFileToBucket(folderPath string, fileName string, content []byte) error {

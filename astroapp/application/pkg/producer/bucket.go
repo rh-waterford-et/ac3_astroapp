@@ -22,6 +22,17 @@ type S3FileSource struct {
 	BatchName string // Optional batch filter
 }
 
+// SingleFileSource handles single file operations
+type SingleFileSource struct {
+	Bucket       s3bucket.S3BucketInterface
+	AppName      string
+	InputDir     string // S3 prefix for input
+	ProcessedDir string // S3 prefix for processed files
+	OutputDir    string // S3 prefix for output
+	BatchName    string // Batch name
+	FileName     string // Specific file name
+}
+
 func NewS3FileSource(bucket s3bucket.S3BucketInterface, appName, inputDir, outputDir string) *S3FileSource {
 	return &S3FileSource{
 		Bucket:    bucket,
@@ -57,6 +68,99 @@ func (s *S3FileSource) ListFilesForBatch(batchName string) ([]string, error) {
 	}
 	log.Printf("Found %d files in batch directory %s", len(batchFiles), batchName)
 	return batchFiles, nil
+}
+
+// ListFiles implementation for SingleFileSource - returns single file if it exists
+func (s *SingleFileSource) ListFiles() ([]string, error) {
+	// First check the input directory
+	inputBatchPath := fmt.Sprintf("%s/%s", s.InputDir, s.BatchName)
+	objects, err := s.Bucket.GetS3Objects(inputBatchPath)
+	if err == nil {
+		for _, obj := range objects {
+			if strings.HasSuffix(obj, s.FileName) {
+				log.Printf("Found file in input directory: %s/%s", inputBatchPath, s.FileName)
+				return []string{fmt.Sprintf("%s/%s", s.BatchName, s.FileName)}, nil
+			}
+		}
+	}
+
+	// If not found in input, check the processed directory
+	processedBatchPath := fmt.Sprintf("%s/%s", s.ProcessedDir, s.BatchName)
+	objects, err = s.Bucket.GetS3Objects(processedBatchPath)
+	if err == nil {
+		for _, obj := range objects {
+			if strings.HasSuffix(obj, s.FileName) {
+				log.Printf("Found file in processed directory: %s/%s", processedBatchPath, s.FileName)
+				return []string{fmt.Sprintf("%s/%s", s.BatchName, s.FileName)}, nil
+			}
+		}
+	}
+
+	// File not found in either location
+	log.Printf("File not found in either input or processed directories. Searched for: %s", s.FileName)
+	return []string{}, nil
+}
+
+// ReadFile implementation for SingleFileSource
+func (s *SingleFileSource) ReadFile(filename string) ([]byte, error) {
+	// For single file source, check both input and processed directories
+	var inputKey, processedKey string
+	if strings.Contains(filename, "/") {
+		// filename already includes batch (e.g., "batch/file.fits")
+		inputKey = fmt.Sprintf("%s/%s", s.InputDir, filename)
+		processedKey = fmt.Sprintf("%s/%s", s.ProcessedDir, filename)
+	} else {
+		// just filename, add batch prefix
+		inputKey = fmt.Sprintf("%s/%s/%s", s.InputDir, s.BatchName, filename)
+		processedKey = fmt.Sprintf("%s/%s/%s", s.ProcessedDir, s.BatchName, filename)
+	}
+
+	// Try input directory first
+	data, err := s.Bucket.DownloadFile(inputKey)
+	if err == nil {
+		log.Printf("Read file from input directory: %s", inputKey)
+		return data, nil
+	}
+
+	// Try processed directory
+	data, err = s.Bucket.DownloadFile(processedKey)
+	if err == nil {
+		log.Printf("Read file from processed directory: %s", processedKey)
+		return data, nil
+	}
+
+	return nil, fmt.Errorf("file not found in either input (%s) or processed (%s) directories", inputKey, processedKey)
+}
+
+// DeleteFile implementation for SingleFileSource
+func (s *SingleFileSource) DeleteFile(filename string) error {
+	// For single file source, check both input and processed directories
+	var inputKey, processedKey string
+	if strings.Contains(filename, "/") {
+		// filename already includes batch (e.g., "batch/file.fits")
+		inputKey = fmt.Sprintf("%s/%s", s.InputDir, filename)
+		processedKey = fmt.Sprintf("%s/%s", s.ProcessedDir, filename)
+	} else {
+		// just filename, add batch prefix
+		inputKey = fmt.Sprintf("%s/%s/%s", s.InputDir, s.BatchName, filename)
+		processedKey = fmt.Sprintf("%s/%s/%s", s.ProcessedDir, s.BatchName, filename)
+	}
+
+	// Try to delete from input directory first
+	err := s.Bucket.DeleteFile(inputKey)
+	if err == nil {
+		log.Printf("Deleted file from input directory: %s", inputKey)
+		return nil
+	}
+
+	// Try to delete from processed directory
+	err = s.Bucket.DeleteFile(processedKey)
+	if err == nil {
+		log.Printf("Deleted file from processed directory: %s", processedKey)
+		return nil
+	}
+
+	return fmt.Errorf("file not found in either input (%s) or processed (%s) directories for deletion", inputKey, processedKey)
 }
 
 func (s *S3FileSource) ReadFile(filename string) ([]byte, error) {

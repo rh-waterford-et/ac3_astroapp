@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/metrics"
@@ -144,15 +143,7 @@ func LaunchProducer(side string) error {
 
 	appRunner := &watcher.Watcher{}
 	if side == "processor" {
-		// Only processor side runs continuously (for monitoring completed files)
-		for {
-			apps := []string{"PPXF", "STARLIGHT", "STECKMAP"}
-			for _, app := range apps {
-				appRunner.RunForBatch(app, "", side, utils, queue, redis)
-			}
-			log.Println("Checking for completed files...")
-			time.Sleep(10 * time.Second)
-		}
+		appRunner.RunProcessor(side, utils, queue, redis)
 	} else {
 		// Producer side starts HTTP server to receive processing triggers
 		log.Println("Producer watcher starting HTTP trigger server on :8081...")
@@ -183,6 +174,41 @@ func LaunchProducer(side string) error {
 			go func() {
 				appRunner.RunForBatch(appType, batchName, side, utils, queue, redis)
 				log.Printf("Completed processing for batch: %s", batchName)
+			}()
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"status": "triggered"})
+		})
+
+		http.HandleFunc("/trigger-single-file", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "POST" {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+
+			var triggerData struct {
+				Dataset   string `json:"dataset"`
+				FileName  string `json:"fileName"`
+				Processor string `json:"processor"`
+			}
+
+			if err := json.NewDecoder(r.Body).Decode(&triggerData); err != nil {
+				http.Error(w, "Invalid request body", http.StatusBadRequest)
+				return
+			}
+
+			batchName := triggerData.Dataset
+			fileName := triggerData.FileName
+			processorType := triggerData.Processor
+			appType := strings.ToUpper(processorType)
+
+			log.Printf("HTTP single file trigger received: batch=%s, file=%s, processor=%s",
+				batchName, fileName, processorType)
+
+			// Run the watcher for this specific file
+			go func() {
+				appRunner.RunForSingleFile(appType, batchName, fileName, side, utils, queue, redis)
+				log.Printf("Completed processing for file: %s in batch: %s", fileName, batchName)
 			}()
 
 			w.Header().Set("Content-Type", "application/json")
