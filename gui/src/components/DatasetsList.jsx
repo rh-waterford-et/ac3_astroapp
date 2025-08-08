@@ -270,11 +270,13 @@ function DatasetsList({ processorType }) {
     setInputFilesPagination(prev => ({ ...prev, loading: true }));
 
     try {
+      // Use the same AbortController as the initial load to avoid race conditions
       const response = await getDatasetFilesListPaginated(
         selectedDataset, 
         processorType, 
         inputFilesPagination.page, 
-        50
+        50,
+        inputFilesAbortController.current?.signal
       );
 
       // Process new input files
@@ -415,11 +417,13 @@ function DatasetsList({ processorType }) {
     setOutputFilesPagination(prev => ({ ...prev, loading: true }));
 
     try {
+      // Use the same AbortController as the initial load to avoid race conditions
       const response = await getDatasetOutputFilesListPaginated(
         selectedDataset, 
         processorType, 
         outputFilesPagination.page, 
-        50
+        50,
+        outputFilesAbortController.current?.signal
       );
 
       // Process new output files

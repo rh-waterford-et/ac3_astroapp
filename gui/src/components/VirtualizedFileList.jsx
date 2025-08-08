@@ -16,6 +16,7 @@ const VirtualizedFileList = ({
   onLoadMore = null,
   hasNextPage = false,
   isLoadingMore = false,
+  totalCount = 0,
   itemHeight = 60,
   truncateFileName = (name) => name,
   getFileStatusColor = (status) => '#4CAF50',
@@ -29,12 +30,13 @@ const VirtualizedFileList = ({
     setLocalItems(items);
   }, [items]);
 
-  // Calculate total item count (including loading placeholder)
+  // Calculate total item count for react-window
+  // Only use loaded items + 1 for loader, don't create huge scrollable areas
   const itemCount = hasNextPage ? localItems.length + 1 : localItems.length;
 
   // Check if item is loaded
   const isItemLoaded = useCallback((index) => {
-    return !!localItems[index];
+    return index < localItems.length;
   }, [localItems]);
 
   // Load more items
@@ -52,23 +54,29 @@ const VirtualizedFileList = ({
   const FileItem = React.memo(({ index, style }) => {
     const file = localItems[index];
     
-    // Loading item
-    if (!file && hasNextPage) {
-      return (
-        <div style={style}>
-          <div className="file-item-container">
-            <div className="file-item">
-              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
-                <div className="astro-loader-galaxy" style={{ width: '16px', height: '16px' }}></div>
-                <div className="astro-loading-text" style={{ fontSize: '10px' }}>Loading more files...</div>
+    // If index is beyond our loaded items, show loader only at the boundary
+    if (index >= localItems.length) {
+      if (hasNextPage && index === localItems.length) {
+        // Show loader only for the first unloaded item
+        return (
+          <div style={style}>
+            <div className="file-loader-container">
+              <div className="file-loader-item">
+                <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                  <div className="astro-loader-galaxy" style={{ width: '16px', height: '16px' }}></div>
+                  <div className="astro-loading-text" style={{ fontSize: '10px' }}>Loading more files...</div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      );
+        );
+      } else {
+        // For all other unloaded items, render empty space
+        return <div style={style}></div>;
+      }
     }
 
-    // Empty slot - no file at this index
+    // Regular file item
     if (!file) {
       return <div style={style}></div>;
     }
@@ -199,6 +207,7 @@ VirtualizedFileList.propTypes = {
   onLoadMore: PropTypes.func,
   hasNextPage: PropTypes.bool,
   isLoadingMore: PropTypes.bool,
+  totalCount: PropTypes.number,
   itemHeight: PropTypes.number,
   truncateFileName: PropTypes.func,
   getFileStatusColor: PropTypes.func,

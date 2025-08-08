@@ -138,7 +138,7 @@ func (l *LocalFileSource) isSystemFile(filename string) bool {
 	return false
 }
 
-// isFileStable checks if a file has been stable (unmodified) for at least 5 seconds
+// isFileStable checks if a file has been stable (unmodified) for at least 15 seconds
 // This prevents race conditions where the watcher picks up files before they're fully written
 func (l *LocalFileSource) isFileStable(filename string) bool {
 	filePath := filepath.Join(l.InputDir, filename)
@@ -147,7 +147,7 @@ func (l *LocalFileSource) isFileStable(filename string) bool {
 		return false
 	}
 
-	// File must be older than 5 seconds to be considered "stable"
-	// This ensures processing scripts have time to write and validate files
-	return time.Since(fileInfo.ModTime()) > 5*time.Second
+	// File must be older than 15 seconds to be considered "stable"
+	// This ensures pPXF has time to write, validate, and complete all files
+	return time.Since(fileInfo.ModTime()) > 15*time.Second
 }

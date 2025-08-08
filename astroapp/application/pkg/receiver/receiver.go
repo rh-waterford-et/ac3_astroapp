@@ -306,7 +306,6 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	var spectrumFiles []api.DataFile
 
 	starlight := app.NewStarlight([]api.DataFile{}, r.Utils)
-	ppxf := app.NewPPXF(r.Utils)
 	for _, file := range msgBody.Files {
 		// Skip hidden files (files starting with .)
 		if strings.HasPrefix(filepath.Base(file.Name), ".") {
@@ -373,12 +372,6 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 			} else {
 				log.Printf("│ ✓ Wrote file: %s to %s", file.Name, filePath)
 				successCount++
-
-				// For pPXF, add each .fits file to the process list immediately
-				if appName == "PPXF" && strings.HasSuffix(file.Name, ".fits") {
-					ppxf.AddToProcessList(filename)
-					log.Printf("│ ✓ Added pPXF file to process list: %s", filename)
-				}
 			}
 		}
 	}
@@ -415,7 +408,7 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 
 	// Handle pPXF processing (individual files, no .in file generation needed)
 	if successCount == int(batchSize) && appName == "PPXF" && side == "processor" {
-		log.Printf("│ ✓ All pPXF files processed and added to process list")
+		log.Printf("│ ✓ All pPXF files written to filesystem (NOTE: processlist adding handled by binary processing path)")
 		// Update progress to analysis stage for pPXF
 		r.updateProgress(appName, batchID, api.StageAnalysis, 70.0)
 	}

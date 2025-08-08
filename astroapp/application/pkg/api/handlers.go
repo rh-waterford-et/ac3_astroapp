@@ -931,8 +931,17 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 			return
 		}
 
-		// Calculate pagination boundaries
-		totalFiles := len(allObjects)
+		// Filter out directory markers (objects ending with "/") - only count actual files
+		var actualFiles []string
+		for _, object := range allObjects {
+			if !strings.HasSuffix(object, "/") {
+				actualFiles = append(actualFiles, object)
+			}
+		}
+
+		// Calculate pagination boundaries using actual file count
+		totalFiles := len(actualFiles)
+		allObjects = actualFiles // Use filtered list for pagination
 		startIndex := page * limit
 		endIndex := startIndex + limit
 
@@ -1015,8 +1024,13 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 			return
 		}
 
-		// Convert all objects to DatasetFile structs
+		// Convert all objects to DatasetFile structs, but skip directory markers
 		for _, object := range objects {
+			// Skip directory markers (objects ending with "/")
+			if strings.HasSuffix(object, "/") {
+				continue
+			}
+
 			filename := object
 			fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
 			metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)

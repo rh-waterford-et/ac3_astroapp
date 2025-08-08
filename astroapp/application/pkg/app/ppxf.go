@@ -106,6 +106,12 @@ func (p *PPXF) AddToProcessList(fileName string) {
 		return
 	}
 
+	// Check if file already exists in processlist to prevent duplicates
+	if p.isFileInProcessList(fileName, processListPath) {
+		log.Printf("pPXF: DUPLICATE ATTEMPT - File already in process list, skipping: %s", fileName)
+		return
+	}
+
 	// Append the filename to the process list
 	file, err := os.OpenFile(processListPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -118,6 +124,30 @@ func (p *PPXF) AddToProcessList(fileName string) {
 	if err != nil {
 		log.Printf("Error adding file to pPXF process list: %v", err)
 	} else {
-		log.Printf("pPXF: Added file to process list: %s", fileName)
+		log.Printf("pPXF: ✓ SUCCESSFULLY ADDED to process list: %s", fileName)
 	}
+}
+
+// isFileInProcessList checks if a file is already in the processlist
+func (p *PPXF) isFileInProcessList(fileName string, processListPath string) bool {
+	// If file doesn't exist, file is not in list
+	if _, err := os.Stat(processListPath); os.IsNotExist(err) {
+		return false
+	}
+
+	// Read the processlist file
+	content, err := os.ReadFile(processListPath)
+	if err != nil {
+		log.Printf("Error reading pPXF process list for duplicate check: %v", err)
+		return false
+	}
+
+	// Check if filename exists in the list
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		if strings.TrimSpace(line) == fileName {
+			return true
+		}
+	}
+	return false
 }
