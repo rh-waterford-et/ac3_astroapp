@@ -12,14 +12,13 @@ import (
 // LocalFileSource handles local filesystem operations
 type LocalFileSource struct {
 	InputDir     string
-	OutputDir    string
 	ProcessedDir string
 }
 
-func NewLocalFileSource(inputDir, outputDir, processedDir string) *LocalFileSource {
+func NewLocalFileSource(inputDir, processedDir string) *LocalFileSource {
 	return &LocalFileSource{
 		InputDir:     inputDir,
-		OutputDir:    outputDir,
+		
 		ProcessedDir: processedDir,
 	}
 }
@@ -52,7 +51,9 @@ func (l *LocalFileSource) ListFiles() ([]string, error) {
 func (l *LocalFileSource) ReadFile(filename string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(l.InputDir, filename))
 }
-
+func (l *LocalFileSource) GetBaseInputDir() string {
+	return filepath.Base(l.InputDir)
+}
 // isPPXFFile checks if this is a pPXF input directory
 func (l *LocalFileSource) isPPXFFile() bool {
 	return strings.Contains(l.InputDir, "/ppxf/data/input")

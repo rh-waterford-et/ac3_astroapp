@@ -40,8 +40,6 @@ type Producer struct {
 	Sender      sender.EventSender
 }
 
-
-
 func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event, utils common.UtilsInterface, side string, eventID string, redisClient *metrics.RedisClient) *Producer {
 	// Initialize sender with Redis client
 	var senderInstance sender.EventSender
@@ -68,8 +66,6 @@ func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event
 	}
 }
 
-
-
 var starlight app.StarlightInterface = &app.Starlight{
 	Utils: &common.Utils{},
 }
@@ -77,7 +73,7 @@ var starlight app.StarlightInterface = &app.Starlight{
 func (p *Producer) CreateEvent(appName string, side string, q queue.QueueInterface) {
 	go func() {
 		for event := range p.EventQueue {
-			log.Printf("Sending event (ID: %s) with %d files\n", p.EventID, len(event.Files))
+			log.Printf("Sending event (ID: %s, BatchID: %s) with %d files\n", p.EventID, event.BatchID, len(event.Files))
 			p.Sender.SendEvent(event, appName, side, q)
 		}
 	}()
@@ -92,13 +88,12 @@ func (p *Producer) AddFile(file api.DataFile, appName string) {
 	}
 }
 
-
 func (p *Producer) SendBatch(appName string) {
 	if len(p.Batch) > 0 {
 		// Update the .in file before sending the batch
 		if appName == "STARLIGHT" && p.Side == "producer" {
 			inFileName, content := starlight.UpdateInFile(p.Batch)
-			println(content)
+			//println(content)
 			if inFileName != "" && content != "" {
 				p.Batch = append(p.Batch, api.DataFile{Name: inFileName, Content: content})
 			}
@@ -107,9 +102,15 @@ func (p *Producer) SendBatch(appName string) {
 		// Update progress to queued stage
 		p.updateProgress(appName, api.StageQueued, 10.0)
 
+		batchID := p.Utils.GenerateUUID()
+		if p.Side == "processor" {
+			// Set batchID to match the directory name
+			batchID = p.FileSource.(*LocalFileSource).GetBaseInputDir() 
+		}
 		event := api.Event{
-			ID:    p.EventID,
-			Files: p.Batch,
+			ID:      p.EventID,
+			BatchID: batchID,
+			Files:   p.Batch,
 		}
 		p.EventQueue <- event
 
@@ -127,9 +128,7 @@ func (p *Producer) DeleteProcessedFiles() {
 		err := p.FileSource.DeleteFile(file.Name)
 		if err != nil {
 			log.Printf("Error deleting file %s: %v\n", file.Name, err)
-		} /* else {
-			log.Printf("Successfully moved file %s to processed dir", file.Name)
-		} */
+		}
 	}
 }
 
@@ -199,4 +198,3 @@ func (p *Producer) updateProgress(appName string, stage api.PipelineStage, progr
 		}
 	}()
 }
-

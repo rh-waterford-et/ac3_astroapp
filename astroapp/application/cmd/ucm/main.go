@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/metrics"
@@ -144,15 +143,7 @@ func LaunchProducer(side string) error {
 
 	appRunner := &watcher.Watcher{}
 	if side == "processor" {
-		// Only processor side runs continuously (for monitoring completed files)
-		for {
-			apps := []string{"PPXF", "STARLIGHT", "STECKMAP"}
-			for _, app := range apps {
-				appRunner.RunForBatch(app, "", side, utils, queue, redis)
-			}
-			log.Println("Checking for completed files...")
-			time.Sleep(10 * time.Second)
-		}
+		appRunner.RunProcessor(side, utils, queue, redis)
 	} else {
 		// Producer side starts HTTP server to receive processing triggers
 		log.Println("Producer watcher starting HTTP trigger server on :8081...")
