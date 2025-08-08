@@ -639,4 +639,38 @@ export const startProcessing = async (datasetName, processorType) => {
     console.error('Error starting processing:', error);
     throw error;
   }
+};
+
+/**
+ * Start processing for a single file
+ * @param {string} datasetName - The name of the dataset containing the file
+ * @param {string} fileName - The name of the specific file to process
+ * @param {string} processorType - The processor type (starlight, ppxf, steckmap)
+ * @returns {Promise<Object>} - Processing response
+ */
+export const startSingleFileProcessing = async (datasetName, fileName, processorType) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/files/process`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        dataset: datasetName,
+        fileName: fileName,
+        processorType: processorType
+      }),
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      return data;
+    } else {
+      throw new Error(data.message || 'Failed to start single file processing');
+    }
+  } catch (error) {
+    console.error('Error starting single file processing:', error);
+    throw error;
+  }
 }; 

@@ -4,7 +4,7 @@ import PropTypes from 'prop-types';
 import FileUpload from './FileUpload';
 import PipelineProgress from './PipelineProgress';
 import VirtualizedFileList from './VirtualizedFileList';
-import { getDatasets, getDatasetFiles, getDatasetFilesListPaginated, getDatasetOutputFiles, getDatasetOutputFilesListPaginated, deleteDataset, deleteFile, startProcessing } from '../services/api';
+import { getDatasets, getDatasetFiles, getDatasetFilesListPaginated, getDatasetOutputFiles, getDatasetOutputFilesListPaginated, deleteDataset, deleteFile, startProcessing, startSingleFileProcessing } from '../services/api';
 import { getProcessorConfig } from '../config/processorConfig';
 
 function DatasetsList({ processorType }) {
@@ -691,6 +691,41 @@ function DatasetsList({ processorType }) {
     }
   };
 
+  // Process individual file function
+  const handleProcessFile = async (fileName) => {
+    if (!selectedDataset) {
+      console.error('No dataset selected for single file processing');
+      return;
+    }
+
+    const confirmed = window.confirm(`Are you sure you want to process the file "${fileName}" with ${processorType}?`);
+    
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      console.log('Processing single file:', fileName, 'in dataset:', selectedDataset, 'with processor:', processorType);
+      
+      const result = await startSingleFileProcessing(selectedDataset, fileName, processorType);
+      
+      if (result.success) {
+        console.log('Single file processing started successfully:', result.message);
+        // Show success message to user
+        alert(`✅ Processing started for file "${fileName}"`);
+        
+        // Optionally refresh data to show processing status
+        // await loadFiles();
+      } else {
+        console.error('Failed to start single file processing:', result.message);
+        alert(`❌ Failed to start processing: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Error starting single file processing:', error);
+      alert(`❌ Error starting processing: ${error.message}`);
+    }
+  };
+
   // Delete dataset function
   const handleDeleteDataset = async (datasetId, datasetName) => {
     const confirmed = window.confirm(`Are you sure you want to delete the dataset "${datasetName}"?`);
@@ -961,6 +996,7 @@ function DatasetsList({ processorType }) {
                     emptyIcon="📁"
                     selectedDataset={selectedDataset}
                     onDelete={handleDeleteFile}
+                    onProcessFile={handleProcessFile}
                     loadingMessage="Loading input files..."
                     onLoadMore={loadMoreInputFiles}
                     hasNextPage={inputFilesPagination.hasMore}
@@ -969,6 +1005,7 @@ function DatasetsList({ processorType }) {
                     truncateFileName={truncateFileName}
                     getFileStatusColor={getFileStatusColor}
                     isInputFile={true}
+                    processorType={processorType}
                   />
                 )}
               </div>
@@ -1008,6 +1045,7 @@ function DatasetsList({ processorType }) {
                     truncateFileName={truncateFileName}
                     getFileStatusColor={getFileStatusColor}
                     isInputFile={false}
+                    processorType={processorType}
                   />
                 )}
               </div>

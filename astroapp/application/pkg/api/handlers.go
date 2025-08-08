@@ -1513,3 +1513,71 @@ func (h *FileUploadHandler) ProcessDataset(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
+
+type ProcessSingleFileRequest struct {
+	Dataset       string `json:"dataset"`
+	FileName      string `json:"fileName"`
+	ProcessorType string `json:"processorType"`
+}
+
+type ProcessSingleFileResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+func (h *FileUploadHandler) ProcessSingleFile(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req ProcessSingleFileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Single file processing request - dataset: %s, file: %s, processor: %s",
+		req.Dataset, req.FileName, req.ProcessorType)
+
+	appType := strings.ToUpper(req.ProcessorType)
+	log.Printf("Single file processing trigger received - batch: %s, file: %s, app: %s",
+		req.Dataset, req.FileName, appType)
+
+	// Make HTTP call to watcher container to trigger single file processing
+	triggerURL := "http://localhost:8081/trigger-single-file"
+	triggerData := map[string]string{
+		"dataset":   req.Dataset,
+		"fileName":  req.FileName,
+		"processor": req.ProcessorType,
+	}
+
+	jsonData, _ := json.Marshal(triggerData)
+	resp, err := http.Post(triggerURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Error triggering single file processing: %v", err)
+		http.Error(w, "Failed to trigger single file processing", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	log.Printf("Successfully triggered single file processing - batch: %s, file: %s", req.Dataset, req.FileName)
+
+	response := ProcessSingleFileResponse{
+		Success: true,
+		Message: fmt.Sprintf("Processing started for file %s in dataset %s", req.FileName, req.Dataset),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}

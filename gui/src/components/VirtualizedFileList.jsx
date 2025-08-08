@@ -12,6 +12,7 @@ const VirtualizedFileList = ({
   emptyIcon = "📁",
   selectedDataset = null,
   onDelete = null,
+  onProcessFile = null,
   loadingMessage = "Loading files...",
   onLoadMore = null,
   hasNextPage = false,
@@ -20,7 +21,8 @@ const VirtualizedFileList = ({
   itemHeight = 60,
   truncateFileName = (name) => name,
   getFileStatusColor = (status) => '#4CAF50',
-  isInputFile = true
+  isInputFile = true,
+  processorType = 'starlight'
 }) => {
   const [localItems, setLocalItems] = useState([]);
   const listRef = useRef();
@@ -101,6 +103,18 @@ const VirtualizedFileList = ({
               ></span>
             </div>
           </div>
+          {onProcessFile && isInputFile && (
+            <button 
+              className="file-process-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onProcessFile(file.name);
+              }}
+              title={`Process file "${file.name}" with ${processorType}`}
+            >
+              ▶
+            </button>
+          )}
           {onDelete && (
             <button 
               className="file-delete-btn"
@@ -203,6 +217,7 @@ VirtualizedFileList.propTypes = {
   emptyIcon: PropTypes.string,
   selectedDataset: PropTypes.string,
   onDelete: PropTypes.func,
+  onProcessFile: PropTypes.func,
   loadingMessage: PropTypes.string,
   onLoadMore: PropTypes.func,
   hasNextPage: PropTypes.bool,
@@ -211,7 +226,8 @@ VirtualizedFileList.propTypes = {
   itemHeight: PropTypes.number,
   truncateFileName: PropTypes.func,
   getFileStatusColor: PropTypes.func,
-  isInputFile: PropTypes.bool
+  isInputFile: PropTypes.bool,
+  processorType: PropTypes.string
 };
 
 export default VirtualizedFileList; 
