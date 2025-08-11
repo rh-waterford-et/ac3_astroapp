@@ -2905,8 +2905,19 @@ body {
   opacity: 1;
 }
 
+/* Different margin based on what buttons are present */
 .file-item-container:hover .file-item {
+  margin-right: 2rem; /* Default space for delete button only */
+}
+
+/* When both process and delete buttons are present */
+.file-item-container:has(.file-process-btn):hover .file-item {
   margin-right: 4rem; /* Space for both process and delete buttons */
+}
+
+/* When no buttons are present (for output files without delete option) */
+.file-item-container:not(:has(.file-process-btn)):not(:has(.file-delete-btn)):hover .file-item {
+  margin-right: 0; /* No extra margin needed */
 }
 
 .file-delete-btn:hover {
@@ -3825,6 +3836,9 @@ body {
   flex-direction: column;
   gap: 0.75rem;
   margin-top: 1.5rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .new-dataset-input-group {
@@ -3989,6 +4003,119 @@ body {
 .dataset-form-actions .create-dataset-toggle-btn:disabled {
   opacity: 0.5 !important;
   cursor: not-allowed !important;
+}
+
+/* pPXF Configuration Styles */
+.ppxf-config-section {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.2) 0%, rgba(26, 32, 44, 0.2) 100%);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  border-radius: 0.5rem;
+  backdrop-filter: blur(8px);
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.ppxf-config-header h5 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #4FD1C5;
+}
+
+.ppxf-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.ppxf-config-row {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.ppxf-config-field {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0; /* Allows flex items to shrink below content size */
+}
+
+.ppxf-config-field.full-width {
+  flex: 1 1 100%;
+}
+
+.ppxf-config-field label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #A0AEC0;
+  margin-bottom: 0.2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ppxf-config-field input,
+.ppxf-config-field select {
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.4) 0%, rgba(26, 32, 44, 0.4) 100%);
+  border: 1px solid rgba(79, 209, 197, 0.3);
+  border-radius: 0.3rem;
+  padding: 0.4rem;
+  font-size: 0.75rem;
+  color: #E2E8F0;
+  transition: all 0.3s ease;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* Remove number input spinners */
+.ppxf-config-field input[type="number"]::-webkit-outer-spin-button,
+.ppxf-config-field input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.ppxf-config-field input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.ppxf-config-field input:focus,
+.ppxf-config-field select:focus {
+  outline: none;
+  border-color: rgba(79, 209, 197, 0.6);
+  box-shadow: 0 0 0 2px rgba(79, 209, 197, 0.1);
+}
+
+.ppxf-config-field input::placeholder {
+  color: rgba(160, 174, 192, 0.6);
+}
+
+.ppxf-config-field select option {
+  background-color: #2D3748;
+  color: #E2E8F0;
+}
+
+/* Responsive adjustments for smaller containers */
+@media (max-width: 600px) {
+  .ppxf-config-row {
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  
+  .ppxf-config-field label {
+    font-size: 0.65rem;
+  }
+  
+  .ppxf-config-field input,
+  .ppxf-config-field select {
+    font-size: 0.7rem;
+    padding: 0.3rem;
+  }
 }
 
 .create-dataset-toggle-btn {

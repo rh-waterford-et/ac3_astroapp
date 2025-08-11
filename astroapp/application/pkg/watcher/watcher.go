@@ -192,7 +192,6 @@ func (w *Watcher) RunForSingleFile(appName string, batchName string, fileName st
 	}
 }
 
-
 func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
 	batchInfoDir := os.Getenv("BATCH_INFO_DIR")
 
@@ -203,29 +202,31 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 	for {
 		select {
 		case <-ticker.C:
+			// Process batch_info files for STARLIGHT (Kate's system)
 			files, err := os.ReadDir(batchInfoDir)
 			if err != nil {
 				fmt.Printf("Error reading directory: %v\n", err)
-				continue
+			} else {
+				for _, file := range files {
+					if file.IsDir() {
+						continue
+					}
+
+					filePath := filepath.Join(batchInfoDir, file.Name())
+					err := w.processBatchFile(filePath, side, utils, queue, redisClient)
+					if err != nil {
+						fmt.Printf("Error processing batch file %s: %v\n", filePath, err)
+						continue
+					}
+					os.Remove(filePath)
+				}
 			}
 
-			for _, file := range files {
-				if file.IsDir() {
-					continue
-				}
-
-				filePath := filepath.Join(batchInfoDir, file.Name())
-				err := w.processBatchFile(filePath, side, utils, queue, redisClient)
-				if err != nil {
-					fmt.Printf("Error processing batch file %s: %v\n", filePath, err)
-					continue
-				}
-				os.Remove(filePath)
-			}
+			// Check for pPXF output files (existing system)
+			w.RunForBatch("PPXF", "NGC7025", side, utils, queue, redisClient)
 		}
 	}
 }
-
 
 func (w *Watcher) processBatchFile(filePath string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) error {
 	file, err := os.Open(filePath)
@@ -300,7 +301,6 @@ func (w *Watcher) processBatchFile(filePath string, side string, utils common.Ut
 
 	return nil
 }
-
 
 func (w *Watcher) ProcessBatch(appName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient, fileSource producer.FileSource, eventID string) {
 	log.Printf("Processing %s files...\n", appName)

@@ -35,8 +35,17 @@ type ListDatasetsResponse struct {
 }
 
 type CreateDatasetRequest struct {
-	DatasetName string `json:"datasetName"`
-	AppType     string `json:"appType"`
+	DatasetName string      `json:"datasetName"`
+	AppType     string      `json:"appType"`
+	PPXFConfig  *PPXFConfig `json:"ppxfConfig,omitempty"`
+}
+
+type PPXFConfig struct {
+	Redshift       float64 `json:"redshift"`
+	VelocityDisp   float64 `json:"velocityDisp"`
+	WaveRangeStart int     `json:"waveRangeStart"`
+	WaveRangeEnd   int     `json:"waveRangeEnd"`
+	SPSName        string  `json:"spsName"`
 }
 
 type CreateDatasetResponse struct {
@@ -73,6 +82,31 @@ func NewFileUploadHandler(s3Bucket s3bucket.S3BucketInterface, progressTracker *
 		S3Bucket:        s3Bucket,
 		ProgressTracker: progressTracker,
 	}
+}
+
+// isSystemFile checks if a file is a system/configuration file that shouldn't be shown in listings
+func isSystemFile(filename string) bool {
+	systemFiles := []string{
+		"mask.txt",           // pPXF mask file
+		"ppxf_config.json",   // pPXF user configuration file
+		".batch_placeholder", // Old build remnant
+		".gitkeep",           // Git keep files
+		".DS_Store",          // macOS system files
+		"Thumbs.db",          // Windows thumbnail cache
+	}
+
+	for _, sysFile := range systemFiles {
+		if filename == sysFile {
+			return true
+		}
+	}
+
+	// Skip hidden files (starting with .)
+	if strings.HasPrefix(filename, ".") {
+		return true
+	}
+
+	return false
 }
 
 func (h *FileUploadHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
@@ -428,6 +462,39 @@ func (h *FileUploadHandler) CreateDataset(w http.ResponseWriter, r *http.Request
 		log.Printf("Successfully created directory: %s", dir)
 	}
 
+	// Create pPXF config file if this is a pPXF dataset and config is provided
+	if strings.ToLower(appType) == "ppxf" && req.PPXFConfig != nil {
+		configJSON, err := json.MarshalIndent(req.PPXFConfig, "", "  ")
+		if err != nil {
+			log.Printf("Error marshaling pPXF config: %v", err)
+			response := CreateDatasetResponse{
+				Success: false,
+				Message: "Failed to create pPXF configuration file",
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Upload config file to S3
+		configKey := fmt.Sprintf("%s/input/%s/ppxf_config.json", appType, sanitizedName)
+		_, err = h.S3Bucket.GetS3Client().PutObject(&s3.PutObjectInput{
+			Bucket:      aws.String(h.S3Bucket.GetBucketName()),
+			Key:         aws.String(configKey),
+			Body:        bytes.NewReader(configJSON),
+			ContentType: aws.String("application/json"),
+		})
+		if err != nil {
+			log.Printf("Error uploading pPXF config file: %v", err)
+			response := CreateDatasetResponse{
+				Success: false,
+				Message: "Failed to upload pPXF configuration file",
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		log.Printf("Successfully created pPXF config file: %s", configKey)
+	}
+
 	// Success response
 	response := CreateDatasetResponse{
 		Success: true,
@@ -730,6 +797,11 @@ func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Requ
 		for _, object := range objects {
 			filename := object
 
+			// Skip system/configuration files
+			if isSystemFile(filename) {
+				continue
+			}
+
 			// Skip if we've already seen this file (avoid duplicates)
 			if fileSeen[filename] {
 				continue
@@ -931,10 +1003,10 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 			return
 		}
 
-		// Filter out directory markers (objects ending with "/") - only count actual files
+		// Filter out directory markers and system files - only count actual data files
 		var actualFiles []string
 		for _, object := range allObjects {
-			if !strings.HasSuffix(object, "/") {
+			if !strings.HasSuffix(object, "/") && !isSystemFile(object) {
 				actualFiles = append(actualFiles, object)
 			}
 		}
@@ -1024,7 +1096,7 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 			return
 		}
 
-		// Convert all objects to DatasetFile structs, but skip directory markers
+		// Convert all objects to DatasetFile structs, but skip directory markers and system files
 		for _, object := range objects {
 			// Skip directory markers (objects ending with "/")
 			if strings.HasSuffix(object, "/") {
@@ -1032,6 +1104,11 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 			}
 
 			filename := object
+
+			// Skip system/configuration files
+			if isSystemFile(filename) {
+				continue
+			}
 			fullObjectKey := fmt.Sprintf("%s/%s", folderPath, filename)
 			metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
 			if err != nil {

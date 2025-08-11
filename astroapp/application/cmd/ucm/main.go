@@ -141,6 +141,13 @@ func LaunchProducer(side string) error {
 		}
 	}
 
+	// Initialize directories for processor side
+	if side == "processor" {
+		if err := utils.EnsureDirectoriesExist(); err != nil {
+			log.Fatalf("Directory initialization failed: %v", err)
+		}
+	}
+
 	appRunner := &watcher.Watcher{}
 	if side == "processor" {
 		appRunner.RunProcessor(side, utils, queue, redis)

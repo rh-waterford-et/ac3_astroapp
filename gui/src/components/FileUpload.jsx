@@ -16,6 +16,15 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
   const [loadingDatasets, setLoadingDatasets] = useState(false);
   const [datasetError, setDatasetError] = useState(null);
 
+  // pPXF Configuration
+  const [ppxfConfig, setPpxfConfig] = useState({
+    redshift: 0.016571,
+    velocityDisp: 200.0,
+    waveRangeStart: 5200,
+    waveRangeEnd: 6150,
+    spsName: 'emiles'
+  });
+
   // Load datasets with useCallback for stability
   const loadDatasets = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -223,8 +232,9 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
         setDatasetError(null);
         
         try {
-          // Create the dataset in S3
-          const result = await createDataset(sanitizedName, processorType);
+          // Create the dataset in S3 with pPXF config if applicable
+          const configToSend = processorType.toLowerCase() === 'ppxf' ? ppxfConfig : null;
+          const result = await createDataset(sanitizedName, processorType, configToSend);
           
           if (result.success) {
             setCurrentDataset(sanitizedName);
@@ -389,7 +399,7 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
                     <input
                       type="text"
                       className="new-dataset-input"
-                      placeholder="NGC7025"
+                      placeholder="Dataset Name (eg: NGC7025)"
                       value={newDatasetName}
                       onChange={(e) => setNewDatasetName(e.target.value)}
                       onKeyDown={(e) => {
@@ -401,6 +411,70 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
                       }}
                     />
                   </div>
+                  
+                  {/* pPXF Configuration Form */}
+                  {processorType.toLowerCase() === 'ppxf' && (
+                    <div className="ppxf-config-section">
+                      <div className="ppxf-config-header">
+                        <h5>pPXF Configuration</h5>
+                      </div>
+                      <div className="ppxf-config-form">
+                        <div className="ppxf-config-row">
+                          <div className="ppxf-config-field">
+                            <label>Redshift:</label>
+                            <input
+                              type="number"
+                              step="0.000001"
+                              value={ppxfConfig.redshift}
+                              onChange={(e) => setPpxfConfig({...ppxfConfig, redshift: parseFloat(e.target.value) || 0})}
+                            />
+                          </div>
+                          <div className="ppxf-config-field">
+                            <label>Velocity Dispersion (km/s):</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={ppxfConfig.velocityDisp}
+                              onChange={(e) => setPpxfConfig({...ppxfConfig, velocityDisp: parseFloat(e.target.value) || 0})}
+                            />
+                          </div>
+                        </div>
+                        <div className="ppxf-config-row">
+                          <div className="ppxf-config-field">
+                            <label>Wave Start (Å):</label>
+                            <input
+                              type="number"
+                              value={ppxfConfig.waveRangeStart}
+                              onChange={(e) => setPpxfConfig({...ppxfConfig, waveRangeStart: parseInt(e.target.value) || 0})}
+                            />
+                          </div>
+                          <div className="ppxf-config-field">
+                            <label>Wave End (Å):</label>
+                            <input
+                              type="number"
+                              value={ppxfConfig.waveRangeEnd}
+                              onChange={(e) => setPpxfConfig({...ppxfConfig, waveRangeEnd: parseInt(e.target.value) || 0})}
+                            />
+                          </div>
+                        </div>
+                        <div className="ppxf-config-row">
+                          <div className="ppxf-config-field full-width">
+                            <label>SPS Model:</label>
+                            <select
+                              value={ppxfConfig.spsName}
+                              onChange={(e) => setPpxfConfig({...ppxfConfig, spsName: e.target.value})}
+                            >
+                              <option value="emiles">EMILES</option>
+                              <option value="fsps">FSPS</option>
+                              <option value="galaxev">GALAXEV</option>
+                              <option value="coelho">Coelho</option>
+                              <option value="coelho_mini">Coelho Mini</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   
                   {/* Action buttons side-by-side */}
                   <div className="dataset-form-actions">

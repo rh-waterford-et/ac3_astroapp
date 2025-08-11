@@ -17,8 +17,8 @@ type LocalFileSource struct {
 
 func NewLocalFileSource(inputDir, processedDir string) *LocalFileSource {
 	return &LocalFileSource{
-		InputDir:     inputDir,
-		
+		InputDir: inputDir,
+
 		ProcessedDir: processedDir,
 	}
 }
@@ -29,6 +29,15 @@ func (l *LocalFileSource) ListFiles() ([]string, error) {
 		return nil, err
 	}
 
+	// Check if this is a pPXF output directory
+	isPPXFOutput := strings.Contains(l.InputDir, "/ppxf/data/output")
+
+	if isPPXFOutput {
+		// For pPXF output, group files by their base input file and only return complete sets
+		return l.listPPXFCompleteFiles()
+	}
+
+	// For non-pPXF files, use the original logic
 	var files []string
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -39,7 +48,7 @@ func (l *LocalFileSource) ListFiles() ([]string, error) {
 				continue
 			}
 
-			// Only include files that are "stable" (older than 5 seconds) to prevent race conditions
+			// Only include files that are "stable" (older than 10 seconds) to prevent race conditions
 			if l.isFileStable(filename) {
 				files = append(files, filename)
 			}
@@ -48,12 +57,78 @@ func (l *LocalFileSource) ListFiles() ([]string, error) {
 	return files, nil
 }
 
+// listPPXFCompleteFiles returns only complete sets of pPXF output files
+func (l *LocalFileSource) listPPXFCompleteFiles() ([]string, error) {
+	entries, err := os.ReadDir(l.InputDir)
+	if err != nil {
+		return nil, err
+	}
+
+	// Group files by their base input file name
+	baseFiles := make(map[string]bool)
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			filename := entry.Name()
+
+			// Skip system files
+			if l.isSystemFile(filename) {
+				continue
+			}
+
+			// Extract base filename from pPXF output file
+			// e.g., "NGC7025_LR-V_final_cube_voronoi_cell_10_kinematics_and_stellar_pops_info.txt"
+			// becomes "NGC7025_LR-V_final_cube_voronoi_cell_10"
+			if strings.Contains(filename, "_kinematics_and_stellar_pops_info.txt") ||
+				strings.Contains(filename, "_pPXF_fitting.pdf") ||
+				strings.Contains(filename, "_residuals.fits") ||
+				strings.Contains(filename, "_bestfit.fits") ||
+				strings.Contains(filename, "_galaxy.fits") {
+
+				var baseName string
+				if strings.Contains(filename, "_kinematics_and_stellar_pops_info.txt") {
+					baseName = strings.TrimSuffix(filename, "_kinematics_and_stellar_pops_info.txt")
+				} else if strings.Contains(filename, "_pPXF_fitting.pdf") {
+					baseName = strings.TrimSuffix(filename, "_pPXF_fitting.pdf")
+				} else if strings.Contains(filename, "_residuals.fits") {
+					baseName = strings.TrimSuffix(filename, "_residuals.fits")
+				} else if strings.Contains(filename, "_bestfit.fits") {
+					baseName = strings.TrimSuffix(filename, "_bestfit.fits")
+				} else if strings.Contains(filename, "_galaxy.fits") {
+					baseName = strings.TrimSuffix(filename, "_galaxy.fits")
+				}
+
+				baseFiles[baseName] = true
+			}
+		}
+	}
+
+	// Now check which base files have complete sets
+	var completeFiles []string
+	for baseName := range baseFiles {
+		if l.isPPXFSetComplete(baseName + ".fits") { // Add .fits extension for the check
+			// Add all 5 files for this complete set
+			expectedFiles := []string{
+				baseName + "_kinematics_and_stellar_pops_info.txt",
+				baseName + "_pPXF_fitting.pdf",
+				baseName + "_residuals.fits",
+				baseName + "_bestfit.fits",
+				baseName + "_galaxy.fits",
+			}
+			completeFiles = append(completeFiles, expectedFiles...)
+		}
+	}
+
+	return completeFiles, nil
+}
+
 func (l *LocalFileSource) ReadFile(filename string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(l.InputDir, filename))
 }
 func (l *LocalFileSource) GetBaseInputDir() string {
 	return filepath.Base(l.InputDir)
 }
+
 // isPPXFFile checks if this is a pPXF input directory
 func (l *LocalFileSource) isPPXFFile() bool {
 	return strings.Contains(l.InputDir, "/ppxf/data/input")
@@ -119,10 +194,12 @@ func moveFile(source, destination string) error {
 // isSystemFile checks if a file is a system/configuration file that shouldn't be processed
 func (l *LocalFileSource) isSystemFile(filename string) bool {
 	systemFiles := []string{
-		"mask.txt",  // pPXF mask file
-		".gitkeep",  // Git keep files
-		".DS_Store", // macOS system files
-		"Thumbs.db", // Windows thumbnail cache
+		"mask.txt",           // pPXF mask file
+		"ppxf_config.json",   // pPXF user configuration file
+		".batch_placeholder", // Old build remnant
+		".gitkeep",           // Git keep files
+		".DS_Store",          // macOS system files
+		"Thumbs.db",          // Windows thumbnail cache
 	}
 
 	for _, sysFile := range systemFiles {
@@ -149,6 +226,32 @@ func (l *LocalFileSource) isFileStable(filename string) bool {
 	}
 
 	// File must be older than 15 seconds to be considered "stable"
-	// This ensures pPXF has time to write, validate, and complete all files
-	return time.Since(fileInfo.ModTime()) > 15*time.Second
+	return time.Since(fileInfo.ModTime()) > 10*time.Second
+}
+
+// isPPXFSetComplete checks if all 5 expected pPXF output files exist for a given input file
+func (l *LocalFileSource) isPPXFSetComplete(baseFilename string) bool {
+	// Extract the base name without extension (e.g., "NGC7025_LR-V_final_cube_voronoi_cell_10")
+	baseName := strings.TrimSuffix(baseFilename, filepath.Ext(baseFilename))
+
+	expectedFiles := []string{
+		baseName + "_kinematics_and_stellar_pops_info.txt",
+		baseName + "_pPXF_fitting.pdf",
+		baseName + "_residuals.fits",
+		baseName + "_bestfit.fits",
+		baseName + "_galaxy.fits",
+	}
+
+	for _, expectedFile := range expectedFiles {
+		filePath := filepath.Join(l.InputDir, expectedFile)
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			return false
+		}
+		// Also check if this file is stable
+		if !l.isFileStable(expectedFile) {
+			return false
+		}
+	}
+
+	return true
 }

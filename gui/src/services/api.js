@@ -158,20 +158,31 @@ export const getDatasets = async (processorType) => {
 /**
  * Create a new dataset in S3
  * @param {string} datasetName - The name of the dataset to create
+ * @param {string} processorType - The processor type (starlight, ppxf, steckmap)
+ * @param {Object} ppxfConfig - Optional pPXF configuration (only for ppxf datasets)
  * @returns {Promise<Object>} - Creation response
  */
-export const createDataset = async (datasetName, processorType) => {
+export const createDataset = async (datasetName, processorType, ppxfConfig = null) => {
   try {
     console.log('Creating dataset:', datasetName, 'for processor:', processorType);
+    
+    const requestBody = {
+      datasetName: datasetName,
+      appType: processorType
+    };
+    
+    // Add pPXF config if provided and processor is pPXF
+    if (processorType.toLowerCase() === 'ppxf' && ppxfConfig) {
+      requestBody.ppxfConfig = ppxfConfig;
+      console.log('Including pPXF config:', ppxfConfig);
+    }
+    
     const response = await fetch(`${API_BASE_URL}/datasets/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-              body: JSON.stringify({
-          datasetName: datasetName,
-          appType: processorType
-        }),
+      body: JSON.stringify(requestBody),
     });
 
     console.log('Create dataset response status:', response.status);
