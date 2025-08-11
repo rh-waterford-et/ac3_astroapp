@@ -192,7 +192,7 @@ func (w *Watcher) RunForSingleFile(appName string, batchName string, fileName st
 	}
 }
 
-// Kate's new RunProcessor method
+
 func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
 	batchInfoDir := os.Getenv("BATCH_INFO_DIR")
 
@@ -226,7 +226,7 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 	}
 }
 
-// Kate's processBatchFile method
+
 func (w *Watcher) processBatchFile(filePath string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) error {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -301,7 +301,7 @@ func (w *Watcher) processBatchFile(filePath string, side string, utils common.Ut
 	return nil
 }
 
-// Kate's ProcessBatch method (refactored from your original logic)
+
 func (w *Watcher) ProcessBatch(appName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient, fileSource producer.FileSource, eventID string) {
 	log.Printf("Processing %s files...\n", appName)
 	batchSize, err := strconv.Atoi(os.Getenv("BATCH_SIZE"))
