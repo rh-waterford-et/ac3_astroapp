@@ -1,11 +1,14 @@
 package watcher
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
@@ -17,6 +20,7 @@ import (
 
 type WatcherInterface interface {
 	Run(appName string, side string, utils common.UtilsInterface) error
+	RunProcessor(side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient)
 }
 
 type Watcher struct{}
@@ -77,7 +81,6 @@ func (w *Watcher) RunForBatch(appName string, batchName string, side string, uti
 	case "processor":
 		fileSource = &producer.LocalFileSource{
 			InputDir:     inputDir,
-			OutputDir:    outputDir,
 			ProcessedDir: processedDir,
 		}
 		files, err := fileSource.ListFiles()
@@ -159,7 +162,6 @@ func (w *Watcher) RunForSingleFile(appName string, batchName string, fileName st
 	case "processor":
 		fileSource = &producer.LocalFileSource{
 			InputDir:     inputDir,
-			OutputDir:    outputDir,
 			ProcessedDir: processedDir,
 		}
 		files, err := fileSource.ListFiles()
@@ -186,6 +188,138 @@ func (w *Watcher) RunForSingleFile(appName string, batchName string, fileName st
 		log.Printf("Using standard text processing for single %s file", appName)
 		eventQueue := make(chan api.Event, 10)
 		standardProducer := producer.NewProducer(1, fileSource, eventQueue, utils, side, eventID, redisClient)
+		standardProducer.CreateEvent(appName, side, queue)
+	}
+}
+
+
+func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
+	batchInfoDir := os.Getenv("BATCH_INFO_DIR")
+
+	log.Println("Checking for completed files...")
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			files, err := os.ReadDir(batchInfoDir)
+			if err != nil {
+				fmt.Printf("Error reading directory: %v\n", err)
+				continue
+			}
+
+			for _, file := range files {
+				if file.IsDir() {
+					continue
+				}
+
+				filePath := filepath.Join(batchInfoDir, file.Name())
+				err := w.processBatchFile(filePath, side, utils, queue, redisClient)
+				if err != nil {
+					fmt.Printf("Error processing batch file %s: %v\n", filePath, err)
+					continue
+				}
+				os.Remove(filePath)
+			}
+		}
+	}
+}
+
+
+func (w *Watcher) processBatchFile(filePath string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	if !scanner.Scan() {
+		return fmt.Errorf("file is empty")
+	}
+
+	inputDir := strings.TrimSpace(scanner.Text())
+	parts := strings.Split(inputDir, "/")
+	var appName, eventID string
+	if len(parts) > 0 {
+		appName = parts[0]
+		eventID = parts[len(parts)-1]
+	} else {
+		return fmt.Errorf("invalid inputDir format: %s", inputDir)
+	}
+
+	if !scanner.Scan() {
+		return fmt.Errorf("file list is missing")
+	}
+	fileList := strings.Split(strings.TrimSpace(scanner.Text()), ",")
+
+	fileName := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
+	processDir := filepath.Join(inputDir, fileName)
+	if err := os.MkdirAll(processDir, 0755); err != nil {
+		return fmt.Errorf("failed to create working directory: %w", err)
+	}
+
+	for len(fileList) > 0 {
+		for i := 0; i < len(fileList); i++ {
+			fileName := strings.TrimSpace(fileList[i])
+
+			sourcePath := filepath.Join(inputDir, fileName)
+			destPath := filepath.Join(processDir, fileName)
+
+			if _, err := os.Stat(sourcePath); err == nil {
+				if err := os.Rename(sourcePath, destPath); err != nil {
+					return fmt.Errorf("failed to move file %s: %w", sourcePath, err)
+				}
+				fileList = append(fileList[:i], fileList[i+1:]...)
+				i--
+			}
+		}
+	}
+
+	if len(fileList) == 0 {
+		processedDir := strings.Replace(inputDir, "/output", "/processed", 1)
+
+		fileSource := &producer.LocalFileSource{
+			InputDir:     processDir,
+			ProcessedDir: processedDir,
+		}
+		files, err := fileSource.ListFiles()
+		if err != nil {
+			return fmt.Errorf("error reading input directory: %w", err)
+		}
+		length := len(files)
+		log.Printf("Found %d files in %s: %v", length, inputDir, files)
+
+		if length > 0 {
+			w.ProcessBatch(appName, side, utils, queue, redisClient, fileSource, eventID)
+		}
+		os.RemoveAll(processDir)
+	}
+
+	return nil
+}
+
+
+func (w *Watcher) ProcessBatch(appName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient, fileSource producer.FileSource, eventID string) {
+	log.Printf("Processing %s files...\n", appName)
+	batchSize, err := strconv.Atoi(os.Getenv("BATCH_SIZE"))
+	if err != nil {
+		log.Printf("Invalid batch size for %s: %v\n", appName, err)
+		return
+	}
+
+	// Check if this app needs binary processing (PPXF)
+	if api.IsAppBinary(appName) {
+		log.Printf("Using binary processing for %s (prevents .fits corruption)", appName)
+		binaryEventQueue := make(chan api.BinaryEvent, 10)
+		binaryProducer := producer.NewBinaryProducer(batchSize, fileSource, binaryEventQueue, utils, side, eventID)
+		binaryProducer.CreateBinaryEvent(appName, side, queue, binaryEventQueue)
+	} else {
+		log.Printf("Using standard text processing for %s", appName)
+		eventQueue := make(chan api.Event, 10)
+		standardProducer := producer.NewProducer(batchSize, fileSource, eventQueue, utils, side, eventID, redisClient)
 		standardProducer.CreateEvent(appName, side, queue)
 	}
 }
