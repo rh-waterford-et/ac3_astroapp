@@ -4,7 +4,7 @@ import PropTypes from 'prop-types';
 import FileUpload from './FileUpload';
 import PipelineProgress from './PipelineProgress';
 import VirtualizedFileList from './VirtualizedFileList';
-import { getDatasets, getDatasetFiles, getDatasetFilesListPaginated, getDatasetOutputFiles, getDatasetOutputFilesListPaginated, deleteDataset, deleteFile, startProcessing, startSingleFileProcessing } from '../services/api';
+import { getDatasets, getDatasetFiles, getDatasetFilesUnified, getDatasetFilesListPaginated, getDatasetOutputFiles, getDatasetOutputFilesListPaginated, deleteDataset, deleteFile, startProcessing, startSingleFileProcessing } from '../services/api';
 import { getProcessorConfig } from '../config/processorConfig';
 
 function DatasetsList({ processorType }) {
@@ -68,18 +68,20 @@ function DatasetsList({ processorType }) {
   const [outputFilesLoading, setOutputFilesLoading] = useState(false);
   const [inputFilesLoaded, setInputFilesLoaded] = useState(false);
   const [error, setError] = useState(null);
+  const [datasetsError, setDatasetsError] = useState(null);
+  const [inputFilesError, setInputFilesError] = useState(null);
+  const [outputFilesError, setOutputFilesError] = useState(null);
 
-  // Pagination state for output files
+  // Clean offset-based pagination state
   const [outputFilesPagination, setOutputFilesPagination] = useState({
-    page: 0,
+    offset: 0,
     hasMore: false,
     loading: false,
     total: 0
   });
 
-  // Pagination state for input files
   const [inputFilesPagination, setInputFilesPagination] = useState({
-    page: 0,
+    offset: 0,
     hasMore: false,
     loading: false,
     total: 0
@@ -128,6 +130,9 @@ function DatasetsList({ processorType }) {
     setOutputFiles([]);
     setSelectedDataset('');
     setError(null);
+    setDatasetsError(null);
+    setInputFilesError(null);
+    setOutputFilesError(null);
     setInputFilesLoading(false);
     setOutputFilesLoading(false);
     setInputFilesLoaded(false);
@@ -185,7 +190,7 @@ function DatasetsList({ processorType }) {
       console.error('❌ Failed to load datasets:', err);
       // Only show error for user actions
       if (!silent) {
-        setError(err.message || 'Failed to load datasets');
+        setDatasetsError(err.message || 'Failed to load datasets');
       }
     } finally {
       // Only hide loading spinner if we showed it
@@ -196,7 +201,7 @@ function DatasetsList({ processorType }) {
     }
   }, [processorType]);
 
-  // Load initial input files with pagination
+  // Load initial input files using unified API
   const loadInputFiles = useCallback(async (silent = false) => {
     if (!selectedDataset || isRefreshing.current) return;
     
@@ -211,13 +216,12 @@ function DatasetsList({ processorType }) {
     // Create new AbortController for this request
     inputFilesAbortController.current = new AbortController();
     
-    // Only show loading spinner for user actions, not background refreshes
     if (!silent) {
       setInputFilesLoading(true);
     }
     
     try {
-      const response = await getDatasetFilesListPaginated(selectedDataset, processorType, 0, 50, inputFilesAbortController.current.signal);
+      const response = await getDatasetFilesUnified(selectedDataset, processorType, 'input', 0, 50, inputFilesAbortController.current.signal);
 
       // Process input files
       const inputFiles = response.files
@@ -228,32 +232,28 @@ function DatasetsList({ processorType }) {
           uploaded: file.timestamp,
           status: 'processed',
           key: file.key
-        }))
-        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+        }));
 
       setInputFiles(inputFiles);
       setInputFilesPagination({
-        page: 1, // Next page to load
-        hasMore: response.hasMore,
+        offset: 50, // Next offset to load
+        hasMore: response.pagination.hasMore,
         loading: false,
-        total: response.total
+        total: response.pagination.total
       });
       setInputFilesLoaded(true);
     } catch (err) {
-      // Handle request cancellation gracefully
       if (err.name === 'AbortError') {
         console.log('🚫 Input files request cancelled');
         return;
       }
       
       console.error('❌ Failed to load input files:', err);
-      // Only show error for user actions, not background refreshes
       if (!silent) {
-        setError(err.message || 'Failed to load input files');
+        setInputFilesError(err.message || 'Failed to load input files');
       }
-      setInputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 });
+      setInputFilesPagination({ offset: 0, hasMore: false, loading: false, total: 0 });
     } finally {
-      // Only hide loading spinner if we showed it
       if (!silent) {
         setInputFilesLoading(false);
       }
@@ -261,21 +261,24 @@ function DatasetsList({ processorType }) {
     }
   }, [selectedDataset, processorType]);
 
-  // Load more input files for infinite scrolling
+  // Load more input files using additive offset-based loading
   const loadMoreInputFiles = useCallback(async () => {
     if (!selectedDataset || inputFilesPagination.loading || !inputFilesPagination.hasMore) return;
 
-    console.log('🔄 Loading more input files, page:', inputFilesPagination.page);
+    console.log('🔄 Loading more input files, offset:', inputFilesPagination.offset);
     
     setInputFilesPagination(prev => ({ ...prev, loading: true }));
 
     try {
-      // Use the same AbortController as the initial load to avoid race conditions
-      const response = await getDatasetFilesListPaginated(
+      // Load 100 files per batch for subsequent loads (after initial 50)
+      console.log(`📊 Loading 100 more input files (offset: ${inputFilesPagination.offset})`);
+      
+      const response = await getDatasetFilesUnified(
         selectedDataset, 
         processorType, 
-        inputFilesPagination.page, 
-        50,
+        'input',
+        inputFilesPagination.offset, 
+        100,
         inputFilesAbortController.current?.signal
       );
 
@@ -290,60 +293,41 @@ function DatasetsList({ processorType }) {
           key: file.key
         }));
 
-      // Append to existing files
+      // ADDITIVE: Append to existing files, never overwrite
       setInputFiles(prev => [...prev, ...newInputFiles]);
       setInputFilesPagination({
-        page: inputFilesPagination.page + 1,
-        hasMore: response.hasMore,
+        offset: inputFilesPagination.offset + 100,
+        hasMore: response.pagination.hasMore,
         loading: false,
-        total: response.total
+        total: response.pagination.total
       });
     } catch (err) {
       console.error('❌ Failed to load more input files:', err);
       setInputFilesPagination(prev => ({ ...prev, loading: false }));
     }
-  }, [selectedDataset, processorType, inputFilesPagination.page, inputFilesPagination.loading, inputFilesPagination.hasMore]);
+  }, [selectedDataset, processorType, inputFilesPagination.offset, inputFilesPagination.loading, inputFilesPagination.hasMore]);
 
-  // Silent background refresh for input files (refresh current loaded pages)
-  const refreshInputFilesInBackground = useCallback(async () => {
+  // Smart auto-refresh: only update total count, never disrupt loaded files
+  const refreshInputFilesCount = useCallback(async () => {
     if (!selectedDataset || isRefreshing.current || inputFilesPagination.loading) return;
     
     try {
-      // Calculate how many pages we currently have loaded
-      const currentlyLoadedPages = Math.max(1, inputFilesPagination.page);
-      const filesPerPage = 50;
-      const limit = currentlyLoadedPages * filesPerPage;
+      // Just check the first page to get updated total count
+      const response = await getDatasetFilesUnified(selectedDataset, processorType, 'input', 0, 1);
       
-      console.log(`🔄 Silent refresh: loading ${limit} input files (${currentlyLoadedPages} pages)`);
-      
-      const response = await getDatasetFilesListPaginated(selectedDataset, processorType, 0, limit);
-
-      // Process input files
-      const refreshedInputFiles = response.files
-        .filter(file => isValidFile(file.name))
-        .map(file => ({
-          name: file.name,
-          size: formatFileSize(file.size),
-          uploaded: file.timestamp,
-          status: 'processed',
-          key: file.key
-        }))
-        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-
-      // Update files and pagination state
-      setInputFiles(refreshedInputFiles);
-      setInputFilesPagination(prev => ({
-        ...prev,
-        total: response.total,
-        hasMore: response.hasMore
-      }));
-      
-      console.log(`✅ Silent refresh complete: ${refreshedInputFiles.length} input files loaded, total: ${response.total}`);
+      // Only update the total count if it has changed
+      if (response.pagination.total !== inputFilesPagination.total) {
+        console.log(`📊 Input files count updated: ${inputFilesPagination.total} → ${response.pagination.total}`);
+        setInputFilesPagination(prev => ({
+          ...prev,
+          total: response.pagination.total,
+          hasMore: prev.offset < response.pagination.total
+        }));
+      }
     } catch (err) {
-      console.error('❌ Silent refresh failed for input files:', err);
-      // Don't show error to user for background refresh
+      console.error('❌ Silent count refresh failed for input files:', err);
     }
-  }, [selectedDataset, processorType, inputFilesPagination.page, inputFilesPagination.loading]);
+  }, [selectedDataset, processorType, inputFilesPagination.total, inputFilesPagination.offset, inputFilesPagination.loading]);
 
   // Load initial output files with pagination
   const loadOutputFiles = useCallback(async (silent = false) => {
@@ -360,13 +344,12 @@ function DatasetsList({ processorType }) {
     // Create new AbortController for this request
     outputFilesAbortController.current = new AbortController();
     
-    // Only show loading spinner for user actions, not background refreshes
     if (!silent) {
       setOutputFilesLoading(true);
     }
     
     try {
-      const response = await getDatasetOutputFilesListPaginated(selectedDataset, processorType, 0, 50, outputFilesAbortController.current.signal);
+      const response = await getDatasetFilesUnified(selectedDataset, processorType, 'output', 0, 50, outputFilesAbortController.current.signal);
 
       // Process output files
       const outputFiles = response.files
@@ -377,18 +360,16 @@ function DatasetsList({ processorType }) {
           uploaded: file.timestamp,
           status: 'completed',
           key: file.key
-        }))
-        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+        }));
 
       setOutputFiles(outputFiles);
       setOutputFilesPagination({
-        page: 1, // Next page to load
-        hasMore: response.hasMore,
+        offset: 50, // Next offset to load
+        hasMore: response.pagination.hasMore,
         loading: false,
-        total: response.total
+        total: response.pagination.total
       });
     } catch (err) {
-      // Handle request cancellation gracefully
       if (err.name === 'AbortError') {
         console.log('🚫 Output files request cancelled');
         return;
@@ -396,11 +377,10 @@ function DatasetsList({ processorType }) {
       
       console.error('❌ Failed to load output files:', err);
       if (!silent) {
-        setError(err.message || 'Failed to load output files');
+        setOutputFilesError(err.message || 'Failed to load output files');
       }
-      setOutputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 });
+      setOutputFilesPagination({ offset: 0, hasMore: false, loading: false, total: 0 });
     } finally {
-      // Only hide loading spinner if we showed it
       if (!silent) {
         setOutputFilesLoading(false);
       }
@@ -408,21 +388,24 @@ function DatasetsList({ processorType }) {
     }
   }, [selectedDataset, processorType]);
 
-  // Load more output files for infinite scrolling
+  // Load more output files using additive offset-based loading
   const loadMoreOutputFiles = useCallback(async () => {
     if (!selectedDataset || outputFilesPagination.loading || !outputFilesPagination.hasMore) return;
 
-    console.log('🔄 Loading more output files, page:', outputFilesPagination.page);
+    console.log('🔄 Loading more output files, offset:', outputFilesPagination.offset);
     
     setOutputFilesPagination(prev => ({ ...prev, loading: true }));
 
     try {
-      // Use the same AbortController as the initial load to avoid race conditions
-      const response = await getDatasetOutputFilesListPaginated(
+      // Load 100 files per batch for subsequent loads (after initial 50)
+      console.log(`📊 Loading 100 more output files (offset: ${outputFilesPagination.offset})`);
+      
+      const response = await getDatasetFilesUnified(
         selectedDataset, 
         processorType, 
-        outputFilesPagination.page, 
-        50,
+        'output',
+        outputFilesPagination.offset, 
+        100,
         outputFilesAbortController.current?.signal
       );
 
@@ -437,75 +420,58 @@ function DatasetsList({ processorType }) {
           key: file.key
         }));
 
-      // Append to existing files
+      // ADDITIVE: Append to existing files, never overwrite
       setOutputFiles(prev => [...prev, ...newOutputFiles]);
       setOutputFilesPagination({
-        page: outputFilesPagination.page + 1,
-        hasMore: response.hasMore,
+        offset: outputFilesPagination.offset + 100,
+        hasMore: response.pagination.hasMore,
         loading: false,
-        total: response.total
+        total: response.pagination.total
       });
     } catch (err) {
       console.error('❌ Failed to load more output files:', err);
       setOutputFilesPagination(prev => ({ ...prev, loading: false }));
     }
-  }, [selectedDataset, processorType, outputFilesPagination.page, outputFilesPagination.loading, outputFilesPagination.hasMore]);
+  }, [selectedDataset, processorType, outputFilesPagination.offset, outputFilesPagination.loading, outputFilesPagination.hasMore]);
 
-  // Silent background refresh for output files (refresh current loaded pages)
-  const refreshOutputFilesInBackground = useCallback(async () => {
+  // Smart auto-refresh: only update total count, never disrupt loaded files
+  const refreshOutputFilesCount = useCallback(async () => {
     if (!selectedDataset || isRefreshing.current || outputFilesPagination.loading) return;
     
     try {
-      // Calculate how many pages we currently have loaded
-      const currentlyLoadedPages = Math.max(1, outputFilesPagination.page);
-      const filesPerPage = 50;
-      const limit = currentlyLoadedPages * filesPerPage;
+      // Just check the first page to get updated total count
+      const response = await getDatasetFilesUnified(selectedDataset, processorType, 'output', 0, 1);
       
-      console.log(`🔄 Silent refresh: loading ${limit} output files (${currentlyLoadedPages} pages)`);
-      
-      const response = await getDatasetOutputFilesListPaginated(selectedDataset, processorType, 0, limit);
-
-      // Process output files
-      const refreshedOutputFiles = response.files
-        .filter(file => isValidFile(file.name))
-        .map(file => ({
-          name: file.name,
-          size: formatFileSize(file.size),
-          uploaded: file.timestamp,
-          status: 'completed',
-          key: file.key
-        }))
-        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-
-      // Update files and pagination state
-      setOutputFiles(refreshedOutputFiles);
-      setOutputFilesPagination(prev => ({
-        ...prev,
-        total: response.total,
-        hasMore: response.hasMore
-      }));
-      
-      console.log(`✅ Silent refresh complete: ${refreshedOutputFiles.length} output files loaded, total: ${response.total}`);
+      // Only update the total count if it has changed
+      if (response.pagination.total !== outputFilesPagination.total) {
+        console.log(`📊 Output files count updated: ${outputFilesPagination.total} → ${response.pagination.total}`);
+        setOutputFilesPagination(prev => ({
+          ...prev,
+          total: response.pagination.total,
+          hasMore: prev.offset < response.pagination.total
+        }));
+      }
     } catch (err) {
-      console.error('❌ Silent refresh failed for output files:', err);
-      // Don't show error to user for background refresh
+      console.error('❌ Silent count refresh failed for output files:', err);
     }
-  }, [selectedDataset, processorType, outputFilesPagination.page, outputFilesPagination.loading]);
+  }, [selectedDataset, processorType, outputFilesPagination.total, outputFilesPagination.offset, outputFilesPagination.loading]);
 
   // Combined background refresh function
   const performBackgroundRefresh = useCallback(async () => {
     if (!selectedDataset || isRefreshing.current) return;
     
-    console.log('🔄 Performing silent background refresh...');
+    console.log('🔄 Performing smart count refresh...');
     
-    // Refresh both input and output files in parallel
+    // Only refresh file counts, never disrupt loaded data
     await Promise.all([
-      refreshInputFilesInBackground(),
-      refreshOutputFilesInBackground()
+      refreshInputFilesCount(),
+      refreshOutputFilesCount()
     ]);
     
-    console.log('✅ Background refresh completed');
-  }, [selectedDataset, refreshInputFilesInBackground, refreshOutputFilesInBackground]);
+    console.log('✅ Smart count refresh completed');
+  }, [selectedDataset, refreshInputFilesCount, refreshOutputFilesCount]);
+
+  // Clean auto-refresh timer - count-only updates every 5 seconds
 
   // Auto-refresh timer - silent background updates every 5 seconds
   useEffect(() => {
@@ -536,16 +502,16 @@ function DatasetsList({ processorType }) {
     if (selectedDataset) {
       setInputFilesLoaded(false);
       setInputFiles([]); // Clear input files when changing datasets
-      setInputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 }); // Reset input pagination
+      setInputFilesPagination({ offset: 0, hasMore: false, loading: false, total: 0 }); // Reset input pagination
       setOutputFiles([]); // Clear output files when changing datasets
-      setOutputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 }); // Reset output pagination
+      setOutputFilesPagination({ offset: 0, hasMore: false, loading: false, total: 0 }); // Reset output pagination
       loadInputFiles();
     } else {
       setInputFiles([]);
       setOutputFiles([]);
       setInputFilesLoaded(false);
-      setInputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 });
-      setOutputFilesPagination({ page: 0, hasMore: false, loading: false, total: 0 });
+      setInputFilesPagination({ offset: 0, hasMore: false, loading: false, total: 0 });
+      setOutputFilesPagination({ offset: 0, hasMore: false, loading: false, total: 0 });
     }
   }, [selectedDataset, loadInputFiles]);
 
@@ -558,10 +524,42 @@ function DatasetsList({ processorType }) {
   }, [inputFilesLoaded, selectedDataset, loadOutputFiles]);
 
    // Handle dataset creation callback
-   const handleDatasetCreated = useCallback((datasetName) => {
-     console.log('✅ Dataset created:', datasetName, '- refreshing...');
-     loadDatasets(true, false); // Silent reload, no force auto-select
-   }, [loadDatasets]);
+     const handleDatasetCreated = useCallback((datasetName) => {
+    console.log('✅ Dataset created:', datasetName, '- refreshing...');
+    loadDatasets(true, false); // Silent reload, no force auto-select
+  }, [loadDatasets]);
+
+  // Manual refresh functions
+  const handleRefreshDatasets = useCallback(async () => {
+    console.log('🔄 Manual refresh: Datasets');
+    setDatasetsError(null); // Clear any previous errors for this pane
+    await loadDatasets(false, false);
+  }, [loadDatasets]);
+
+  const handleRefreshInputFiles = useCallback(async () => {
+    if (!selectedDataset) return;
+    console.log('🔄 Manual refresh: Input files for', selectedDataset);
+    
+    // Reset pagination and reload from start, but preserve current total
+    const currentTotal = inputFilesPagination.total;
+    setInputFiles([]);
+    setInputFilesPagination({ offset: 0, hasMore: false, loading: false, total: currentTotal });
+    setInputFilesLoaded(false);
+    setInputFilesError(null); // Clear any previous errors for this pane
+    await loadInputFiles();
+  }, [selectedDataset, loadInputFiles, inputFilesPagination.total]);
+
+  const handleRefreshOutputFiles = useCallback(async () => {
+    if (!selectedDataset) return;
+    console.log('🔄 Manual refresh: Output files for', selectedDataset);
+    
+    // Reset pagination and reload from start, but preserve current total
+    const currentTotal = outputFilesPagination.total;
+    setOutputFiles([]);
+    setOutputFilesPagination({ offset: 0, hasMore: false, loading: false, total: currentTotal });
+    setOutputFilesError(null); // Clear any previous errors for this pane
+    await loadOutputFiles();
+  }, [selectedDataset, loadOutputFiles, outputFilesPagination.total]);
 
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
@@ -735,7 +733,12 @@ function DatasetsList({ processorType }) {
     }
 
     try {
-      console.log('Deleting dataset:', datasetId);
+      console.log('🗑️ Starting dataset deletion:', datasetId);
+      
+      // Show loading states in all panes during deletion
+      setLoading(true);
+      setInputFilesLoading(true);
+      setOutputFilesLoading(true);
       
       const result = await deleteDataset(datasetId, processorType);
       
@@ -744,10 +747,12 @@ function DatasetsList({ processorType }) {
         
         // Handle selection logic and refresh all panes
         if (selectedDataset === datasetId) {
-          // Clear current files immediately
+          // Clear current files and pagination immediately
           setInputFiles([]);
           setOutputFiles([]);
           setInputFilesLoaded(false);
+          setInputFilesPagination({ offset: 0, hasMore: false, loading: false, total: 0 });
+          setOutputFilesPagination({ offset: 0, hasMore: false, loading: false, total: 0 });
           
           // Find remaining datasets (excluding the deleted one)
           const remainingDatasets = datasets.filter(d => d.id !== datasetId);
@@ -760,6 +765,9 @@ function DatasetsList({ processorType }) {
             // No datasets left, clear everything
             setSelectedDataset('');
             setError(null);
+            setDatasetsError(null);
+            setInputFilesError(null);
+            setOutputFilesError(null);
           }
         }
         
@@ -776,12 +784,20 @@ function DatasetsList({ processorType }) {
         }
         
         // Give user feedback
-        console.log(`Dataset "${datasetName}" deleted successfully - all panes refreshed`);
+        console.log(`✅ Dataset "${datasetName}" deleted successfully - all panes refreshed`);
       } else {
-        console.error('Failed to delete dataset:', result.message);
+        console.error('❌ Failed to delete dataset:', result.message);
+        setError(result.message || 'Failed to delete dataset');
       }
     } catch (error) {
-      console.error('Error deleting dataset:', error.message);
+      console.error('❌ Error deleting dataset:', error.message);
+      setError(error.message || 'Failed to delete dataset');
+    } finally {
+      // Always clear loading states when deletion is complete
+      setLoading(false);
+      setInputFilesLoading(false);
+      setOutputFilesLoading(false);
+      console.log('🏁 Dataset deletion process completed');
     }
   };
 
@@ -867,7 +883,21 @@ function DatasetsList({ processorType }) {
                 <div className="pane-header-left">
                   <h3>Datasets</h3>
                 </div>
-                <div className="pane-count">{datasets.length}</div>
+                <div className="pane-header-right">
+                  <button 
+                    className="refresh-btn" 
+                    onClick={handleRefreshDatasets}
+                    disabled={loading}
+                    title="Refresh datasets"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 4v6h-6"/>
+                      <path d="M1 20v-6h6"/>
+                      <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                  </button>
+                  <div className="pane-count">{datasets.length}</div>
+                </div>
               </div>
               <div className="pane-content">
               {loading ? (
@@ -875,11 +905,11 @@ function DatasetsList({ processorType }) {
                   <div className="astro-loader-galaxy" style={{ width: '20px', height: '20px' }}></div>
                   <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading datasets...</div>
                 </div>
-              ) : error ? (
+              ) : datasetsError ? (
                 <div className="empty-pane">
                   <div className="empty-icon">❌</div>
                   <p>Error loading datasets</p>
-                  <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{error}</p>
+                  <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{datasetsError}</p>
                 </div>
               ) : datasets.length > 0 ? (
                 datasets.map(dataset => {
@@ -893,15 +923,6 @@ function DatasetsList({ processorType }) {
                       >
                         <div className="dataset-info">
                           <div className="dataset-name">{dataset.name}</div>
-                        </div>
-                        <div className="dataset-status">
-                          <span 
-                            className="status-dot"
-                            style={{ 
-                              backgroundColor: processingComplete ? '#4FD1C5' : getDatasetStatusColor(dataset.status)
-                            }}
-                            title={processingComplete ? 'Processing complete' : dataset.status}
-                          ></span>
                         </div>
                       </button>
                       <div className="dataset-actions">
@@ -948,25 +969,41 @@ function DatasetsList({ processorType }) {
             {/* Middle Pane - Input Files */}
             <div className="pipeline-pane files-pane">
               <div className="pane-header">
-                <h3>Input Files - {datasetName}</h3>
-                <div className="pane-count">
-                  {inputFilesPagination.total > 0 ? inputFilesPagination.total : inputFiles.length}
+                <div className="pane-header-left">
+                  <h3>Input Files - {datasetName}</h3>
+                </div>
+                <div className="pane-header-right">
+                  <button 
+                    className="refresh-btn" 
+                    onClick={handleRefreshInputFiles}
+                    disabled={inputFilesLoading || !selectedDataset}
+                    title="Refresh input files"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 4v6h-6"/>
+                      <path d="M1 20v-6h6"/>
+                      <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                  </button>
+                  <div className="pane-count">
+                    {inputFilesPagination.total > 0 ? inputFilesPagination.total : inputFiles.length}
+                  </div>
                 </div>
               </div>
               <div className="pane-content">
                 {(() => {
                   console.log('Input files render check:', {
                     inputFilesLoading,
-                    error,
+                    inputFilesError,
                     inputFilesLength: inputFiles.length,
-                    renderCondition: !inputFilesLoading && !error && inputFiles.length === 0 ? 'empty' : 
+                    renderCondition: !inputFilesLoading && !inputFilesError && inputFiles.length === 0 ? 'empty' : 
                                      inputFilesLoading ? 'loading' : 
-                                     error ? 'error' : 
+                                     inputFilesError ? 'error' : 
                                      inputFiles.length > 0 ? 'show-files' : 'fallback-empty'
                   });
                   return null;
                 })()}
-                {!inputFilesLoading && !error && inputFiles.length === 0 && selectedDataset ? (
+                {!inputFilesLoading && !inputFilesError && inputFiles.length === 0 && selectedDataset ? (
                   <div className="empty-pane">
                     <div className="empty-icon">📁</div>
                     <p>No input files available</p>
@@ -981,17 +1018,17 @@ function DatasetsList({ processorType }) {
                     <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
                     <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading input files...</div>
                   </div>
-                ) : error ? (
+                ) : inputFilesError ? (
                   <div className="empty-pane">
                     <div className="empty-icon">❌</div>
                     <p>Error loading input files</p>
-                    <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{error}</p>
+                    <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{inputFilesError}</p>
                   </div>
                 ) : (
                   <VirtualizedFileList
                     items={inputFiles}
                     isLoading={inputFilesLoading}
-                    error={error}
+                    error={inputFilesError}
                     emptyMessage="No input files available"
                     emptyIcon="📁"
                     selectedDataset={selectedDataset}
@@ -1014,25 +1051,54 @@ function DatasetsList({ processorType }) {
             {/* Right Pane - Output Files */}
             <div className="pipeline-pane files-pane">
               <div className="pane-header">
-                <h3>Output Files - {datasetName}</h3>
-                <div className="pane-count">
-                  {outputFilesPagination.total > 0 ? outputFilesPagination.total : outputFiles.length}
+                <div className="pane-header-left">
+                  <h3>Output Files - {datasetName}</h3>
+                </div>
+                <div className="pane-header-right">
+                  <button 
+                    className="refresh-btn" 
+                    onClick={handleRefreshOutputFiles}
+                    disabled={outputFilesLoading || !selectedDataset}
+                    title="Refresh output files"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 4v6h-6"/>
+                      <path d="M1 20v-6h6"/>
+                      <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                  </button>
+                  <div className="pane-count">
+                    {outputFilesPagination.total > 0 ? outputFilesPagination.total : outputFiles.length}
+                  </div>
                 </div>
               </div>
               <div className="pane-content">
-                {!inputFilesLoaded ? (
+                {!outputFilesLoading && !outputFilesError && outputFiles.length === 0 && selectedDataset ? (
                   <div className="empty-pane">
-                    <div className="cyber-hourglass">
-                      <div className="hourglass-top"></div>
-                      <div className="hourglass-bottom"></div>
-                      <div className="sand-particle"></div>
-                    </div>
+                    <div className="empty-icon">📁</div>
+                    <p>No output files available</p>
+                  </div>
+                ) : !selectedDataset ? (
+                  <div className="empty-pane">
+                    <div className="empty-icon">📂</div>
+                    <p>Select a dataset to view output files</p>
+                  </div>
+                ) : outputFilesLoading ? (
+                  <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                    <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
+                    <div className="astro-loading-text" style={{ fontSize: '12px' }}>Loading output files...</div>
+                  </div>
+                ) : outputFilesError ? (
+                  <div className="empty-pane">
+                    <div className="empty-icon">❌</div>
+                    <p>Error loading output files</p>
+                    <p style={{ fontSize: '12px', color: '#FF6B6B' }}>{outputFilesError}</p>
                   </div>
                 ) : (
                   <VirtualizedFileList
                     items={outputFiles}
                     isLoading={outputFilesLoading}
-                    error={error}
+                    error={outputFilesError}
                     emptyMessage="No output files available"
                     emptyIcon="📁"
                     selectedDataset={selectedDataset}

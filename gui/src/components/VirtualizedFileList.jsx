@@ -95,13 +95,7 @@ const VirtualizedFileList = ({
                 <div className="file-size">{file.size}</div>
               </div>
             </div>
-            <div className="file-status" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span 
-                className="status-dot"
-                style={{ backgroundColor: getFileStatusColor(file.status) }}
-                title={file.status}
-              ></span>
-            </div>
+
           </div>
           {onProcessFile && isInputFile && (
             <button 

@@ -158,20 +158,31 @@ export const getDatasets = async (processorType) => {
 /**
  * Create a new dataset in S3
  * @param {string} datasetName - The name of the dataset to create
+ * @param {string} processorType - The processor type (starlight, ppxf, steckmap)
+ * @param {Object} ppxfConfig - Optional pPXF configuration (only for ppxf datasets)
  * @returns {Promise<Object>} - Creation response
  */
-export const createDataset = async (datasetName, processorType) => {
+export const createDataset = async (datasetName, processorType, ppxfConfig = null) => {
   try {
     console.log('Creating dataset:', datasetName, 'for processor:', processorType);
+    
+    const requestBody = {
+      datasetName: datasetName,
+      appType: processorType
+    };
+    
+    // Add pPXF config if provided and processor is pPXF
+    if (processorType.toLowerCase() === 'ppxf' && ppxfConfig) {
+      requestBody.ppxfConfig = ppxfConfig;
+      console.log('Including pPXF config:', ppxfConfig);
+    }
+    
     const response = await fetch(`${API_BASE_URL}/datasets/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-              body: JSON.stringify({
-          datasetName: datasetName,
-          appType: processorType
-        }),
+      body: JSON.stringify(requestBody),
     });
 
     console.log('Create dataset response status:', response.status);
@@ -305,7 +316,54 @@ export const getDatasetFiles = async (datasetName, processorType) => {
 };
 
 /**
- * Get input files for a dataset with pagination - specifically for file lists (not image gallery)
+ * UNIFIED: Get dataset files with robust offset-based pagination
+ * @param {string} datasetName - Name of the dataset  
+ * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
+ * @param {string} fileType - Type of files (input, processed, output)
+ * @param {number} offset - Starting position (0-based)
+ * @param {number} limit - Number of files to return per page
+ * @param {AbortSignal} signal - Optional AbortSignal for request cancellation
+ * @returns {Promise<Object>} - Object with files array, pagination info
+ */
+export const getDatasetFilesUnified = async (datasetName, processorType, fileType, offset = 0, limit = 50, signal = null) => {
+  if (!processorType) {
+    throw new Error('getDatasetFilesUnified: processorType is required');
+  }
+  if (!fileType) {
+    throw new Error('getDatasetFilesUnified: fileType is required (input, processed, output)');
+  }
+  
+  console.log(`📄 Fetching ${fileType} files for dataset: ${datasetName}, processor: ${processorType}, offset: ${offset}, limit: ${limit}`);
+  
+  const response = await fetch(`${API_BASE_URL}/datasets/files-unified?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}&type=${encodeURIComponent(fileType)}&offset=${offset}&limit=${limit}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    signal: signal,
+  });
+
+  console.log(`Unified ${fileType} files response status:`, response.status);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${fileType} files: ${response.status}`);
+  }
+
+  const data = await response.json();
+  console.log(`Unified ${fileType} files response data:`, data);
+  
+  if (data.success) {
+    return {
+      files: data.files || [],
+      pagination: data.pagination || { offset: 0, limit: 50, total: 0, hasMore: false }
+    };
+  } else {
+    throw new Error(data.message || `Failed to fetch ${fileType} files`);
+  }
+};
+
+/**
+ * DEPRECATED: Get input files for a dataset with pagination - USE getDatasetFilesUnified INSTEAD
  * @param {string} datasetName - Name of the dataset
  * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
  * @param {number} page - Page number (0-based)
@@ -399,7 +457,7 @@ export const getDatasetOutputFiles = async (datasetName, processorType) => {
 };
 
 /**
- * Get output files for a dataset with pagination - specifically for file lists (not image gallery)
+ * DEPRECATED: Get output files for a dataset with pagination - USE getDatasetFilesUnified INSTEAD
  * @param {string} datasetName - Name of the dataset
  * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
  * @param {number} page - Page number (0-based)

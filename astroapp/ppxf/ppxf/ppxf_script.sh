@@ -12,12 +12,61 @@ MASK_FILE="/processing_data/ppxf/data/input/mask.txt"
 # API server URL for progress updates
 API_URL="http://uc3-backend-service:8080/api/progress/update"
 
-# Default parameters (can be overridden via environment variables)
-REDSHIFT=${PPXF_REDSHIFT:-0.0}
-VELOCITY_DISPERSION=${PPXF_VEL_DISP:-100.0}
-WAVE_RANGE_START=${PPXF_WAVE_START:-4000}
-WAVE_RANGE_END=${PPXF_WAVE_END:-7000}
-SPS_NAME=${PPXF_SPS_NAME:-emiles}
+# Function to load configuration from ppxf_config.json
+load_ppxf_config() {
+    local config_file="$PPXF_INPUT_DIR/ppxf_config.json"
+    
+    # Default parameters
+    REDSHIFT=${PPXF_REDSHIFT:-0.0}
+    VELOCITY_DISPERSION=${PPXF_VEL_DISP:-100.0}
+    WAVE_RANGE_START=${PPXF_WAVE_START:-4000}
+    WAVE_RANGE_END=${PPXF_WAVE_END:-7000}
+    SPS_NAME=${PPXF_SPS_NAME:-emiles}
+    
+    # Check if user config file exists
+    if [ -f "$config_file" ]; then
+        echo "Found user pPXF configuration: $config_file"
+        echo "Loading user-defined parameters..."
+        
+        # Parse JSON and extract values using jq if available, otherwise use grep/sed
+        if command -v jq >/dev/null 2>&1; then
+            echo "Using jq for JSON parsing"
+            REDSHIFT=$(jq -r '.redshift // empty' "$config_file" 2>/dev/null)
+            VELOCITY_DISPERSION=$(jq -r '.velocityDisp // empty' "$config_file" 2>/dev/null)
+            WAVE_RANGE_START=$(jq -r '.waveRangeStart // empty' "$config_file" 2>/dev/null)
+            WAVE_RANGE_END=$(jq -r '.waveRangeEnd // empty' "$config_file" 2>/dev/null)
+            SPS_NAME=$(jq -r '.spsName // empty' "$config_file" 2>/dev/null)
+        else
+            echo "jq not available, using grep/sed for JSON parsing"
+            # Fallback parsing without jq
+            REDSHIFT=$(grep -o '"redshift"[^,]*' "$config_file" | sed 's/.*: *\([0-9.]*\).*/\1/' 2>/dev/null)
+            VELOCITY_DISPERSION=$(grep -o '"velocityDisp"[^,]*' "$config_file" | sed 's/.*: *\([0-9.]*\).*/\1/' 2>/dev/null)
+            WAVE_RANGE_START=$(grep -o '"waveRangeStart"[^,]*' "$config_file" | sed 's/.*: *\([0-9]*\).*/\1/' 2>/dev/null)
+            WAVE_RANGE_END=$(grep -o '"waveRangeEnd"[^,]*' "$config_file" | sed 's/.*: *\([0-9]*\).*/\1/' 2>/dev/null)
+            SPS_NAME=$(grep -o '"spsName"[^,]*' "$config_file" | sed 's/.*: *"\([^"]*\)".*/\1/' 2>/dev/null)
+        fi
+        
+        # Use defaults if parsing failed
+        REDSHIFT=${REDSHIFT:-${PPXF_REDSHIFT:-0.0}}
+        VELOCITY_DISPERSION=${VELOCITY_DISPERSION:-${PPXF_VEL_DISP:-100.0}}
+        WAVE_RANGE_START=${WAVE_RANGE_START:-${PPXF_WAVE_START:-4000}}
+        WAVE_RANGE_END=${WAVE_RANGE_END:-${PPXF_WAVE_END:-7000}}
+        SPS_NAME=${SPS_NAME:-${PPXF_SPS_NAME:-emiles}}
+        
+        echo "Loaded configuration from $config_file:"
+        echo "  Redshift: $REDSHIFT"
+        echo "  Velocity Dispersion: $VELOCITY_DISPERSION km/s"
+        echo "  Wave Range: $WAVE_RANGE_START - $WAVE_RANGE_END Å"
+        echo "  SPS Model: $SPS_NAME"
+    else
+        echo "No user config found at $config_file"
+        echo "Using environment variables or defaults:"
+        echo "  Redshift: $REDSHIFT"
+        echo "  Velocity Dispersion: $VELOCITY_DISPERSION km/s"
+        echo "  Wave Range: $WAVE_RANGE_START - $WAVE_RANGE_END Å"
+        echo "  SPS Model: $SPS_NAME"
+    fi
+}
 
 # Function to remove first line from process list
 removeFileFromList(){
@@ -78,7 +127,11 @@ main() {
     echo "Input directory: $PPXF_INPUT_DIR"
     echo "Output directory: $PPXF_OUTPUT_DIR"
     echo "Process file: $PROCESS_FILE"
-    echo "Parameters: redshift=$REDSHIFT, vel_disp=$VELOCITY_DISPERSION, wave_range=$WAVE_RANGE_START-$WAVE_RANGE_END"
+    
+    # Load configuration (either from user config file or environment variables)
+    load_ppxf_config
+    
+    echo "Final parameters: redshift=$REDSHIFT, vel_disp=$VELOCITY_DISPERSION, wave_range=$WAVE_RANGE_START-$WAVE_RANGE_END"
     
     # Create default mask file
     create_default_mask
