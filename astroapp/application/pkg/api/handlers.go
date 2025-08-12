@@ -48,6 +48,19 @@ type PPXFConfig struct {
 	SPSName        string  `json:"spsName"`
 }
 
+// Unified file listing response structure
+type UnifiedFilesResponse struct {
+	Success    bool          `json:"success"`
+	Files      []DatasetFile `json:"files"`
+	Message    string        `json:"message,omitempty"`
+	Pagination struct {
+		Offset  int  `json:"offset"`
+		Limit   int  `json:"limit"`
+		Total   int  `json:"total"`
+		HasMore bool `json:"hasMore"`
+	} `json:"pagination"`
+}
+
 type CreateDatasetResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
@@ -1014,6 +1027,32 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 		// Calculate pagination boundaries using actual file count
 		totalFiles := len(actualFiles)
 		allObjects = actualFiles // Use filtered list for pagination
+
+		// Sort files for pPXF by directory number before pagination
+		if strings.ToLower(appType) == "ppxf" {
+			sort.Slice(allObjects, func(i, j int) bool {
+				// Extract directory numbers from paths like "108/filename.fits"
+				partsA := strings.Split(allObjects[i], "/")
+				partsB := strings.Split(allObjects[j], "/")
+
+				if len(partsA) == 0 || len(partsB) == 0 {
+					return allObjects[i] < allObjects[j]
+				}
+
+				// Convert directory names to integers for proper numerical sorting
+				dirA, errA := strconv.Atoi(partsA[0])
+				dirB, errB := strconv.Atoi(partsB[0])
+
+				// If parsing fails, fall back to string comparison
+				if errA != nil || errB != nil {
+					return allObjects[i] < allObjects[j]
+				}
+
+				// Compare as integers: 2 < 10 < 20 (not "10" < "2" < "20")
+				return dirA < dirB
+			})
+		}
+
 		startIndex := page * limit
 		endIndex := startIndex + limit
 
@@ -1094,6 +1133,27 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 			}
 			json.NewEncoder(w).Encode(response)
 			return
+		}
+
+		// Sort files for pPXF by directory number before processing
+		if strings.ToLower(appType) == "ppxf" {
+			sort.Slice(objects, func(i, j int) bool {
+				// Extract directory numbers from paths like "108/filename.fits"
+				dirStrA := strings.Split(objects[i], "/")[0]
+				dirStrB := strings.Split(objects[j], "/")[0]
+
+				// Convert directory names to integers for proper numerical sorting
+				dirA, errA := strconv.Atoi(dirStrA)
+				dirB, errB := strconv.Atoi(dirStrB)
+
+				// If parsing fails, fall back to string comparison
+				if errA != nil || errB != nil {
+					return objects[i] < objects[j]
+				}
+
+				// Compare as integers: 2 < 10 < 20 (not "10" < "2" < "20")
+				return dirA < dirB
+			})
 		}
 
 		// Convert all objects to DatasetFile structs, but skip directory markers and system files
@@ -1340,6 +1400,328 @@ func (h *FileUploadHandler) ListDatasetOutputFilesPaginated(w http.ResponseWrite
 		Limit:   limit,
 		HasMore: hasMore,
 	}
+	json.NewEncoder(w).Encode(response)
+}
+
+// ListDatasetFilesUnified is a robust, unified endpoint for listing dataset files
+// Supports input, processed, and output files with consistent offset-based pagination
+func (h *FileUploadHandler) ListDatasetFilesUnified(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse required parameters
+	dataset := strings.TrimSpace(r.URL.Query().Get("dataset"))
+	fileType := strings.TrimSpace(r.URL.Query().Get("type"))
+	appType := strings.TrimSpace(r.URL.Query().Get("app"))
+
+	// Validate required parameters
+	if dataset == "" {
+		response := UnifiedFilesResponse{
+			Success: false,
+			Message: "Dataset parameter is required",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if fileType == "" {
+		response := UnifiedFilesResponse{
+			Success: false,
+			Message: "Type parameter is required (input, processed, output)",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if appType == "" {
+		appType = "starlight" // default
+	}
+
+	// Validate file type
+	validTypes := []string{"input", "processed", "output"}
+	isValidType := false
+	for _, validType := range validTypes {
+		if strings.ToLower(fileType) == validType {
+			fileType = validType
+			isValidType = true
+			break
+		}
+	}
+
+	if !isValidType {
+		response := UnifiedFilesResponse{
+			Success: false,
+			Message: fmt.Sprintf("Invalid type. Allowed: %s", strings.Join(validTypes, ", ")),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Validate application type
+	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	isValidApp := false
+	for _, app := range allowedApps {
+		if strings.ToLower(appType) == app {
+			appType = app
+			isValidApp = true
+			break
+		}
+	}
+
+	if !isValidApp {
+		response := UnifiedFilesResponse{
+			Success: false,
+			Message: fmt.Sprintf("Invalid app type. Allowed: %s", strings.Join(allowedApps, ", ")),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Parse pagination parameters
+	offset := 0
+	limit := 50 // default page size
+
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 200 {
+			limit = l
+		}
+	}
+
+	// Validate dataset name
+	if strings.Contains(dataset, "/") || strings.Contains(dataset, "\\") {
+		response := UnifiedFilesResponse{
+			Success: false,
+			Message: "Invalid dataset name",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Get all objects from S3 and filter them
+	var allObjects []string
+	var err error
+
+	switch fileType {
+	case "input":
+		// For input files, search both input and processed directories (like legacy API)
+		inputPath := fmt.Sprintf("%s/input/%s", appType, dataset)
+		processedPath := fmt.Sprintf("%s/processed/%s", appType, dataset)
+
+		// Get files from input directory
+		inputObjects, inputErr := h.S3Bucket.GetS3Objects(inputPath)
+		if inputErr != nil {
+			log.Printf("Warning: Could not list input objects for %s %s in app %s: %v", fileType, dataset, appType, inputErr)
+			inputObjects = []string{}
+		}
+
+		// Get files from processed directory
+		processedObjects, processedErr := h.S3Bucket.GetS3Objects(processedPath)
+		if processedErr != nil {
+			log.Printf("Warning: Could not list processed objects for %s %s in app %s: %v", fileType, dataset, appType, processedErr)
+			processedObjects = []string{}
+		}
+
+		// Prefix files with their directory type for later key reconstruction
+		for _, obj := range inputObjects {
+			allObjects = append(allObjects, "input/"+obj)
+		}
+		for _, obj := range processedObjects {
+			allObjects = append(allObjects, "processed/"+obj)
+		}
+
+	case "processed":
+		// For processed files, only search processed directory
+		folderPath := fmt.Sprintf("%s/processed/%s", appType, dataset)
+		allObjects, err = h.S3Bucket.GetS3Objects(folderPath)
+		if err != nil {
+			log.Printf("Error listing S3 objects for %s %s in app %s: %v", fileType, dataset, appType, err)
+			response := UnifiedFilesResponse{
+				Success: false,
+				Message: fmt.Sprintf("Failed to list %s files", fileType),
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+	case "output":
+		// For output files, only search output directory
+		folderPath := fmt.Sprintf("%s/output/%s", appType, dataset)
+		allObjects, err = h.S3Bucket.GetS3Objects(folderPath)
+		if err != nil {
+			log.Printf("Error listing S3 objects for %s %s in app %s: %v", fileType, dataset, appType, err)
+			response := UnifiedFilesResponse{
+				Success: false,
+				Message: fmt.Sprintf("Failed to list %s files", fileType),
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+	}
+
+	// Filter out directory markers and system files
+	var filteredFiles []string
+	for _, object := range allObjects {
+		if strings.HasSuffix(object, "/") {
+			continue // Skip directory markers
+		}
+
+		// For input files with prefixes, extract the actual filename for system file check
+		var actualFilename string
+		if fileType == "input" {
+			if strings.HasPrefix(object, "input/") {
+				actualFilename = strings.TrimPrefix(object, "input/")
+			} else if strings.HasPrefix(object, "processed/") {
+				actualFilename = strings.TrimPrefix(object, "processed/")
+			} else {
+				actualFilename = object
+			}
+		} else {
+			actualFilename = object
+		}
+
+		// Check if it's a system file using the actual filename
+		if !isSystemFile(actualFilename) {
+			filteredFiles = append(filteredFiles, object)
+		}
+	}
+
+	// Apply stable sorting based on app type
+	if strings.ToLower(appType) == "ppxf" && fileType == "output" {
+		// Numerical sorting for pPXF output files by directory number
+		sort.Slice(filteredFiles, func(i, j int) bool {
+			partsA := strings.Split(filteredFiles[i], "/")
+			partsB := strings.Split(filteredFiles[j], "/")
+
+			if len(partsA) == 0 || len(partsB) == 0 {
+				return filteredFiles[i] < filteredFiles[j]
+			}
+
+			// Convert directory names to integers for proper numerical sorting
+			dirA, errA := strconv.Atoi(partsA[0])
+			dirB, errB := strconv.Atoi(partsB[0])
+
+			// If parsing fails, fall back to string comparison
+			if errA != nil || errB != nil {
+				return filteredFiles[i] < filteredFiles[j]
+			}
+
+			return dirA < dirB
+		})
+	} else {
+		// Alphabetical sorting for other cases
+		sort.Strings(filteredFiles)
+	}
+
+	// Calculate total and pagination boundaries
+	totalFiles := len(filteredFiles)
+	startIndex := offset
+	endIndex := offset + limit
+
+	// Ensure we don't go out of bounds
+	if startIndex > totalFiles {
+		startIndex = totalFiles
+	}
+	if endIndex > totalFiles {
+		endIndex = totalFiles
+	}
+
+	// Extract the page of files we need
+	var pageFiles []string
+	if startIndex < totalFiles {
+		pageFiles = filteredFiles[startIndex:endIndex]
+	}
+
+	// Get metadata for the files in this page
+	var files []DatasetFile
+	for _, object := range pageFiles {
+		var fullObjectKey string
+		var displayName string
+
+		// Construct full object key based on file type
+		switch fileType {
+		case "input":
+			// For input files, object includes the prefix (input/ or processed/)
+			if strings.HasPrefix(object, "input/") {
+				actualFile := strings.TrimPrefix(object, "input/")
+				fullObjectKey = fmt.Sprintf("%s/input/%s/%s", appType, dataset, actualFile)
+				displayName = actualFile
+			} else if strings.HasPrefix(object, "processed/") {
+				actualFile := strings.TrimPrefix(object, "processed/")
+				fullObjectKey = fmt.Sprintf("%s/processed/%s/%s", appType, dataset, actualFile)
+				displayName = actualFile
+			} else {
+				// Fallback
+				fullObjectKey = fmt.Sprintf("%s/input/%s/%s", appType, dataset, object)
+				displayName = object
+			}
+		case "processed":
+			fullObjectKey = fmt.Sprintf("%s/processed/%s/%s", appType, dataset, object)
+			displayName = object
+		case "output":
+			fullObjectKey = fmt.Sprintf("%s/output/%s/%s", appType, dataset, object)
+			displayName = object
+		}
+		metadata, err := h.S3Bucket.GetObjectMetadata(fullObjectKey)
+		if err != nil {
+			log.Printf("Warning: Could not get metadata for %s: %v", object, err)
+			files = append(files, DatasetFile{
+				Name:      displayName,
+				Size:      0,
+				Timestamp: "Unknown",
+				Key:       fullObjectKey,
+			})
+			continue
+		}
+
+		files = append(files, DatasetFile{
+			Name:      displayName,
+			Size:      metadata.Size,
+			Timestamp: metadata.LastModified.Format("2006-01-02 15:04:05"),
+			Key:       fullObjectKey,
+		})
+	}
+
+	hasMore := endIndex < totalFiles
+
+	log.Printf("Unified file listing for %s %s (%s): returning %d files (offset: %d, limit: %d, total: %d, hasMore: %t)",
+		fileType, dataset, appType, len(files), offset, limit, totalFiles, hasMore)
+
+	response := UnifiedFilesResponse{
+		Success: true,
+		Files:   files,
+		Pagination: struct {
+			Offset  int  `json:"offset"`
+			Limit   int  `json:"limit"`
+			Total   int  `json:"total"`
+			HasMore bool `json:"hasMore"`
+		}{
+			Offset:  offset,
+			Limit:   limit,
+			Total:   totalFiles,
+			HasMore: hasMore,
+		},
+	}
+
 	json.NewEncoder(w).Encode(response)
 }
 

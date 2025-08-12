@@ -45,6 +45,9 @@ func (s *Server) setupRoutes() {
 	// List dataset output files with pagination endpoint
 	http.HandleFunc("/api/datasets/output-files-paginated", s.fileUploadHandler.ListDatasetOutputFilesPaginated)
 
+	// Unified file listing endpoint with robust offset-based pagination
+	http.HandleFunc("/api/datasets/files-unified", s.fileUploadHandler.ListDatasetFilesUnified)
+
 	// Create dataset endpoint
 	http.HandleFunc("/api/datasets/create", s.fileUploadHandler.CreateDataset)
 
