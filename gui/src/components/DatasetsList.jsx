@@ -270,12 +270,15 @@ function DatasetsList({ processorType }) {
     setInputFilesPagination(prev => ({ ...prev, loading: true }));
 
     try {
+      // Load 100 files per batch for subsequent loads (after initial 50)
+      console.log(`📊 Loading 100 more input files (offset: ${inputFilesPagination.offset})`);
+      
       const response = await getDatasetFilesUnified(
         selectedDataset, 
         processorType, 
         'input',
         inputFilesPagination.offset, 
-        50,
+        100,
         inputFilesAbortController.current?.signal
       );
 
@@ -293,7 +296,7 @@ function DatasetsList({ processorType }) {
       // ADDITIVE: Append to existing files, never overwrite
       setInputFiles(prev => [...prev, ...newInputFiles]);
       setInputFilesPagination({
-        offset: inputFilesPagination.offset + 50,
+        offset: inputFilesPagination.offset + 100,
         hasMore: response.pagination.hasMore,
         loading: false,
         total: response.pagination.total
@@ -394,12 +397,15 @@ function DatasetsList({ processorType }) {
     setOutputFilesPagination(prev => ({ ...prev, loading: true }));
 
     try {
+      // Load 100 files per batch for subsequent loads (after initial 50)
+      console.log(`📊 Loading 100 more output files (offset: ${outputFilesPagination.offset})`);
+      
       const response = await getDatasetFilesUnified(
         selectedDataset, 
         processorType, 
         'output',
         outputFilesPagination.offset, 
-        50,
+        100,
         outputFilesAbortController.current?.signal
       );
 
@@ -417,7 +423,7 @@ function DatasetsList({ processorType }) {
       // ADDITIVE: Append to existing files, never overwrite
       setOutputFiles(prev => [...prev, ...newOutputFiles]);
       setOutputFilesPagination({
-        offset: outputFilesPagination.offset + 50,
+        offset: outputFilesPagination.offset + 100,
         hasMore: response.pagination.hasMore,
         loading: false,
         total: response.pagination.total

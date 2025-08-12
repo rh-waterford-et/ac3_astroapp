@@ -2648,6 +2648,58 @@ body {
   white-space: nowrap;
 }
 
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.75rem;
+  background: rgba(79, 209, 197, 0.1);
+  border: 1px solid rgba(79, 209, 197, 0.3);
+  border-radius: 0.25rem;
+  color: #4FD1C5;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.refresh-btn svg {
+  transition: transform 0.3s ease;
+  stroke: #4FD1C5;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(79, 209, 197, 0.2);
+  border-color: rgba(79, 209, 197, 0.5);
+}
+
+.refresh-btn:hover:not(:disabled) svg {
+  transform: rotate(90deg);
+  stroke: #66E3D7;
+}
+
+.refresh-btn:active:not(:disabled) {
+  background: rgba(79, 209, 197, 0.3);
+}
+
+.refresh-btn:active:not(:disabled) svg {
+  transform: rotate(180deg);
+  stroke: #66E3D7;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: #718096;
+  border-color: rgba(113, 128, 150, 0.3);
+  background: rgba(113, 128, 150, 0.1);
+}
+
+.refresh-btn:disabled svg {
+  stroke: #718096;
+}
+
 .pane-content {
   flex: 1;
   overflow-y: auto;
