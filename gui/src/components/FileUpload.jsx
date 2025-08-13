@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import PropTypes from 'prop-types';
 import { uploadFiles as apiUploadFiles, getDatasets, createDataset } from '../services/api';
-import { getProcessorConfig } from '../config/processorConfig';
 
 const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processorType, onDatasetCreated }, ref) => {
   const [dragActive, setDragActive] = useState(false);

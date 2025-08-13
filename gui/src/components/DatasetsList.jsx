@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
-// Re-enabling FileUpload component
 import FileUpload from './FileUpload';
 import PipelineProgress from './PipelineProgress';
 import VirtualizedFileList from './VirtualizedFileList';
-import { getDatasets, getDatasetFiles, getDatasetFilesUnified, getDatasetFilesListPaginated, getDatasetOutputFiles, getDatasetOutputFilesListPaginated, deleteDataset, deleteFile, startProcessing, startSingleFileProcessing } from '../services/api';
-import { getProcessorConfig } from '../config/processorConfig';
+import { getDatasets, getDatasetFilesUnified, deleteDataset, deleteFile, startProcessing, startSingleFileProcessing } from '../services/api';
 
 function DatasetsList({ processorType }) {
   const [selectedDataset, setSelectedDataset] = useState('');

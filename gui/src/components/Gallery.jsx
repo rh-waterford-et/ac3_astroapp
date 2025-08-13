@@ -13,7 +13,7 @@ import NGC7025_age_mass_weighted from '../assets/NGC7025_age_mass_weighted.jpg';
 import NGC7025_metallicity from '../assets/NGC7025_metallicity.jpg';
 
 // Import API functions
-import { getDatasetOutputFiles, getDatasetOutputFilesPaginated } from '../services/api.js';
+import { getDatasetOutputFilesPaginated } from '../services/api.js';
 
 // Module-level PDF cache for progressive loading
 const pdfCache = new Map();
@@ -29,7 +29,6 @@ const getCachedPdfs = (objectName, processorType) => {
 const setCachedPdfs = (objectName, processorType, data) => {
   const key = getCacheKey(objectName, processorType);
   pdfCache.set(key, { ...data, lastUpdated: Date.now() });
-  console.log(`💾 Cached PDFs for ${key}: ${data.batches.length} batches, ${data.total} total files`);
 };
 
 const Gallery = ({ aladinInstance }) => {
@@ -60,7 +59,6 @@ const Gallery = ({ aladinInstance }) => {
 const setupGalleryControls = (aladin) => {
   setupImageModal();
   setupViewChangeMonitoring(aladin);
-  console.log('Gallery controls set up');
 };
 
 /**
@@ -79,7 +77,6 @@ const setupViewChangeMonitoring = (aladin) => {
     viewChangeTimeout = setTimeout(() => {
       // Check if we have a current object and need to update gallery
       if (window.currentLoadedObject) {
-        console.log('📍 View changed, checking if still at object coordinates');
         loadObjectImages(window.currentLoadedObject);
       }
     }, 500); // Wait 500ms after view stops changing
@@ -247,7 +244,6 @@ const displayImageFromNavigation = (item) => {
         statusElement.textContent = `Viewing ${objectName} H4 PDF: ${title} (${currentImageIndex + 1}/${currentGalleryItems.length})`;
       }
       
-      console.log(`🔄 Navigated to PDF ${currentImageIndex + 1}/${currentGalleryItems.length}: ${title}`);
       return; // Exit early since openImageModal handles everything
     } else if (img) {
       // For regular images
@@ -292,8 +288,6 @@ const displayImageFromNavigation = (item) => {
       if (statusElement) {
         statusElement.textContent = `Viewing ${objectName} map: ${modalTitle.textContent} (${currentImageIndex + 1}/${currentGalleryItems.length})`;
       }
-      
-      console.log(`🔄 Navigated to image ${currentImageIndex + 1}/${currentGalleryItems.length}: ${modalTitle.textContent}`);
     } else {
       console.log('⚠️ Could not find image or PDF data for navigation item');
     }
