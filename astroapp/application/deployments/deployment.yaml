@@ -21,7 +21,7 @@ spec:
         persistentVolumeClaim:
           claimName: ucm-pv-claim-producer
       containers:
-      - image: quay.io/bcapper30/uc3-backend:latest
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: watcher-producer
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
@@ -82,7 +82,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/bcapper30/uc3-backend:latest
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: http-server
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
@@ -145,7 +145,7 @@ spec:
         - containerPort: 28181
         - containerPort: 28182
         - containerPort: 28183
-      - image: quay.io/bcapper30/uc3-backend:latest
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: receiver-producer
         workingDir: /processing_data/
         volumeMounts:

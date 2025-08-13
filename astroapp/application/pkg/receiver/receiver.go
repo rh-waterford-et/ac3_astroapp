@@ -180,7 +180,7 @@ func (r *Receiver) createBatchInfoFile(appName, eventID, batchID, filenamesHeade
 		cleanFilenames = append(cleanFilenames, "output_"+cleanName)
 	}
 
-	content := fmt.Sprintf("%s/data/output/%s\n%s",
+	content := fmt.Sprintf("%s/data/output/\n%s\n%s",
 		strings.ToLower(appName),
 		eventID,
 		strings.Join(cleanFilenames, ", "))
