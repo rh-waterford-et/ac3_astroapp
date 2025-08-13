@@ -1,7 +1,6 @@
 import React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { Rnd } from 'react-rnd';
-import './App.css';
 import Sidebar from './components/Sidebar';
 import Gallery from './components/Gallery';
 import StatusBar from './components/StatusBar';

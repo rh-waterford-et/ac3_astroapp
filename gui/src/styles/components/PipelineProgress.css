@@ -1,0 +1,123 @@
+/* Pipeline Progress Monitor Theming */
+.pipeline-progress-monitor {
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.8) 0%, rgba(26, 32, 44, 0.8) 50%, rgba(79, 209, 197, 0.25) 100%);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  border-radius: 0.375rem;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pipeline-progress-refresh-indicator {
+  display: inline-block;
+  animation: progress-refresh-spin 2s linear infinite;
+  color: #4FD1C5;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+@keyframes progress-refresh-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.progress-list {
+  padding: 0.375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.pipeline-progress-item {
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.35) 0%, rgba(26, 32, 44, 0.35) 100%);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  border-radius: 0.25rem;
+  padding: 0.5rem;
+  margin-bottom: 0.25rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pipeline-progress-item:hover {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.15) 0%, rgba(56, 178, 172, 0.1) 100%);
+  border-color: rgba(79, 209, 197, 0.4);
+  transform: translateY(-1px);
+}
+
+.pipeline-progress-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.pipeline-progress-item-info {
+  flex: 1;
+}
+
+.pipeline-progress-item-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.pipeline-progress-status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.pipeline-progress-dataset-name {
+  color: #E2E8F0;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.pipeline-progress-dataset-type {
+  color: #A0AEC0;
+  font-size: 0.625rem;
+  background: rgba(45, 55, 72, 0.6);
+  backdrop-filter: blur(8px);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.1875rem;
+  border: 1px solid rgba(79, 209, 197, 0.2);
+}
+
+.pipeline-progress-stage {
+  color: #A0AEC0;
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.pipeline-progress-time {
+  text-align: right;
+  font-size: 0.625rem;
+  color: #A0AEC0;
+  flex-shrink: 0;
+}
+
+.pipeline-progress-processing-info {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.375rem;
+  font-size: 0.625rem;
+  color: #A0AEC0;
+}
+
+.pipeline-progress-summary {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border-top: 1px solid rgba(79, 209, 197, 0.2);
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.625rem;
+  color: #4FD1C5;
+}

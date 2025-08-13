@@ -1,5 +1,3 @@
-/* App.css - Updated for full-screen Aladin Lite application */
-
 #root {
   width: 100%;
   height: 100%;
@@ -7,7 +5,53 @@
   padding: 0;
 }
 
-/* Ensure Aladin Lite gets full space */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background-color: #1a202c;
+  color: #e2e8f0;
+  position: relative;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0.125rem 0.5rem 0.5rem 0;
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.content-layout {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+  justify-content: flex-start;
+  padding-left: 0.5rem;
+}
+
+.bottom-overlay {
+  position: fixed;
+  right: 0.5rem;
+  left: 16rem;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.gallery-overlay {
+  bottom: 5rem;
+}
+
+.status-overlay {
+  bottom: 0.5rem;
+}
+
 #aladin-lite-div {
   width: 100% !important;
   height: 100% !important;
@@ -15,24 +59,36 @@
   position: relative !important;
 }
 
-/* Override any potential canvas sizing issues */
 #aladin-lite-div canvas {
   width: 100% !important;
   height: 100% !important;
 }
 
-/* Ensure Aladin controls are properly positioned */
 #aladin-lite-div .aladin-box {
   width: 100% !important;
   height: 100% !important;
 }
 
-/* Remove any potential margins or padding from Aladin elements */
 #aladin-lite-div * {
   box-sizing: border-box;
 }
 
-/* Remove the old logo and card styles as they're not needed for the Aladin app */
+.aladin-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.aladin-background #aladin-lite-div {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+
 .logo {
   height: 6em;
   padding: 1.5em;
@@ -69,7 +125,6 @@
   color: #888;
 }
 
-/* Hide Aladin coordinate display elements */
 #aladin-lite-div .aladin-location,
 #aladin-lite-div .aladin-location-text,
 #aladin-lite-div .aladin-coord-text,
@@ -85,17 +140,14 @@
   visibility: hidden !important;
 }
 
-/* Hide any text elements that might contain coordinate information */
 #aladin-lite-div div:not(.aladin-reticle):not(.aladin-canvas) {
   /* Only hide if the text content looks like coordinates */
 }
 
-/* More specific targeting for coordinate boxes */
 #aladin-lite-div > div > div[style*="position: absolute"][style*="top"] {
   /* This targets positioned divs that might be coordinate displays */
 }
 
-/* PDF Thumbnail Styles */
 .pdf-thumbnail-canvas {
   width: 100%;
   height: 100%;
@@ -116,4 +168,31 @@
   font-size: 10px;
   color: #888;
   text-align: center;
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(26, 32, 44, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.loading-spinner {
+  color: #a0aec0;
+  font-size: 0.6875rem;
+  font-style: italic;
+  width: 40px;
+  height: 40px;
+  border: 4px solid #2d3748;
+  border-top: 4px solid var(--blue-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
 }

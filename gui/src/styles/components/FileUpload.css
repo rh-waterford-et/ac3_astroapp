@@ -1,0 +1,585 @@
+/* File Upload Component Styles */
+.file-upload {
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.8) 0%, rgba(26, 32, 44, 0.8) 50%, rgba(79, 209, 197, 0.1) 100%);
+  backdrop-filter: blur(8px);
+  border-radius: 0.375rem;
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.upload-header {
+  flex-shrink: 0;
+  padding: 0.5rem 0.75rem;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.6) 0%, rgba(26, 32, 44, 0.6) 100%);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(79, 209, 197, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.upload-header h3 {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #E2E8F0;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.upload-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.upload-btn {
+  padding: 0.25rem 0.5rem;
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.2) 0%, rgba(56, 178, 172, 0.15) 100%);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(79, 209, 197, 0.4);
+  border-radius: 0.1875rem;
+  color: #4FD1C5;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.upload-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.3) 0%, rgba(56, 178, 172, 0.2) 100%);
+  border-color: rgba(79, 209, 197, 0.6);
+  transform: translateY(-1px);
+}
+
+.upload-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clear-btn {
+  padding: 0.25rem 0.5rem;
+  background: linear-gradient(135deg, rgba(74, 85, 104, 0.2) 0%, rgba(45, 55, 72, 0.15) 100%);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(74, 85, 104, 0.4);
+  border-radius: 0.1875rem;
+  color: #A0AEC0;
+  font-size: 0.6875rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.clear-btn:hover:not(:disabled) {
+  border-color: rgba(74, 85, 104, 0.6);
+  color: #CBD5E0;
+}
+
+.clear-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clear-all-btn {
+  background: linear-gradient(135deg, rgba(252, 129, 129, 0.1) 0%, rgba(245, 101, 101, 0.05) 100%);
+  border-color: rgba(252, 129, 129, 0.3);
+  color: #FC8181;
+}
+
+.clear-all-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(252, 129, 129, 0.15) 0%, rgba(245, 101, 101, 0.1) 100%);
+  border-color: rgba(252, 129, 129, 0.5);
+  color: #FEB2B2;
+  transform: translateY(-1px);
+}
+
+.upload-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1rem;
+  padding: 1rem;
+  height: auto;
+  min-height: auto;
+}
+
+.upload-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.6) 0%, rgba(26, 32, 44, 0.6) 100%);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  border-radius: 0.375rem;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(79, 209, 197, 0.1);
+}
+
+.upload-section:hover {
+  border-color: rgba(79, 209, 197, 0.5);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(79, 209, 197, 0.2),
+    0 0 20px rgba(79, 209, 197, 0.1);
+  transform: translateY(-1px);
+}
+
+.upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  height: 3rem;
+  padding: 0.5rem;
+  border: 2px dashed rgba(79, 209, 197, 0.3);
+  border-radius: 0.375rem;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.2) 0%, rgba(26, 32, 44, 0.2) 100%);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.upload-zone:hover,
+.upload-zone.drag-active {
+  border-color: rgba(79, 209, 197, 0.6);
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.1) 0%, rgba(56, 178, 172, 0.05) 100%);
+}
+
+.upload-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.7;
+}
+
+.upload-text {
+  text-align: center;
+}
+
+.upload-primary {
+  font-size: 0.75rem;
+  color: #E2E8F0;
+  margin-bottom: 0.25rem;
+}
+
+.upload-secondary {
+  font-size: 0.625rem;
+  color: #A0AEC0;
+}
+
+.upload-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+  overflow-y: auto;
+  min-height: 0;
+  max-height: 30vh;
+  height: 30vh;
+}
+
+.dataset-section .dataset-selection,
+.upload-files-section .upload-zone,
+.files-list-section .upload-queue {
+  flex: 1;
+  min-height: 0;
+}
+
+.empty-files-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: #a0aec0;
+  text-align: center;
+}
+
+.empty-message {
+  font-size: 0.625rem;
+  margin-bottom: 0.5rem;
+  color: #e2e8f0;
+}
+
+.empty-hint {
+  font-size: 0.625rem;
+  color: #a0aec0;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 0.5rem;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.35) 0%, rgba(26, 32, 44, 0.35) 100%);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  border-radius: 0.25rem;
+}
+
+.queue-file-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-file-name {
+  font-size: 0.6875rem;
+  color: #E2E8F0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-file-size {
+  font-size: 0.625rem;
+  color: #A0AEC0;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: 0.5rem;
+}
+
+.queue-error-message {
+  font-size: 0.5625rem;
+  color: #FC8181;
+  margin-top: 0.25rem;
+  font-style: italic;
+  line-height: 1.3;
+}
+
+.queue-status {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.upload-progress {
+  width: 40px;
+  height: 0.25rem;
+  background: rgba(45, 55, 72, 0.6);
+  border-radius: 0.125rem;
+  overflow: hidden;
+  border: 1px solid rgba(79, 209, 197, 0.1);
+}
+
+.upload-progress-fill {
+  height: 100%;
+  border-radius: 0.125rem;
+  transition: all 0.3s ease;
+}
+
+.queue-status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.remove-file-btn {
+  background: none;
+  border: none;
+  color: #FC8181;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.125rem;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.remove-file-btn:hover {
+  color: #FEB2B2;
+  transform: scale(1.1);
+}
+
+.queue-summary {
+  font-size: 0.5625rem;
+  color: #4FD1C5;
+  font-weight: 500;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(79, 209, 197, 0.3);
+}
+
+.section-header h4 {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #CBD5E0;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+
+.dataset-selection {
+  margin-bottom: 1.25rem;
+}
+
+.dataset-select-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dataset-select {
+  padding: 0.375rem 0.5rem;
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  border-radius: 0.25rem;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.4) 0%, rgba(26, 32, 44, 0.4) 100%);
+  backdrop-filter: blur(8px);
+  color: #e2e8f0;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.dataset-select:hover {
+  border-color: rgba(79, 209, 197, 0.4);
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.06) 0%, rgba(56, 178, 172, 0.03) 100%);
+}
+
+.dataset-select:focus {
+  outline: none;
+  border-color: rgba(79, 209, 197, 0.6);
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.1) 0%, rgba(56, 178, 172, 0.05) 100%);
+  box-shadow: 0 0 0 2px rgba(79, 209, 197, 0.15);
+}
+
+.dataset-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dataset-path {
+  color: #a0aec0;
+  font-size: 0.6875rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.3) 0%, rgba(26, 32, 44, 0.3) 100%);
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.25rem;
+  border-left: 0.25rem solid rgba(79, 209, 197, 0.6);
+}
+
+.new-dataset-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.new-dataset-input-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.new-dataset-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  border-radius: 0.25rem;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.4) 0%, rgba(26, 32, 44, 0.4) 100%);
+  backdrop-filter: blur(8px);
+  color: #e2e8f0;
+  font-size: 0.6875rem;
+  transition: all 0.3s ease;
+}
+
+.new-dataset-input:focus {
+  outline: none;
+  border-color: rgba(79, 209, 197, 0.6);
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.1) 0%, rgba(56, 178, 172, 0.05) 100%);
+  box-shadow: 0 0 0 2px rgba(79, 209, 197, 0.15);
+}
+
+.new-dataset-input::placeholder {
+  color: #a0aec0;
+}
+
+.create-dataset-btn {
+  padding: 0.25rem 0.5rem;
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.2) 0%, rgba(56, 178, 172, 0.15) 100%);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(79, 209, 197, 0.4);
+  border-radius: 0.1875rem;
+  color: #4FD1C5;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.create-dataset-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.3) 0%, rgba(56, 178, 172, 0.2) 100%);
+  border-color: rgba(79, 209, 197, 0.6);
+  transform: translateY(-1px);
+}
+
+.create-dataset-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancel-dataset-btn {
+  padding: 0.25rem 0.5rem;
+  background: linear-gradient(135deg, rgba(74, 85, 104, 0.2) 0%, rgba(45, 55, 72, 0.15) 100%);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(74, 85, 104, 0.4);
+  border-radius: 0.1875rem;
+  color: #A0AEC0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.cancel-dataset-btn:hover {
+  border-color: rgba(74, 85, 104, 0.6);
+  color: #CBD5E0;
+  transform: translateY(-1px);
+}
+
+.dataset-preview {
+  color: #a0aec0;
+  font-size: 0.6875rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.3) 0%, rgba(26, 32, 44, 0.3) 100%);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.25rem;
+  border-left: 0.25rem solid rgba(79, 209, 197, 0.6);
+}
+
+.create-dataset-section {
+  margin-top: 0.75rem;
+}
+
+.new-dataset-form .create-dataset-section {
+  margin-top: 0.5rem;
+}
+
+.dataset-form-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(79, 209, 197, 0.3) 50%, transparent 100%);
+  margin: 1rem 0 0.75rem 0;
+}
+
+.dataset-form-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  align-items: center;
+}
+
+.dataset-form-actions .create-dataset-btn {
+  flex: 0 0 auto !important;
+  padding: 0.5rem 1rem !important;
+  font-size: 0.75rem !important;
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.2) 0%, rgba(56, 178, 172, 0.15) 100%) !important;
+  backdrop-filter: blur(8px) !important;
+  border: 1px solid rgba(79, 209, 197, 0.4) !important;
+  border-radius: 0.1875rem !important;
+  color: #4FD1C5 !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  white-space: nowrap !important;
+}
+
+.dataset-form-actions .create-dataset-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.3) 0%, rgba(56, 178, 172, 0.2) 100%) !important;
+  border-color: rgba(79, 209, 197, 0.6) !important;
+  transform: translateY(-1px) !important;
+}
+
+.dataset-form-actions .create-dataset-btn:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.dataset-form-actions .create-dataset-toggle-btn {
+  flex: 0 0 auto;
+  margin-bottom: 0 !important;
+  padding: 0.5rem 1rem !important;
+  font-size: 0.75rem !important;
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.2) 0%, rgba(56, 178, 172, 0.15) 100%) !important;
+  backdrop-filter: blur(8px) !important;
+  border: 1px solid rgba(79, 209, 197, 0.4) !important;
+  border-radius: 0.1875rem !important;
+  color: #4FD1C5 !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  white-space: nowrap !important;
+  width: auto !important;
+}
+
+.dataset-form-actions .create-dataset-toggle-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.3) 0%, rgba(56, 178, 172, 0.2) 100%) !important;
+  border-color: rgba(79, 209, 197, 0.6) !important;
+  transform: translateY(-1px) !important;
+  color: #4FD1C5 !important;
+}
+
+.dataset-form-actions .create-dataset-toggle-btn:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.create-dataset-toggle-btn {
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.3) 0%, rgba(26, 32, 44, 0.3) 100%);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(79, 209, 197, 0.3);
+  border-radius: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  color: #E2E8F0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.create-dataset-toggle-btn:hover:not(:disabled) {
+  border-color: rgba(79, 209, 197, 0.5);
+  color: #4FD1C5;
+  transform: translateY(-1px);
+}
+
+.create-dataset-toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.create-dataset-toggle-btn.cancel-variant {
+  border-color: rgba(74, 85, 104, 0.3);
+  color: #CBD5E0;
+}
+
+.create-dataset-toggle-btn.cancel-variant:hover:not(:disabled) {
+  border-color: rgba(74, 85, 104, 0.5);
+  color: #E2E8F0;
+}
