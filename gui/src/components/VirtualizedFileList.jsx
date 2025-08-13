@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import InfiniteLoader from 'react-window-infinite-loader';
 import AutoSizer from 'react-virtualized-auto-sizer';
@@ -20,26 +20,19 @@ const VirtualizedFileList = ({
   totalCount = 0,
   itemHeight = 60,
   truncateFileName = (name) => name,
-  getFileStatusColor = (status) => '#4CAF50',
   isInputFile = true,
   processorType = 'starlight'
 }) => {
-  const [localItems, setLocalItems] = useState([]);
   const listRef = useRef();
-
-  // Update local items when props change
-  useEffect(() => {
-    setLocalItems(items);
-  }, [items]);
 
   // Calculate total item count for react-window
   // Only use loaded items + 1 for loader, don't create huge scrollable areas
-  const itemCount = hasNextPage ? localItems.length + 1 : localItems.length;
+  const itemCount = hasNextPage ? items.length + 1 : items.length;
 
   // Check if item is loaded
   const isItemLoaded = useCallback((index) => {
-    return index < localItems.length;
-  }, [localItems]);
+    return index < items.length;
+  }, [items]);
 
   // Load more items
   const loadMoreItems = useCallback(async (startIndex, stopIndex) => {
@@ -54,28 +47,23 @@ const VirtualizedFileList = ({
 
   // File item component - styled to match current theme
   const FileItem = React.memo(({ index, style }) => {
-    const file = localItems[index];
+    const file = items[index];
     
     // If index is beyond our loaded items, show loader only at the boundary
-    if (index >= localItems.length) {
-      if (hasNextPage && index === localItems.length) {
-        // Show loader only for the first unloaded item
+    if (index >= items.length) {
+      if (hasNextPage && index === items.length) {
         return (
-          <div style={style}>
-            <div className="file-loader-container">
-              <div className="file-loader-item">
-                <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
-                  <div className="astro-loader-galaxy" style={{ width: '16px', height: '16px' }}></div>
-                  <div className="astro-loading-text" style={{ fontSize: '10px' }}>Loading more files...</div>
-                </div>
+          <div style={style} className="file-loader-container">
+            <div className="file-loader-item">
+              <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
+                <div className="astro-loader-galaxy" style={{ width: '16px', height: '16px' }}></div>
+                <div className="astro-loading-text" style={{ fontSize: '10px' }}>Loading more files...</div>
               </div>
             </div>
           </div>
         );
-      } else {
-        // For all other unloaded items, render empty space
-        return <div style={style}></div>;
       }
+      return <div style={style}></div>;
     }
 
     // Regular file item
@@ -99,7 +87,9 @@ const VirtualizedFileList = ({
           </div>
           {onProcessFile && isInputFile && (
             <button 
+              type="button"
               className="file-process-btn"
+              aria-label={`Process file ${file.name} with ${processorType}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onProcessFile(file.name);
@@ -111,7 +101,9 @@ const VirtualizedFileList = ({
           )}
           {onDelete && (
             <button 
+              type="button"
               className="file-delete-btn"
+              aria-label={`Delete file ${file.name}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onDelete(file.key, file.name, isInputFile);
@@ -139,7 +131,7 @@ const VirtualizedFileList = ({
   }
 
   // Loading state (initial load)
-  if (isLoading && localItems.length === 0) {
+  if (isLoading && items.length === 0) {
     return (
       <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
         <div className="astro-loader-galaxy" style={{ width: '24px', height: '24px' }}></div>
@@ -160,7 +152,7 @@ const VirtualizedFileList = ({
   }
 
   // Empty state (no files)
-  if (!isLoading && localItems.length === 0) {
+  if (!isLoading && items.length === 0) {
     return (
       <div className="empty-pane">
         <div className="empty-icon">{emptyIcon}</div>
@@ -190,6 +182,7 @@ const VirtualizedFileList = ({
                 width={width}
                 itemCount={itemCount}
                 itemSize={itemHeight}
+                itemKey={(index) => items[index]?.key || items[index]?.name || index}
                 onItemsRendered={onItemsRendered}
                 overscanCount={10} // Render 10 extra items for smoother scrolling
               >
@@ -216,10 +209,10 @@ VirtualizedFileList.propTypes = {
   onLoadMore: PropTypes.func,
   hasNextPage: PropTypes.bool,
   isLoadingMore: PropTypes.bool,
-  totalCount: PropTypes.number,
+
   itemHeight: PropTypes.number,
   truncateFileName: PropTypes.func,
-  getFileStatusColor: PropTypes.func,
+
   isInputFile: PropTypes.bool,
   processorType: PropTypes.string
 };
