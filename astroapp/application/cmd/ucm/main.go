@@ -140,16 +140,11 @@ func LaunchProducer(side string) error {
 			log.Printf("Connected to Redis for metrics tracking")
 		}
 	}
-
-	// Initialize directories for processor side
+	appRunner := &watcher.Watcher{}
 	if side == "processor" {
 		if err := utils.EnsureDirectoriesExist(); err != nil {
 			log.Fatalf("Directory initialization failed: %v", err)
 		}
-	}
-
-	appRunner := &watcher.Watcher{}
-	if side == "processor" {
 		appRunner.RunProcessor(side, utils, queue, redis)
 	} else {
 		// Producer side starts HTTP server to receive processing triggers
