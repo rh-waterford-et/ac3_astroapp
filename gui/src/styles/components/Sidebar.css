@@ -1,4 +1,4 @@
-.right-sidebar {
+.sidebar {
   width: 15rem;
   background-color: rgba(45, 55, 72, 0.3);
   border: 1px solid rgba(79, 209, 197, 0.2);
@@ -10,17 +10,17 @@
   pointer-events: auto;
 }
 
-.right-sidebar::-webkit-scrollbar {
+.sidebar::-webkit-scrollbar {
   width: 4px;
   transition: width 0.3s ease;
 }
 
-.right-sidebar::-webkit-scrollbar-track {
+.sidebar::-webkit-scrollbar-track {
   background: transparent;
   border-radius: 2px;
 }
 
-.right-sidebar::-webkit-scrollbar-thumb {
+.sidebar::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: 2px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -29,35 +29,35 @@
   border: 1px solid transparent;
 }
 
-.right-sidebar:hover::-webkit-scrollbar {
+.sidebar:hover::-webkit-scrollbar {
   width: 6px;
 }
 
-.right-sidebar:hover::-webkit-scrollbar-thumb {
+.sidebar:hover::-webkit-scrollbar-thumb {
   background: rgba(79, 209, 197, 0.4);
   box-shadow: 0 0 8px rgba(79, 209, 197, 0.2);
   min-height: 30px;
   background-clip: content-box;
 }
 
-.right-sidebar::-webkit-scrollbar-thumb:hover {
+.sidebar::-webkit-scrollbar-thumb:hover {
   background: var(--blue-primary);
   box-shadow: 0 0 12px rgba(79, 209, 197, 0.4);
   transform: scaleY(1.2);
 }
 
-.right-sidebar::-webkit-scrollbar-thumb:active {
+.sidebar::-webkit-scrollbar-thumb:active {
   background: var(--blue-dark);
   box-shadow: 0 0 16px rgba(79, 209, 197, 0.6);
 }
 
-.right-sidebar {
+.sidebar {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
   transition: scrollbar-color 0.3s ease;
 }
 
-.right-sidebar:hover {
+.sidebar:hover {
   scrollbar-color: rgba(79, 209, 197, 0.4) transparent;
 }
 
@@ -157,8 +157,13 @@
   margin-bottom: 1rem;
 }
 
+/* Extra spacing between Kinematics and Stellar Populations */
+.sidebar .control-section .subsection + .subsection {
+  margin-top: 0.5rem;
+}
+
 .subsection h5 {
-  margin: 0 0 0.5rem 0;
+  margin: 0 0 0.25rem 0;
   font-size: 0.6875rem;
   font-weight: 500;
   color: var(--orange-light);
@@ -249,5 +254,16 @@
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+.sidebar fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar fieldset legend {
+  margin: 0 0 4px;
+  padding: 0;
 }
   
