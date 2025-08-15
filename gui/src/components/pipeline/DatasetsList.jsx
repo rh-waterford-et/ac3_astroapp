@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import FileUpload from './FileUpload';
 import PipelineProgress from './PipelineProgress';
 import VirtualizedFileList from './VirtualizedFileList';
-import { getDatasets, getDatasetFilesUnified, deleteDataset, deleteFile, startProcessing, startSingleFileProcessing } from '../services/api';
+import { getDatasets, getDatasetFilesUnified, deleteDataset, deleteFile, startProcessing, startSingleFileProcessing } from '../../services/api';
 
 function DatasetsList({ processorType }) {
   const [selectedDataset, setSelectedDataset] = useState('');

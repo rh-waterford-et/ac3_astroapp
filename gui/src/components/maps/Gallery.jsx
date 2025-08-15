@@ -2,18 +2,18 @@ import React, { useEffect } from 'react';
 import PropTypes from 'prop-types';
 
 // Import NGC7025 images from assets
-import NGC7025_stellar_velocity from '../assets/NGC7025_stellar_velocity.jpg';
-import NGC7025_stellar_velocity_error from '../assets/NGC7025_stellar_velocity_error.jpg';
-import NGC7025_velocity_dispersion from '../assets/NGC7025_velocity_dispersion.jpg';
-import NGC7025_velocity_dispersion_error from '../assets/NGC7025_velocity_dispersion_error.jpg';
-import NGC7025_h3 from '../assets/NGC7025_h3.jpg';
-import NGC7025_h4 from '../assets/NGC7025_h4.jpg';
-import NGC7025_age from '../assets/NGC7025_age.jpeg';
-import NGC7025_age_mass_weighted from '../assets/NGC7025_age_mass_weighted.jpg';
-import NGC7025_metallicity from '../assets/NGC7025_metallicity.jpg';
+import NGC7025_stellar_velocity from '../../assets/NGC7025_stellar_velocity.jpg';
+import NGC7025_stellar_velocity_error from '../../assets/NGC7025_stellar_velocity_error.jpg';
+import NGC7025_velocity_dispersion from '../../assets/NGC7025_velocity_dispersion.jpg';
+import NGC7025_velocity_dispersion_error from '../../assets/NGC7025_velocity_dispersion_error.jpg';
+import NGC7025_h3 from '../../assets/NGC7025_h3.jpg';
+import NGC7025_h4 from '../../assets/NGC7025_h4.jpg';
+import NGC7025_age from '../../assets/NGC7025_age.jpeg';
+import NGC7025_age_mass_weighted from '../../assets/NGC7025_age_mass_weighted.jpg';
+import NGC7025_metallicity from '../../assets/NGC7025_metallicity.jpg';
 
 // Import API functions
-import { getDatasetOutputFilesPaginated } from '../services/api.js';
+import { getDatasetOutputFilesPaginated } from '../../services/api.js';
 
 // Module-level PDF cache for progressive loading
 const pdfCache = new Map();

@@ -1,11 +1,11 @@
 import React, { useEffect, useImperativeHandle, forwardRef, useState, useRef } from 'react';
 import PropTypes from 'prop-types';
-import UploadZone from './upload/UploadZone';
-import UploadQueueList from './upload/UploadQueueList';
-import DatasetSelector from './upload/DatasetSelector';
-import NewDatasetForm from './upload/NewDatasetForm';
-import useDatasets from '../hooks/useDatasets';
-import useUploadQueue from '../hooks/useUploadQueue';
+import UploadZone from '../upload/UploadZone';
+import UploadQueueList from '../upload/UploadQueueList';
+import DatasetSelector from '../upload/DatasetSelector';
+import NewDatasetForm from '../upload/NewDatasetForm';
+import useDatasets from '../../hooks/useDatasets';
+import useUploadQueue from '../../hooks/useUploadQueue';
 
 const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processorType, onDatasetCreated }, ref) => {
   const {

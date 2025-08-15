@@ -1,17 +1,17 @@
 import React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import Sidebar from './components/Sidebar';
-import Gallery from './components/Gallery';
-import StatusBar from './components/StatusBar';
-import ErrorOverlay from './components/ErrorOverlay';
-import ImageModal from './components/ImageModal';
-import TabNavigation from './components/TabNavigation';
-import PipelineAppSelector from './components/PipelineAppSelector';
-import HeaderControls from './components/HeaderControls';
+import Sidebar from './components/maps/Sidebar';
+import Gallery from './components/maps/Gallery';
+import StatusBar from './components/maps/StatusBar';
+import ErrorOverlay from './components/maps/ErrorOverlay';
+import ImageModal from './components/ui/ImageModal';
+import TabNavigation from './components/ui/TabNavigation';
+import PipelineAppSelector from './components/pipeline/PipelineAppSelector';
+import HeaderControls from './components/maps/HeaderControls';
 import { loadScript, hideCoordinateElements, hideCoordinateFrames, setupKeyboardControls } from './utils/UtilsAladin';
-import AladinInteractions from './components/AladinInteractions';
+import AladinInteractions from './components/maps/AladinInteractions';
 import { MAP_CONTROLS, MODAL_DIMENSIONS, TIMEOUTS, RETICLE, DEFAULTS } from './utils/constants';
-import DatasetsList from './components/DatasetsList';
+import DatasetsList from './components/pipeline/DatasetsList';
 import logoImage from './assets/AC3-LogoConFrase.jpg';
 
 function App() {
