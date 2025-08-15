@@ -38,7 +38,7 @@ export const handleGalaxyNotFound = (input) => {
   }
 };
 
-export const handleGalaxySearch = (aladin, input) => {
+export const handleGalaxySearch = (aladin, input, gallery = null) => {
   const searchName = input.trim();
   const displayName = searchName;
   const currentPosition = aladin.getRaDec();
@@ -73,7 +73,10 @@ export const handleGalaxySearch = (aladin, input) => {
         // Store the current object and coordinates, then load images
         window.currentLoadedObject = displayName;
         window.currentObjectCoords = afterPosition;
-        if (window.loadObjectImages) {
+        if (gallery && gallery.loadObjectImages) {
+          gallery.loadObjectImages(displayName);
+        } else if (window.loadObjectImages) {
+          // Fallback to window function for backward compatibility
           window.loadObjectImages(displayName);
         }
 
@@ -173,7 +176,7 @@ export const cycleSurvey = (aladin) => {
 };
 
 
-export const setupSearchControls = (aladin) => {
+export const setupSearchControls = (aladin, gallery = null) => {
   const searchGalaxyBtn = document.getElementById('search-galaxy-btn');
   const galaxySearchInput = document.getElementById('galaxy-search');
   
@@ -189,7 +192,7 @@ export const setupSearchControls = (aladin) => {
     newSearchBtn.addEventListener('click', () => {
       const input = newSearchInput.value.trim();
       if (input) {
-        handleGalaxySearch(aladin, input);
+        handleGalaxySearch(aladin, input, gallery);
       } else {
         console.log('No input provided for search');
       }
@@ -204,7 +207,7 @@ export const setupSearchControls = (aladin) => {
   }
 };
 
-export const setupControls = (aladin) => {
+export const setupControls = (aladin, gallery = null) => {
   // Format selection
   const formatSelect = document.getElementById('format-select');
   if (formatSelect) {
@@ -236,7 +239,7 @@ export const setupControls = (aladin) => {
     }
   }
 
-  setupSearchControls(aladin);
+  setupSearchControls(aladin, gallery);
 };
 
 export const loadScript = (src) => {

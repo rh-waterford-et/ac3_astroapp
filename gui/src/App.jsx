@@ -4,7 +4,7 @@ import Sidebar from './components/maps/Sidebar';
 import Gallery from './components/maps/Gallery';
 import StatusBar from './components/maps/StatusBar';
 import ErrorOverlay from './components/maps/ErrorOverlay';
-import ImageModal from './components/ui/ImageModal';
+import GalleryModal from './components/maps/gallery/modal/GalleryModal';
 import TabNavigation from './components/ui/TabNavigation';
 import PipelineAppSelector from './components/pipeline/PipelineAppSelector';
 import HeaderControls from './components/maps/HeaderControls';
@@ -13,8 +13,11 @@ import AladinInteractions from './components/maps/AladinInteractions';
 import { MAP_CONTROLS, MODAL_DIMENSIONS, TIMEOUTS, RETICLE, DEFAULTS } from './utils/constants';
 import DatasetsList from './components/pipeline/DatasetsList';
 import logoImage from './assets/AC3-LogoConFrase.jpg';
+import { GalleryProvider, useGallery } from './contexts/GalleryContext';
+import { AppStateProvider } from './contexts/AppStateContext';
 
-function App() {
+// Main App Content that uses Gallery Context
+function AppContent({ onGalleryOperationsReady }) {
   const [aladinInstance, setAladinInstance] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -25,11 +28,11 @@ function App() {
   const keyboardInitRef = useRef(false);
   const tabTimeoutRef = useRef(null);
 
+  // Use Gallery Context instead of window functions
+  const gallery = useGallery();
 
-  // Make centerModal globally available
-  useEffect(() => {
-    window.centerModal = centerModal;
-  }, []);
+
+
 
   // Add beforeunload event listener to warn about uploads in progress
   useEffect(() => {
@@ -112,7 +115,7 @@ function App() {
           if (statusElement) statusElement.textContent = `Viewing: ${input}`;
           window.currentLoadedObject = input;
           window.currentObjectCoords = afterPosition;
-          if (window.loadObjectImages) window.loadObjectImages(input);
+          gallery.loadObjectImages(input);
           const el = document.getElementById('galaxy-search');
           if (el) el.value = '';
         }
@@ -138,13 +141,13 @@ function App() {
       const config = mapControls[checkboxId];
       const currentObject = window.currentLoadedObject;
       if (currentObject) {
-        if (window.loadObjectImages) window.loadObjectImages(currentObject);
+        gallery.loadObjectImages(currentObject);
       } else {
         const mapType = checkboxId.replace('map-', '');
         if (isChecked) {
-          if (window.addMapToGallery) window.addMapToGallery(mapType, config.label, config.icon);
+          gallery.addMapToGallery(mapType, config.label, config.icon);
         } else {
-          if (window.removeMapFromGallery) window.removeMapFromGallery(mapType);
+          gallery.removeMapFromGallery(mapType);
         }
       }
     }
@@ -175,7 +178,7 @@ function App() {
             const isChecked = sidebarState[checkboxId];
             if (isChecked) {
               const mapType = checkboxId.replace('map-', '');
-              if (window.addMapToGallery) window.addMapToGallery(mapType, config.label, config.icon);
+              gallery.addMapToGallery(mapType, config.label, config.icon);
             }
           });
         }
@@ -238,15 +241,7 @@ function App() {
     }
   };
 
-  const centerModal = () => {
-    if (modalRndRef.current) {
-      const modalWidth = MODAL_DIMENSIONS.widthPx;
-      const modalHeight = MODAL_DIMENSIONS.heightPx;
-      const centerX = Math.max(0, (window.innerWidth - modalWidth) / 2);
-      const centerY = Math.max(0, (window.innerHeight - modalHeight) / 2);
-      modalRndRef.current.updatePosition({ x: centerX, y: centerY });
-    }
-  };
+
 
   return (
     <div className="app">
@@ -323,7 +318,17 @@ function App() {
         <>
           {/* Bottom Gallery */}
           <div className="bottom-overlay gallery-overlay">
-            <Gallery aladinInstance={aladinInstance} />
+            <Gallery 
+              aladinInstance={aladinInstance} 
+              onGalleryOperationsReady={onGalleryOperationsReady}
+              checkboxStates={sidebarState}
+              onStatusUpdate={(message) => {
+                const statusElement = document.getElementById('current-status');
+                if (statusElement) {
+                  statusElement.textContent = message;
+                }
+              }}
+            />
           </div>
           {/* Status Bar */}
           <div className="bottom-overlay status-overlay">
@@ -334,9 +339,35 @@ function App() {
 
       {/* Interactions Handler (invisible component) */}
       <AladinInteractions aladinInstance={aladinInstance} />
-      {/* Image Modal */}
-      <ImageModal ref={modalRndRef} width={MODAL_DIMENSIONS.widthPx} height={MODAL_DIMENSIONS.heightPx} />
+      {/* Gallery Modal */}
+      <GalleryModal 
+        modalRndRef={modalRndRef} 
+        onStatusUpdate={(message) => {
+          const statusElement = document.getElementById('current-status');
+          if (statusElement) {
+            statusElement.textContent = message;
+          }
+        }} 
+      />
     </div>
+  );
+}
+
+// Main App wrapper that provides Gallery Context
+function App() {
+  const [galleryOperations, setGalleryOperations] = useState(null);
+
+  // Callback to receive gallery operations from Gallery component
+  const handleGalleryOperationsReady = (operations) => {
+    setGalleryOperations(operations);
+  };
+
+  return (
+    <AppStateProvider>
+      <GalleryProvider galleryOperations={galleryOperations}>
+        <AppContent onGalleryOperationsReady={handleGalleryOperationsReady} />
+      </GalleryProvider>
+    </AppStateProvider>
   );
 }
 

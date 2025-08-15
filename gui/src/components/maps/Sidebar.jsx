@@ -1,12 +1,13 @@
 import React, { useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { MAP_CHECKBOX_IDS, KINEMATICS_CHECKBOXES, POPULATION_CHECKBOXES, DISPLAY_CHECKBOXES } from '../../utils/constants';
+import { useGallery } from '../../contexts/GalleryContext';
 
 const areAllMapsSelected = (checkboxStates) => {
   return MAP_CHECKBOX_IDS.every(id => checkboxStates[id]);
 };
 
-const handleSelectAllMaps = (checkboxStates, onCheckboxChange) => {
+const handleSelectAllMaps = (checkboxStates, onCheckboxChange, gallery) => {
   const allSelected = MAP_CHECKBOX_IDS.every(id => checkboxStates[id]);
   const newState = !allSelected;
   MAP_CHECKBOX_IDS.forEach(id => {
@@ -14,8 +15,8 @@ const handleSelectAllMaps = (checkboxStates, onCheckboxChange) => {
   });
   setTimeout(() => {
     const currentObject = window.currentLoadedObject;
-    if (currentObject && window.loadObjectImages) {
-      window.loadObjectImages(currentObject);
+    if (currentObject && gallery) {
+      gallery.loadObjectImages(currentObject);
     }
   }, 100);
 };
@@ -35,6 +36,8 @@ const CheckboxItem = ({ id, label, checked, onChange }) => (
 );
 
 const Sidebar = ({ aladinInstance, checkboxStates, onCheckboxChange }) => {
+  const gallery = useGallery();
+
   useEffect(() => {
     if (!aladinInstance) return;
     setupSidebarControls(aladinInstance, checkboxStates, onCheckboxChange);
@@ -50,7 +53,7 @@ const Sidebar = ({ aladinInstance, checkboxStates, onCheckboxChange }) => {
                 type="checkbox"
                 id="select-all-maps"
                 checked={areAllMapsSelected(checkboxStates)}
-                onChange={() => handleSelectAllMaps(checkboxStates, onCheckboxChange)}
+                onChange={() => handleSelectAllMaps(checkboxStates, onCheckboxChange, gallery)}
                 aria-label="Select all maps"
               />
               <span className="checkmark"></span>

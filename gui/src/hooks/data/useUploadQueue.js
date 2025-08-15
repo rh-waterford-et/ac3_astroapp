@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { uploadFiles as apiUploadFiles } from '../services/api';
+import { uploadFiles as apiUploadFiles } from '../../services/api';
 
 export default function useUploadQueue(processorType) {
   const [queue, setQueue] = useState([]);

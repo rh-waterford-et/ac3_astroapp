@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getDatasets as apiGetDatasets, createDataset as apiCreateDataset } from '../services/api';
+import { getDatasets as apiGetDatasets, createDataset as apiCreateDataset } from '../../services/api';
 
 export default function useDatasets(processorType) {
   const [availableDatasets, setAvailableDatasets] = useState([]);

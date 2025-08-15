@@ -4,8 +4,8 @@ import UploadZone from '../upload/UploadZone';
 import UploadQueueList from '../upload/UploadQueueList';
 import DatasetSelector from '../upload/DatasetSelector';
 import NewDatasetForm from '../upload/NewDatasetForm';
-import useDatasets from '../../hooks/useDatasets';
-import useUploadQueue from '../../hooks/useUploadQueue';
+import useDatasets from '../../hooks/data/useDatasets';
+import useUploadQueue from '../../hooks/data/useUploadQueue';
 
 const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processorType, onDatasetCreated }, ref) => {
   const {
