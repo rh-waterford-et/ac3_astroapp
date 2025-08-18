@@ -17,7 +17,6 @@ export const hideCoordinateElements = () => {
         }
       });
     } catch (error) {
-      console.log('Could not hide coordinate elements via DOM:', error);
     }
   };
 
@@ -26,7 +25,6 @@ export const hideCoordinateFrames = (aladin) => {
       if (aladin.hideCooFrame) aladin.hideCooFrame();
       if (aladin.hideFrame) aladin.hideFrame();
     } catch (error) {
-      console.log('Could not hide coordinate frame:', error);
     }
   };
 
@@ -125,7 +123,6 @@ export const applyImageFormat = (aladin, format) => {
       statusElement.textContent = `Format: ${format.toUpperCase()} | Survey: ${currentSurvey}`;
     }
   } catch (error) {
-    console.error('Error applying image format:', error);
   }
 };
 
@@ -194,7 +191,6 @@ export const setupSearchControls = (aladin, gallery = null) => {
       if (input) {
         handleGalaxySearch(aladin, input, gallery);
       } else {
-        console.log('No input provided for search');
       }
     });
 

@@ -95,7 +95,6 @@ export const useModalNavigation = () => {
     // Prevent background scrolling
     document.body.style.overflow = 'hidden';
     
-    console.log(`🖼️ Opened modal for ${imageData.title} - ${imageData.objectName}`);
   }, [setupNavigationState]);
 
   /**
@@ -110,7 +109,6 @@ export const useModalNavigation = () => {
     // Restore scrolling
     document.body.style.overflow = '';
     
-    console.log('🖼️ Closed modal');
   }, []);
 
   /**

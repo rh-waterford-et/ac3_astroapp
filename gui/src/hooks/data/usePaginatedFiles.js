@@ -49,7 +49,6 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
 
   // Cancel pending requests
   const cancelRequests = useCallback(() => {
-    console.log(`🚫 Cancelling ${fileType} files requests`);
     if (abortController.current) {
       abortController.current.abort();
       abortController.current = null;
@@ -60,7 +59,6 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
   const loadFiles = useCallback(async (silent = false) => {
     if (!selectedDataset || isRefreshing.current) return;
     
-    console.log(`🔄 Loading ${fileType} files for:`, selectedDataset);
     isRefreshing.current = true;
     
     // Cancel any existing request
@@ -106,11 +104,9 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
       setFilesLoaded(true);
     } catch (err) {
       if (err.name === 'AbortError') {
-        console.log(`🚫 ${fileType} files request cancelled`);
         return;
       }
       
-      console.error(`❌ Failed to load ${fileType} files:`, err);
       if (!silent) {
         setError(err.message || `Failed to load ${fileType} files`);
       }
@@ -127,13 +123,10 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
   const loadMoreFiles = useCallback(async () => {
     if (!selectedDataset || pagination.loading || !pagination.hasMore) return;
 
-    console.log(`🔄 Loading more ${fileType} files, offset:`, pagination.offset);
-    
     setPagination(prev => ({ ...prev, loading: true }));
 
     try {
       // Load 100 files per batch for subsequent loads (after initial 50)
-      console.log(`📊 Loading 100 more ${fileType} files (offset: ${pagination.offset})`);
       
       const response = await getDatasetFilesUnified(
         selectedDataset, 
@@ -164,7 +157,6 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
         total: response.pagination.total
       });
     } catch (err) {
-      console.error(`❌ Failed to load more ${fileType} files:`, err);
       setPagination(prev => ({ ...prev, loading: false }));
     }
   }, [selectedDataset, processorType, fileType, pagination.offset, pagination.loading, pagination.hasMore, isValidFile, formatFileSize]);
@@ -179,7 +171,6 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
       
       // Only update the total count if it has changed
       if (response.pagination.total !== pagination.total) {
-        console.log(`📊 ${fileType} files count updated: ${pagination.total} → ${response.pagination.total}`);
         setPagination(prev => ({
           ...prev,
           total: response.pagination.total,
@@ -187,7 +178,6 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
         }));
       }
     } catch (err) {
-      console.error(`❌ Silent count refresh failed for ${fileType} files:`, err);
     }
   }, [selectedDataset, processorType, fileType, pagination.total, pagination.offset, pagination.loading]);
 
@@ -200,7 +190,6 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
     }
 
     try {
-      console.log('Deleting file:', fileKey);
       
       // Immediately remove the file from the UI for instant feedback
       setFiles(prevFiles => prevFiles.filter(file => file.key !== fileKey));
@@ -208,17 +197,14 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
       const result = await apiDeleteFile(fileKey, processorType);
       
       if (result.success) {
-        console.log('File deleted successfully');
         return { success: true };
       } else {
-        console.error('Failed to delete file:', result.message);
         
         // Restore the file in the UI if deletion failed, then refresh
         await loadFiles();
         return { success: false, error: result.message };
       }
     } catch (error) {
-      console.error('Error deleting file:', error);
       
       // Restore the correct state if deletion failed
       await loadFiles();
@@ -229,7 +215,6 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
   // Manual refresh
   const refresh = useCallback(async () => {
     if (!selectedDataset) return;
-    console.log(`🔄 Manual refresh: ${fileType} files for`, selectedDataset);
     
     // Reset pagination and reload from start, but preserve current total
     const currentTotal = pagination.total;
@@ -257,7 +242,6 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
   // Cleanup: cancel requests when component unmounts
   useEffect(() => {
     return () => {
-      console.log(`🧹 usePaginatedFiles (${fileType}) unmounting - cancelling requests`);
       cancelRequests();
     };
   }, [fileType, cancelRequests]);

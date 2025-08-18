@@ -12,19 +12,16 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
     setCurrentObjectName(objectName);
     setGalleryState('loading');
     setGalleryItems([]); // Clear existing items
-    console.log(`🧹 Gallery cleared completely`);
   }, []);
 
   // Set navigate to object state
   const setNavigateToObjectState = useCallback((objectName) => {
-    console.log(`📍 Not at ${objectName} coordinates, showing location message`);
     setCurrentObjectName(objectName);
     setGalleryState('navigate-to-object');
   }, []);
 
   // Add image item to gallery
   const addImageItem = useCallback((imageSrc, mapType, objectName) => {
-    console.log(`🖼️ Adding object image: ${mapType.label} for ${objectName}`);
     
     const newItem = {
       id: `image-${mapType.key}-${Date.now()}`,
@@ -61,24 +58,20 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
 
   // Add placeholder item to gallery
   const addPlaceholderItem = useCallback((mapType, label, icon) => {
-    console.log(`📦 Checking conditions for placeholder: ${label} (${mapType})`);
     
     // Check if at least 1 checkbox is selected using props
     const mapCheckboxKeys = Object.keys(checkboxStates).filter(key => key.startsWith('map-'));
     const checkedCount = mapCheckboxKeys.filter(key => checkboxStates[key]).length;
     
     if (checkedCount < 1) {
-      console.log(`❌ Not enough options selected (${checkedCount}/1 minimum required)`);
       return;
     }
     
     // Check if we're at object coordinates
     if (!window.currentLoadedObject || !isAtObjectCoordinates(window.currentLoadedObject, window.aladinInstance)) {
-      console.log(`❌ Not at object coordinates or no object loaded`);
       return;
     }
     
-    console.log(`✅ Both conditions met - adding placeholder: ${label} (${mapType})`);
     
     // Check if this map type already exists
     const existingItem = galleryItems.find(item => item.mapType === mapType);
@@ -98,13 +91,11 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
     if (galleryState === 'empty') {
       setGalleryState('loaded');
     }
-    console.log(`Added ${label} to gallery`);
   }, [checkboxStates, galleryItems, galleryState]);
 
   // Remove item by map type
   const removeItemByMapType = useCallback((mapType) => {
     setGalleryItems(prev => prev.filter(item => item.mapType !== mapType));
-    console.log(`Removed ${mapType} from gallery`);
     
     // Check if we still meet the conditions for showing placeholders using props
     const mapCheckboxKeys = Object.keys(checkboxStates).filter(key => key.startsWith('map-'));
@@ -113,7 +104,6 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
     if (checkedCount < 1) {
       // Remove all remaining placeholders since we don't meet the minimum requirement
       setGalleryItems(prev => prev.filter(item => item.type !== 'placeholder'));
-      console.log(`Removed all placeholders - only ${checkedCount} options selected (minimum 1 required)`);
     }
     
     // Show empty message if no items left
@@ -139,7 +129,6 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
       onStatusUpdate('Gallery cleared');
     }
     
-    console.log('Gallery cleared');
   }, [onStatusUpdate]);
 
   // Handle loading status after images are processed
@@ -158,7 +147,6 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
         setGalleryState('no-images');
       }
     } else {
-      console.log(`Loaded ${totalItems} total items for ${objectName}`);
       setGalleryState('loaded');
       
       if (onStatusUpdate) {

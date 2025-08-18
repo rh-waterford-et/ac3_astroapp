@@ -13,12 +13,6 @@ export const useProgressCalculation = (
 
   // Calculate progress data from props
   useEffect(() => {
-    console.log('PipelineProgress calculating progress from props');
-    console.log('Datasets:', datasets);
-    console.log('Input files loaded:', inputFiles.length);
-    console.log('Input files total:', inputFilesTotalCount);
-    console.log('Output files loaded:', outputFiles.length);
-    console.log('Output files total:', outputFilesTotalCount);
     
     const progressMap = {};
     
@@ -45,7 +39,6 @@ export const useProgressCalculation = (
         
         progress = Math.min((outputCount / expectedOutputCount) * 100, 100);
         
-        console.log(`Dataset ${dataset.name} (${processorType || 'STARLIGHT'}): ${processedCount} input files, ${outputCount} output files, expected: ${expectedOutputCount}, ${progress.toFixed(1)}% progress`);
         
         // Determine status and stage based on progress only if not already set
         if (progress >= 100) {
@@ -78,7 +71,6 @@ export const useProgressCalculation = (
       };
     });
     
-    console.log('Final progress map:', progressMap);
     setProgressData(progressMap);
     
   }, [datasets, inputFiles, inputFilesTotalCount, outputFiles, outputFilesTotalCount, processingHistory, processorType]);

@@ -28,16 +28,12 @@ export const useTimeEstimation = (processorType) => {
       
       if (remainingFiles <= 0) return 'Finalizing...';
       
-      // Debug logging
-      console.log(`Time estimation for ${processorType}: ${filesTotal} input files, ${filesProcessed} output files, ${actualFilesProcessed} input files processed, ${remainingFiles} remaining`);
-      console.log(`Processing history available:`, processingHistory.length, 'entries');
       
       // Use actual processing history if available
       if (processingHistory.length > 0) {
         const recentHistory = processingHistory.slice(-10); // Use last 10 files
         const processingTimes = recentHistory.map(h => h.processingTime / 1000 / 60); // Convert to minutes
         
-        console.log(`Using processing history:`, processingTimes.map(t => `${t.toFixed(2)}m`));
         
         let estimatedMinutesPerFile;
         
@@ -47,15 +43,12 @@ export const useTimeEstimation = (processorType) => {
           const medianTime = median(processingTimes);
           const stdDev = standardDeviation(processingTimes);
           
-          console.log(`Stats - Avg: ${avgTime.toFixed(2)}m, Median: ${medianTime.toFixed(2)}m, StdDev: ${stdDev.toFixed(2)}m`);
           
           // Use median if there's high variance, otherwise use mean
           if (stdDev > avgTime * 0.5) {
             estimatedMinutesPerFile = medianTime;
-            console.log(`High variance detected, using median: ${medianTime.toFixed(2)}m`);
           } else {
             estimatedMinutesPerFile = avgTime;
-            console.log(`Low variance, using mean: ${avgTime.toFixed(2)}m`);
           }
           
           // Add buffer for uncertainty (10-20% based on standard deviation)
@@ -65,11 +58,9 @@ export const useTimeEstimation = (processorType) => {
         } else {
           // Use simple average for small sample sizes
           estimatedMinutesPerFile = mean(processingTimes);
-          console.log(`Small sample, using simple average: ${estimatedMinutesPerFile.toFixed(2)}m`);
         }
         
         const estimatedMinutes = remainingFiles * estimatedMinutesPerFile;
-        console.log(`Final estimate: ${remainingFiles} files × ${estimatedMinutesPerFile.toFixed(2)}m = ${estimatedMinutes.toFixed(1)}m`);
         
         if (estimatedMinutes > 60) {
           const hours = Math.ceil(estimatedMinutes / 60);
@@ -79,7 +70,6 @@ export const useTimeEstimation = (processorType) => {
       }
       
       // Improved fallback estimate based on user feedback: 10 minutes total / ~40-50 files = ~15 seconds per file
-      console.log(`No processing history, using fallback estimate`);
       const estimatedSeconds = remainingFiles * 15; // 15 seconds per file
       const estimatedMinutes = estimatedSeconds / 60;
       

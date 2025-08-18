@@ -22,7 +22,6 @@ function DatasetsList({ processorType }) {
       const stored = localStorage.getItem(`pipeline-${key}-collapsed`);
       return stored !== null ? JSON.parse(stored) : defaultValue;
     } catch (error) {
-      console.error(`Error reading ${key} collapse state:`, error);
       return defaultValue;
     }
   };
@@ -31,7 +30,6 @@ function DatasetsList({ processorType }) {
     try {
       localStorage.setItem(`pipeline-${key}-collapsed`, JSON.stringify(value));
     } catch (error) {
-      console.error(`Error storing ${key} collapse state:`, error);
     }
   };
 

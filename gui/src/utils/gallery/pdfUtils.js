@@ -33,7 +33,6 @@ export const generatePdfThumbnail = async (pdfUrl, cellNumber) => {
   try {
     // Check if PDF.js is available
     if (typeof window.pdfjsLib === 'undefined') {
-      console.log('PDF.js not available, keeping placeholder for Cell', cellNumber);
       return;
     }
 
@@ -63,10 +62,8 @@ export const generatePdfThumbnail = async (pdfUrl, cellNumber) => {
     canvas.style.display = 'block';
     loadingIndicator.style.display = 'none';
     
-    console.log(`✅ Generated thumbnail for Cell ${cellNumber}`);
     
   } catch (error) {
-    console.log(`⚠️ Could not generate thumbnail for Cell ${cellNumber}:`, error.message);
     
     // Show error state in the placeholder
     const container = document.getElementById(`pdf-thumb-${cellNumber}`);
@@ -141,6 +138,5 @@ export const pdfItemExists = (galleryContainer, cellNumber) => {
  */
 export const initializePdfJs = () => {
   loadPdfJs().catch(() => {
-    console.log('PDF.js could not be loaded, thumbnails will show placeholders');
   });
 }; 
