@@ -22,7 +22,6 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
 
   // Add image item to gallery
   const addImageItem = useCallback((imageSrc, mapType, objectName) => {
-    
     const newItem = {
       id: `image-${mapType.key}-${Date.now()}`,
       type: 'image',
@@ -58,7 +57,6 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
 
   // Add placeholder item to gallery
   const addPlaceholderItem = useCallback((mapType, label, icon) => {
-    
     // Check if at least 1 checkbox is selected using props
     const mapCheckboxKeys = Object.keys(checkboxStates).filter(key => key.startsWith('map-'));
     const checkedCount = mapCheckboxKeys.filter(key => checkboxStates[key]).length;
@@ -71,7 +69,6 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
     if (!window.currentLoadedObject || !isAtObjectCoordinates(window.currentLoadedObject, window.aladinInstance)) {
       return;
     }
-    
     
     // Check if this map type already exists
     const existingItem = galleryItems.find(item => item.mapType === mapType);
@@ -128,18 +125,15 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
     if (onStatusUpdate) {
       onStatusUpdate('Gallery cleared');
     }
-    
   }, [onStatusUpdate]);
 
   // Handle loading status after images are processed
   const updateLoadingStatus = useCallback((imagesLoaded, mapTypes, objectName) => {
-    // Check total items including those already in state
-    const totalItems = galleryItems.length;
+    // Use both current gallery items AND newly loaded items count to prevent flash
+    const totalItems = galleryItems.length + imagesLoaded;
     
     if (totalItems === 0) {
-      const anyChecked = mapTypes.some(mapType => {
-        return checkboxStates[mapType.checkboxId] || false;
-      });
+      const anyChecked = mapTypes.some(mapType => checkboxStates[mapType.checkboxId] || false);
       
       if (!anyChecked) {
         setGalleryState('no-options');
@@ -153,7 +147,7 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
         onStatusUpdate(`Loaded ${totalItems} maps for ${objectName} - click on an image to select`);
       }
     }
-  }, [galleryItems, checkboxStates, onStatusUpdate]);
+  }, [galleryItems.length, checkboxStates, onStatusUpdate]);
 
   // Status update handler
   const updateStatus = useCallback((message) => {
