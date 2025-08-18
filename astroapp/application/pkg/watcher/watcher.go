@@ -196,7 +196,7 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 		if err != nil {
 			fmt.Printf("Error reading directory: %v\n", err)
 		} else {
-			log.Printf("DEBUG: Found %d files in %s", len(files), batchInfoDir)
+			//log.Printf("DEBUG: Found %d files in %s", len(files), batchInfoDir)
 			for _, file := range files {
 				if file.IsDir() {
 					continue
@@ -231,7 +231,7 @@ func (w *Watcher) processBatchFile(filePath, side string, utils common.UtilsInte
 		return fmt.Errorf("file is empty - missing input directory")
 	}
 	inputDir := strings.TrimSpace(scanner.Text())
-	appName := strings.SplitN(inputDir, "/", 2)[0]
+	appName := strings.ToUpper(strings.SplitN(inputDir, "/", 2)[0])
 	// Read event ID (second line)
 	if !scanner.Scan() {
 		return fmt.Errorf("missing event ID")
@@ -256,7 +256,6 @@ func (w *Watcher) processBatchFile(filePath, side string, utils common.UtilsInte
 		for _, fileName := range fileList {
 			fileName = strings.TrimSpace(fileName)
 			sourcePath := filepath.Join(inputDir, fileName)
-			log.Printf("Reading file %s from %s", fileName, sourcePath)
 			if _, err := os.Stat(sourcePath); err == nil {
 				content, err := os.ReadFile(sourcePath)
 				if err != nil {

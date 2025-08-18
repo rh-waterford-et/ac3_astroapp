@@ -20,7 +20,6 @@ type EventSender interface {
 	SendEvent(event api.Event, appName string, side string, q queue.QueueInterface)
 }
 
-
 type RabbitMQSender struct {
 	Queue       queue.QueueInterface
 	Utils       common.UtilsInterface
@@ -34,8 +33,6 @@ func NewRabbitMQSender(queue queue.QueueInterface, utils common.UtilsInterface, 
 		RedisClient: redisClient,
 	}
 }
-
-
 
 func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string, q queue.QueueInterface) {
 	var queueName string
@@ -90,7 +87,7 @@ func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string,
 		err = metricsStore.UpdateMetricField(ctx, event.ID, "queue_start_time", event.BatchID, time.Now())
 		if err != nil {
 			log.Printf("Failed to record queue start time: %v", err)
-		} 
+		}
 	} else {
 		log.Printf("No Redis client found")
 	}
@@ -99,4 +96,3 @@ func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string,
 	log.Printf(" [x] Sent batch with %d files for app %s\n", len(event.Files), appName)
 	log.Printf("     Files: %s\n", strings.Join(filenames, ", "))
 }
-

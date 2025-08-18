@@ -65,6 +65,8 @@ spec:
           value: "ppxf/output"
         - name: OUTPUT_STECKMAP
           value: "steckmap/output"
+        - name: METRICS
+          value: "metrics"
         - name: TEMPLATE_IN_FILE_PATH
           value: "/docker/starlight/config_files_starlight/grid_example.in"
         - name: "IN_FILE_OUTPUT_PATH"

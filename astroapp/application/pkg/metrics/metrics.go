@@ -142,7 +142,7 @@ func (ms *MetricsStore) GetEventBatches(ctx context.Context, eventID string) ([]
 	return batches, nil
 }
 
-func (ms *MetricsStore) UpdateMetricField(ctx context.Context, eventID, batchID, field string, value time.Time) error {
+func (ms *MetricsStore) UpdateMetricField(ctx context.Context, eventID, field, batchID string, value time.Time) error {
 	key := ms.GetBatchKey(eventID, batchID)
 	log.Printf("DEBUG: UpdateMetricField - key: %s, field: %s, value: %s", key, field, value.Format(time.RFC3339Nano))
 
@@ -152,31 +152,41 @@ func (ms *MetricsStore) UpdateMetricField(ctx context.Context, eventID, batchID,
 		return fmt.Errorf("failed to set basic fields: %w", err)
 	}
 
-	// Set the specified field
-	err = ms.redis.HSet(ctx, key, field, value.Format(time.RFC3339Nano))
+	// Read current value to enforce monotonic policy
+	currentMap, err := ms.redis.HGetAll(ctx, key)
 	if err != nil {
-		return fmt.Errorf("failed to update metric field: %w", err)
+		return fmt.Errorf("failed to read current metric fields: %w", err)
 	}
-
-	// For queue_start_time, also update first_queue_start_time if this is earlier
-	if field == "queue_start_time" {
-		currentFirst, err := ms.redis.HGetAll(ctx, key)
-		if err != nil || currentFirst["first_queue_start_time"] == "" {
-			// If no value exists, set this as first
-			err = ms.redis.HSet(ctx, key, "first_queue_start_time", value.Format(time.RFC3339Nano))
-			if err != nil {
-				return fmt.Errorf("failed to set first_queue_start_time: %w", err)
-			}
-		} else {
-			// Compare with existing first_queue_start_time
-			currentTime, err := time.Parse(time.RFC3339Nano, currentFirst["first_queue_start_time"])
-			if err == nil && value.Before(currentTime) {
-				err = ms.redis.HSet(ctx, key, "first_queue_start_time", value.Format(time.RFC3339Nano))
-				if err != nil {
-					return fmt.Errorf("failed to update first_queue_start_time: %w", err)
+	currentRaw := currentMap[field]
+	if currentRaw != "" {
+		if t, parseErr := time.Parse(time.RFC3339Nano, currentRaw); parseErr == nil {
+			switch field {
+			case "queue_start_time", "queue_receive_time":
+				// Keep earliest timestamp
+				if !value.Before(t) {
+					// Existing value is earlier or equal; keep it
+					if ms.ttl > 0 {
+						_ = ms.redis.Expire(ctx, key, ms.ttl)
+					}
+					return nil
+				}
+			case "batch_end_time":
+				// Keep latest timestamp
+				if !value.After(t) {
+					// Existing value is later or equal; keep it
+					if ms.ttl > 0 {
+						_ = ms.redis.Expire(ctx, key, ms.ttl)
+					}
+					return nil
 				}
 			}
 		}
+	}
+
+	// Set the specified field with the new value (passed policy checks)
+	err = ms.redis.HSet(ctx, key, field, value.Format(time.RFC3339Nano))
+	if err != nil {
+		return fmt.Errorf("failed to update metric field: %w", err)
 	}
 
 	if ms.ttl > 0 {

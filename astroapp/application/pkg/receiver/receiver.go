@@ -254,34 +254,31 @@ func (r *Receiver) recordQueueFirstReceiveTime(eventID, batchID string) {
 
 func (r *Receiver) createNewMetricRecord(metricsStore *metrics.MetricsStore, ctx context.Context, eventID, batchID string) {
 	log.Printf("│ DEBUG: Creating new metric record")
-	err := metricsStore.RecordMetric(ctx, &metrics.MetricRecord{
-		EventID:        eventID,
-		BatchID:        batchID,
-		QueueStartTime: time.Now(),
-	})
+	// When the processor sees a batch first time, set only queue_receive_time; queue_start_time is set by producer at publish time
+	err := metricsStore.UpdateMetricField(ctx, eventID, "queue_receive_time", batchID, time.Now())
 	if err != nil {
-		log.Printf("│ ✗ Failed to record queue first receive time: %v", err)
+		log.Printf("│ ✗ Failed to record queue receive time: %v", err)
 	} else {
-		log.Printf("│ ✓ Recorded queue first receive time for event %s, batch %s", eventID, batchID)
+		log.Printf("│ ✓ Recorded queue receive time for event %s, batch %s", eventID, batchID)
 	}
 }
 
 func (r *Receiver) updateExistingMetricRecord(metricsStore *metrics.MetricsStore, ctx context.Context, eventID, batchID, key string) {
-	log.Printf("│ DEBUG: Metric already exists, checking if queue_first_receive_time is set")
+	log.Printf("│ DEBUG: Metric already exists, checking if queue_receive_time is set")
 	allFields, err := r.RedisClient.HGetAll(ctx, key)
 	if err != nil {
 		log.Printf("│ ✗ Failed to get metric fields: %v", err)
 		return
 	}
 
-	currentTime := allFields["queue_first_receive_time"]
-	log.Printf("│ DEBUG: Current queue_first_receive_time = '%s'", currentTime)
+	currentTime := allFields["queue_receive_time"]
+	log.Printf("│ DEBUG: Current queue_receive_time = '%s'", currentTime)
 	if currentTime == "" || currentTime == "0001-01-01T00:00:00Z" {
-		err = metricsStore.UpdateMetricField(ctx, eventID, "queue_first_receive_time", batchID, time.Now())
+		err = metricsStore.UpdateMetricField(ctx, eventID, "queue_receive_time", batchID, time.Now())
 		if err != nil {
-			log.Printf("│ ✗ Failed to update queue first receive time: %v", err)
+			log.Printf("│ ✗ Failed to update queue receive time: %v", err)
 		} else {
-			log.Printf("│ ✓ Updated queue first receive time for event %s", eventID)
+			log.Printf("│ ✓ Updated queue receive time for event %s", eventID)
 		}
 	}
 }
@@ -349,7 +346,7 @@ func (r *Receiver) validateBatchMetadata(d amqp.Delivery, batchID string) (int32
 		return 0, nil, false
 	}
 
-	log.Printf("│ Processing batch of %d files:", batchSize)
+	//log.Printf("│ Processing batch of %d files:", batchSize)
 	for i, filename := range filenames {
 		log.Printf("│ %d. %s", i+1, filename)
 	}
@@ -460,7 +457,7 @@ func (r *Receiver) handleProducerFile(file api.DataFile, outputPath, appName str
 		folderPath = ""
 	}
 
-	log.Printf("│ DEBUG: S3 upload - folderPath: '%s', fileName: '%s'", folderPath, fileName)
+	//log.Printf("│ DEBUG: S3 upload - folderPath: '%s', fileName: '%s'", folderPath, fileName)
 
 	err := r.Bucket.UploadFileToBucket(folderPath, fileName, []byte(file.Content))
 	if err != nil {
@@ -583,7 +580,7 @@ func (r *Receiver) extractBatchNameFromFilename(filename string) string {
 	// Remove file extension
 	name := strings.TrimSuffix(filename, filepath.Ext(filename))
 
-	log.Printf("│ DEBUG: Extracting batch name from filename: %s (without extension: %s)", filename, name)
+	//log.Printf("│ DEBUG: Extracting batch name from filename: %s (without extension: %s)", filename, name)
 
 	// Check if it's a STARLIGHT output file pattern
 	if strings.HasPrefix(name, "output_") && strings.Contains(name, "_LR-V") {
@@ -593,7 +590,7 @@ func (r *Receiver) extractBatchNameFromFilename(filename string) string {
 			prefixPart := parts[0]
 			if strings.HasPrefix(prefixPart, "output_") {
 				batchName := strings.TrimPrefix(prefixPart, "output_")
-				log.Printf("│ DEBUG: STARLIGHT batch name extracted: %s", batchName)
+				//log.Printf("│ DEBUG: STARLIGHT batch name extracted: %s", batchName)
 				return batchName
 			}
 		}
