@@ -4,23 +4,15 @@ import DatasetProgressBar from './DatasetProgressBar';
 
 const DatasetProgressItem = ({ 
   dataset, 
-  currentProgress, 
+  progress: currentProgress, 
   processorType, 
-  getEstimatedTime, 
-  getProcessingStats, 
-  getStatusColor 
+  getEstimatedTime
 }) => {
   return (
     <div className="pipeline-progress-item">
       <div className="pipeline-progress-item-header">
         <div className="pipeline-progress-item-info">
           <div className="pipeline-progress-item-title">
-            <span 
-              className="pipeline-progress-status-dot"
-              style={{ 
-                backgroundColor: getStatusColor(currentProgress.status)
-              }}
-            ></span>
             <span className="pipeline-progress-dataset-name">
               {dataset.name}
             </span>
@@ -37,21 +29,20 @@ const DatasetProgressItem = ({
         </div>
         <div className="pipeline-progress-time">
           {getEstimatedTime(
-            currentProgress.progress, 
-            currentProgress.status, 
-            currentProgress.filesProcessed, 
+            currentProgress.progress,
+            currentProgress.status,
+            currentProgress.filesProcessed,
             currentProgress.filesTotal,
             currentProgress.processingHistory
           )}
         </div>
       </div>
-      
       <DatasetProgressBar 
-        progress={currentProgress.progress}
-        status={currentProgress.status}
+        progress={currentProgress.progress} 
+        status={currentProgress.status} 
       />
-      
-      {(currentProgress.status === 'processing' || currentProgress.status === 'completed') && processorType !== 'ppxf' && (
+      {(currentProgress.status === 'processing' || currentProgress.status === 'completed') && 
+       processorType !== 'ppxf' && (
         <div className="pipeline-progress-processing-info">
           <span>
             {currentProgress.filesProcessed} of {currentProgress.filesTotal} files processed
@@ -59,7 +50,8 @@ const DatasetProgressItem = ({
         </div>
       )}
       
-      {(currentProgress.status === 'processing' || currentProgress.status === 'completed') && processorType === 'ppxf' && (
+      {(currentProgress.status === 'processing' || currentProgress.status === 'completed') && 
+       processorType === 'ppxf' && (
         <div className="pipeline-progress-processing-info">
           <span>
             {Math.floor(currentProgress.filesProcessed / 5)} of {currentProgress.filesTotal} input files processed ({currentProgress.filesProcessed} output files)
@@ -88,23 +80,10 @@ const DatasetProgressItem = ({
 };
 
 DatasetProgressItem.propTypes = {
-  dataset: PropTypes.shape({
-    id: PropTypes.string.isRequired,
-    name: PropTypes.string.isRequired,
-  }).isRequired,
-  currentProgress: PropTypes.shape({
-    progress: PropTypes.number.isRequired,
-    status: PropTypes.string.isRequired,
-    stage: PropTypes.string.isRequired,
-    filesProcessed: PropTypes.number.isRequired,
-    filesTotal: PropTypes.number.isRequired,
-    errorMessage: PropTypes.string,
-    processingHistory: PropTypes.array.isRequired,
-  }).isRequired,
-  processorType: PropTypes.string,
-  getEstimatedTime: PropTypes.func.isRequired,
-  getProcessingStats: PropTypes.func.isRequired,
-  getStatusColor: PropTypes.func.isRequired,
+  dataset: PropTypes.object.isRequired,
+  progress: PropTypes.object.isRequired,
+  processorType: PropTypes.string.isRequired,
+  getEstimatedTime: PropTypes.func.isRequired
 };
 
 export default DatasetProgressItem; 

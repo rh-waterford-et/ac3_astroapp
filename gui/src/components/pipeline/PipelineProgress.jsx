@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
 import DatasetProgressItem from './DatasetProgressItem';
 import { useTimeEstimation } from '../../hooks/data/useTimeEstimation';
@@ -6,8 +6,6 @@ import { useFileTracking } from '../../hooks/data/useFileTracking';
 import { useProgressCalculation } from '../../hooks/data/useProgressCalculation';
 
 function PipelineProgress({ datasets, inputFiles, inputFilesTotalCount, outputFiles, outputFilesTotalCount, processorType, isCollapsed = false, onToggleCollapse }) {
-  const [refreshing, setRefreshing] = useState(false);
-
   // Time estimation hook
   const { getEstimatedTime, getProcessingStats } = useTimeEstimation(processorType);
   
@@ -25,28 +23,6 @@ function PipelineProgress({ datasets, inputFiles, inputFilesTotalCount, outputFi
     processorType
   );
 
-  // Periodic refresh indicator
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRefreshing(true);
-      setTimeout(() => setRefreshing(false), 500);
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed': return '#4FD1C5';
-      case 'processing': return '#4FD1C5';
-      case 'queued': return '#FF7849';
-      case 'ready': return '#A0AEC0';
-      case 'error': return '#E53E3E';
-      default: return '#A0AEC0';
-    }
-  };
-
-  
   return (
     <div className="pipeline-progress-monitor">
       <div className="pane-header">
@@ -62,71 +38,45 @@ function PipelineProgress({ datasets, inputFiles, inputFilesTotalCount, outputFi
               </span>
             </button>
           )}
-          <h3>Pipeline Progress</h3>
+          <h3>Pipeline Progress Monitor</h3>
         </div>
-        <div className="pane-header-right" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          {datasets.length > 0 && (
-            <div className="pane-count">{datasets.length}</div>
-          )}
+        <div className="pane-header-right">
+          <div className="pane-count">{datasets.length}</div>
         </div>
       </div>
       
       {!isCollapsed && (
-        <>
-          <div className="progress-list">
-            {datasets.map(dataset => {
-              const currentProgress = progressData[dataset.id] || {
-                progress: 0,
-                status: 'ready',
-                stage: 'Ready',
-                lastUpdated: new Date(),
-                filesTotal: 0,
-                filesProcessed: 0,
-                errorMessage: '',
-                processingHistory: []
-              };
+        <div className="pipeline-progress-content">
+          {datasets.length > 0 ? (
+            <div className="pipeline-progress-list">
+              {datasets.map(dataset => {
+                const currentProgress = progressData[dataset.name] || {
+                  progress: 0,
+                  status: 'ready',
+                  stage: 'Ready for processing',
+                  filesProcessed: 0,
+                  filesTotal: 0,
+                  processingHistory: []
+                };
 
-              const stats = getProcessingStats(currentProgress.processingHistory);
-
-              return (
-                <DatasetProgressItem
-                  key={dataset.id}
-                  dataset={dataset}
-                  currentProgress={currentProgress}
-                  processorType={processorType}
-                  getEstimatedTime={getEstimatedTime}
-                  getProcessingStats={getProcessingStats}
-                  getStatusColor={getStatusColor}
-                />
-              );
-            })}
-          </div>
-          
-          {/* Summary stats at the bottom */}
-          <div className="pipeline-progress-summary">
-            <div>
-              Total datasets: {datasets.length}
+                return (
+                  <DatasetProgressItem
+                    key={dataset.id}
+                    dataset={dataset}
+                    progress={currentProgress}
+                    getEstimatedTime={getEstimatedTime}
+                    processorType={processorType}
+                  />
+                );
+              })}
             </div>
-            <div>
-              Processing: {Object.values(progressData).filter(d => d.status === 'processing').length} | 
-              Completed: {Object.values(progressData).filter(d => d.status === 'completed').length} | 
-              Queued: {Object.values(progressData).filter(d => d.status === 'queued').length}
-            </div>
-          </div>
-          
-          {/* Show helpful message when no active processing */}
-          {datasets.length > 0 && 
-           Object.values(progressData).every(d => d.status === 'ready') && (
-            <div className="pipeline-progress-summary" style={{ 
-              borderColor: 'rgba(160, 174, 192, 0.3)',
-              color: '#A0AEC0',
-              fontSize: '0.6rem',
-              padding: '0.25rem 0.5rem'
-            }}>
-              💡 No active pipeline processing. Upload files to start processing.
+          ) : (
+            <div className="empty-pane">
+              <div className="empty-icon">⏳</div>
+              <p>No datasets being processed</p>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

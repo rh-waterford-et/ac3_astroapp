@@ -16,52 +16,17 @@ function DatasetsList({ processorType }) {
   const inputFilesData = usePaginatedFiles(datasetOps.selectedDataset, 'input', processorType);
   const outputFilesData = usePaginatedFiles(datasetOps.selectedDataset, 'output', processorType);
   
-  // Helper functions for localStorage persistence
-  const getStoredCollapseState = (key, defaultValue = false) => {
-    try {
-      const stored = localStorage.getItem(`pipeline-${key}-collapsed`);
-      return stored !== null ? JSON.parse(stored) : defaultValue;
-    } catch (error) {
-      return defaultValue;
-    }
-  };
+  // Consolidated collapse state - simple and clean
+  const [collapseState, setCollapseState] = useState({
+    upload: false,
+    datasets: false,
+    progress: false
+  });
 
-  const setStoredCollapseState = (key, value) => {
-    try {
-      localStorage.setItem(`pipeline-${key}-collapsed`, JSON.stringify(value));
-    } catch (error) {
-    }
-  };
-
-  // Initialize collapsed states from localStorage, defaulting to false (not collapsed)
-  const [isUploadCollapsed, setIsUploadCollapsed] = useState(() => 
-    getStoredCollapseState('upload', false)
-  );
-  const [isDatasetsCollapsed, setIsDatasetsCollapsed] = useState(() => 
-    getStoredCollapseState('datasets', false)
-  );
-  const [isPipelineProgressCollapsed, setIsPipelineProgressCollapsed] = useState(() => 
-    getStoredCollapseState('progress', false)
-  );
-
-  // Enhanced setters that also save to localStorage
-  const toggleUploadCollapsed = () => {
-    const newState = !isUploadCollapsed;
-    setIsUploadCollapsed(newState);
-    setStoredCollapseState('upload', newState);
-  };
-
-  const toggleDatasetsCollapsed = () => {
-    const newState = !isDatasetsCollapsed;
-    setIsDatasetsCollapsed(newState);
-    setStoredCollapseState('datasets', newState);
-  };
-
-  const togglePipelineProgressCollapsed = () => {
-    const newState = !isPipelineProgressCollapsed;
-    setIsPipelineProgressCollapsed(newState);
-    setStoredCollapseState('progress', newState);
-  };
+  // Single parameterized toggle function
+  const toggleSection = useCallback((section) => {
+    setCollapseState(prev => ({ ...prev, [section]: !prev[section] }));
+  }, []);
 
   // Auto-refresh for file counts
   useAutoRefresh(datasetOps.selectedDataset, [
@@ -120,8 +85,8 @@ function DatasetsList({ processorType }) {
       <div style={{ marginBottom: '0.75rem' }}>
         <FileUpload 
           ref={fileUploadRef}
-          isCollapsed={isUploadCollapsed} 
-          onToggleCollapse={toggleUploadCollapsed} 
+          isCollapsed={collapseState.upload} 
+          onToggleCollapse={() => toggleSection('upload')} 
           processorType={processorType}
           onDatasetCreated={datasetOps.handleDatasetCreated}
         />
@@ -134,18 +99,18 @@ function DatasetsList({ processorType }) {
           <div className="pane-header-left">
             <button 
               className="collapse-toggle"
-              onClick={toggleDatasetsCollapsed}
-              title={isDatasetsCollapsed ? "Expand Dataset Management" : "Collapse Dataset Management"}
+              onClick={() => toggleSection('datasets')}
+              title={collapseState.datasets ? "Expand Dataset Management" : "Collapse Dataset Management"}
             >
-              <span className={`toggle-icon ${isDatasetsCollapsed ? 'collapsed' : ''}`}>
-                {isDatasetsCollapsed ? '▲' : '▼'}
+              <span className={`toggle-icon ${collapseState.datasets ? 'collapsed' : ''}`}>
+                {collapseState.datasets ? '▲' : '▼'}
               </span>
             </button>
             <h3>Dataset Management</h3>
           </div>
         </div>
         
-        {!isDatasetsCollapsed && (
+        {!collapseState.datasets && (
           <div className="pipeline-panes">
             
             {/* Left Pane - Dataset Selection */}
@@ -188,8 +153,8 @@ function DatasetsList({ processorType }) {
         outputFiles={outputFilesData.files}
         outputFilesTotalCount={outputFilesData.pagination.total}
         processorType={processorType}
-        isCollapsed={isPipelineProgressCollapsed}
-        onToggleCollapse={togglePipelineProgressCollapsed}
+        isCollapsed={collapseState.progress}
+        onToggleCollapse={() => toggleSection('progress')}
       />
       
     </div>

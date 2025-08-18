@@ -3,6 +3,97 @@
 const API_BASE_URL = '/api';
 
 /**
+ * Standard headers for JSON API requests
+ */
+const STANDARD_HEADERS = {
+  'Content-Type': 'application/json',
+};
+
+/**
+ * Build URL with query parameters
+ * @param {string} endpoint - API endpoint path
+ * @param {Object} params - Query parameters object
+ * @returns {string} - Complete URL with encoded parameters
+ */
+const buildUrl = (endpoint, params = {}) => {
+  const url = new URL(`${API_BASE_URL}/${endpoint}`, window.location.origin);
+  
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined) {
+      url.searchParams.append(key, String(value));
+    }
+  });
+  
+  return url.toString();
+};
+
+/**
+ * Process API response with standard error handling
+ * @param {Response} response - Fetch response object
+ * @param {string} context - Context for error messages
+ * @returns {Promise<Object>} - Parsed response data
+ */
+const processResponse = async (response, context) => {
+  if (!response.ok) {
+    throw new Error(`Failed to ${context}: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  
+  if (data.success) {
+    return data;
+  } else {
+    throw new Error(data.message || `Failed to ${context}`);
+  }
+};
+
+/**
+ * Standard API request with consistent error handling
+ * @param {string} endpoint - API endpoint path
+ * @param {Object} options - Request options
+ * @returns {Promise<Object>} - API response data
+ */
+const apiRequest = async (endpoint, options = {}) => {
+  const { 
+    method = 'GET', 
+    body, 
+    signal, 
+    params = {}, 
+    context = endpoint.replace(/[/-]/g, ' ')
+  } = options;
+  
+  const url = buildUrl(endpoint, params);
+  
+  const fetchOptions = {
+    method,
+    headers: STANDARD_HEADERS,
+    signal
+  };
+  
+  if (body) {
+    fetchOptions.body = JSON.stringify(body);
+  }
+  
+  const response = await fetch(url, fetchOptions);
+  return processResponse(response, context);
+};
+
+/**
+ * API request with try-catch wrapper returning success/error format
+ * @param {string} endpoint - API endpoint path
+ * @param {Object} options - Request options
+ * @returns {Promise<Object>} - {success: boolean, message?: string, ...data}
+ */
+const apiRequestSafe = async (endpoint, options = {}) => {
+  try {
+    const data = await apiRequest(endpoint, options);
+    return { success: true, ...data };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+/**
  * Upload a single file to the backend
  * @param {File} file - The file to upload
  * @param {string} dataset - The dataset name for organizing files
@@ -55,22 +146,7 @@ export const uploadFile = async (file, dataset, onProgress = null, processorType
  * @returns {Promise<Object>} - Health check response
  */
 export const checkHealth = async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/health`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Health check failed with status: ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    throw new Error(`Health check failed: ${error.message}`);
-  }
+  return apiRequest('health', { context: 'health check' });
 };
 
 /**
@@ -129,24 +205,13 @@ export const getDatasets = async (processorType) => {
   if (!processorType) {
     throw new Error('getDatasets: processorType is required');
   }
-  const response = await fetch(`${API_BASE_URL}/datasets?app=${encodeURIComponent(processorType)}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch datasets: ${response.status}`);
-  }
-
-  const data = await response.json();
   
-  if (data.success) {
-    return data.datasets || [];
-  } else {
-    throw new Error('Failed to fetch datasets');
-  }
+  const data = await apiRequest('datasets', { 
+    params: { app: processorType },
+    context: 'fetch datasets'
+  });
+  
+  return data.datasets || [];
 };
 
 /**
@@ -157,41 +222,21 @@ export const getDatasets = async (processorType) => {
  * @returns {Promise<Object>} - Creation response
  */
 export const createDataset = async (datasetName, processorType, ppxfConfig = null) => {
-  try {
-    
-    const requestBody = {
-      datasetName: datasetName,
-      appType: processorType
-    };
-    
-    // Add pPXF config if provided and processor is pPXF
-    if (processorType.toLowerCase() === 'ppxf' && ppxfConfig) {
-      requestBody.ppxfConfig = ppxfConfig;
-    }
-    
-    const response = await fetch(`${API_BASE_URL}/datasets/create`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-
-    if (!response.ok) {
-      throw new Error(`Failed to create dataset: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    if (data.success) {
-      return { success: true, message: data.message };
-    } else {
-      throw new Error(data.message || 'Failed to create dataset');
-    }
-  } catch (error) {
-    return { success: false, message: error.message || 'Failed to create dataset' };
+  const requestBody = {
+    datasetName: datasetName,
+    appType: processorType
+  };
+  
+  // Add pPXF config if provided and processor is pPXF
+  if (processorType.toLowerCase() === 'ppxf' && ppxfConfig) {
+    requestBody.ppxfConfig = ppxfConfig;
   }
+  
+  return apiRequestSafe('datasets/create', {
+    method: 'POST',
+    body: requestBody,
+    context: 'create dataset'
+  });
 };
 
 /**
@@ -201,28 +246,11 @@ export const createDataset = async (datasetName, processorType, ppxfConfig = nul
  * @returns {Promise<Object>} - Delete response
  */
 export const deleteDataset = async (datasetName, processorType) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/datasets/delete?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to delete dataset: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    if (data.success) {
-      return { success: true, message: data.message };
-    } else {
-      throw new Error(data.message || 'Failed to delete dataset');
-    }
-  } catch (error) {
-    return { success: false, message: error.message || 'Failed to delete dataset' };
-  }
+  return apiRequestSafe('datasets/delete', {
+    method: 'DELETE',
+    params: { dataset: datasetName, app: processorType },
+    context: 'delete dataset'
+  });
 };
 
 /**
@@ -232,28 +260,11 @@ export const deleteDataset = async (datasetName, processorType) => {
  * @returns {Promise<Object>} - Delete response
  */
 export const deleteFile = async (fileKey, processorType) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/files/delete?key=${encodeURIComponent(fileKey)}&app=${encodeURIComponent(processorType)}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to delete file: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    if (data.success) {
-      return { success: true, message: data.message };
-    } else {
-      throw new Error(data.message || 'Failed to delete file');
-    }
-  } catch (error) {
-    return { success: false, message: error.message || 'Failed to delete file' };
-  }
+  return apiRequestSafe('files/delete', {
+    method: 'DELETE',
+    params: { key: fileKey, app: processorType },
+    context: 'delete file'
+  });
 };
 
 /**
@@ -265,24 +276,13 @@ export const getDatasetFiles = async (datasetName, processorType) => {
   if (!processorType) {
     throw new Error('getDatasetFiles: processorType is required');
   }
-  const response = await fetch(`${API_BASE_URL}/datasets/files?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch dataset files: ${response.status}`);
-  }
-
-  const data = await response.json();
   
-  if (data.success) {
-    return data.files || [];
-  } else {
-    throw new Error(data.message || 'Failed to fetch dataset files');
-  }
+  const data = await apiRequest('datasets/files', {
+    params: { dataset: datasetName, app: processorType },
+    context: 'fetch dataset files'
+  });
+  
+  return data.files || [];
 };
 
 /**
@@ -303,34 +303,28 @@ export const getDatasetFilesUnified = async (datasetName, processorType, fileTyp
     throw new Error('getDatasetFilesUnified: fileType is required (input, processed, output)');
   }
   
-  const response = await fetch(`${API_BASE_URL}/datasets/files-unified?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}&type=${encodeURIComponent(fileType)}&offset=${offset}&limit=${limit}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
+  const data = await apiRequest('datasets/files-unified', {
+    params: { 
+      dataset: datasetName, 
+      app: processorType, 
+      type: fileType, 
+      offset, 
+      limit 
     },
-    signal: signal,
+    signal,
+    context: `fetch ${fileType} files`
   });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch ${fileType} files: ${response.status}`);
-  }
-
-  const data = await response.json();
   
-  if (data.success) {
-    return {
-      files: data.files || [],
-      pagination: data.pagination || { offset: 0, limit: 50, total: 0, hasMore: false }
-    };
-  } else {
-    throw new Error(data.message || `Failed to fetch ${fileType} files`);
-  }
+  return {
+    files: data.files || [],
+    pagination: data.pagination || { offset: 0, limit: 50, total: 0, hasMore: false }
+  };
 };
 
 /**
- * DEPRECATED: Get input files for a dataset with pagination - USE getDatasetFilesUnified INSTEAD
- * @param {string} datasetName - Name of the dataset
- * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
+ * Get list of input files in a specific dataset with pagination
+ * @param {string} datasetName - The name of the dataset
+ * @param {string} processorType - The processor type (starlight, ppxf, etc.)
  * @param {number} page - Page number (0-based)
  * @param {number} limit - Number of files to return per page
  * @param {AbortSignal} signal - Optional AbortSignal for request cancellation
@@ -341,42 +335,35 @@ export const getDatasetFilesListPaginated = async (datasetName, processorType, p
     throw new Error('getDatasetFilesListPaginated: processorType is required');
   }
   
-  const response = await fetch(`${API_BASE_URL}/datasets/files?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}&page=${page}&limit=${limit}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
+  const data = await apiRequest('datasets/files', {
+    params: { 
+      dataset: datasetName, 
+      app: processorType, 
+      page, 
+      limit 
     },
-    signal: signal,
+    signal,
+    context: 'fetch paginated dataset input files list'
   });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch paginated dataset input files list: ${response.status}`);
-  }
-
-  const data = await response.json();
   
-  if (data.success) {
-    // Backend now supports pagination on the regular endpoint
-    if (data.pagination) {
-      return {
-        files: data.files || [],
-        hasMore: data.pagination.hasMore || false,
-        total: data.pagination.total || 0,
-        page: data.pagination.page || page,
-        limit: data.pagination.limit || limit
-      };
-    } else {
-      // No pagination requested, return all files
-      return {
-        files: data.files || [],
-        hasMore: false,
-        total: data.files?.length || 0,
-        page,
-        limit
-      };
-    }
+  // Backend now supports pagination on the regular endpoint
+  if (data.pagination) {
+    return {
+      files: data.files || [],
+      hasMore: data.pagination.hasMore || false,
+      total: data.pagination.total || 0,
+      page: data.pagination.page || page,
+      limit: data.pagination.limit || limit
+    };
   } else {
-    throw new Error(data.message || 'Failed to fetch paginated dataset input files list');
+    // No pagination requested, return all files
+    return {
+      files: data.files || [],
+      hasMore: false,
+      total: data.files?.length || 0,
+      page,
+      limit
+    };
   }
 };
 
@@ -389,30 +376,19 @@ export const getDatasetOutputFiles = async (datasetName, processorType) => {
   if (!processorType) {
     throw new Error('getDatasetOutputFiles: processorType is required');
   }
-  const response = await fetch(`${API_BASE_URL}/datasets/output-files?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch dataset output files: ${response.status}`);
-  }
-
-  const data = await response.json();
   
-  if (data.success) {
-    return data.files || [];
-  } else {
-    throw new Error(data.message || 'Failed to fetch dataset output files');
-  }
+  const data = await apiRequest('datasets/output-files', {
+    params: { dataset: datasetName, app: processorType },
+    context: 'fetch dataset output files'
+  });
+  
+  return data.files || [];
 };
 
 /**
- * DEPRECATED: Get output files for a dataset with pagination - USE getDatasetFilesUnified INSTEAD
- * @param {string} datasetName - Name of the dataset
- * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
+ * Get list of output files in a specific dataset with pagination
+ * @param {string} datasetName - The name of the dataset
+ * @param {string} processorType - The processor type (starlight, ppxf, etc.)
  * @param {number} page - Page number (0-based)
  * @param {number} limit - Number of files to return per page
  * @param {AbortSignal} signal - Optional AbortSignal for request cancellation
@@ -423,51 +399,44 @@ export const getDatasetOutputFilesListPaginated = async (datasetName, processorT
     throw new Error('getDatasetOutputFilesListPaginated: processorType is required');
   }
   
-  const response = await fetch(`${API_BASE_URL}/datasets/output-files?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}&page=${page}&limit=${limit}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
+  const data = await apiRequest('datasets/output-files', {
+    params: { 
+      dataset: datasetName, 
+      app: processorType, 
+      page, 
+      limit 
     },
-    signal: signal,
+    signal,
+    context: 'fetch paginated dataset output files list'
   });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch paginated dataset output files list: ${response.status}`);
-  }
-
-  const data = await response.json();
   
-  if (data.success) {
-    // Backend now supports pagination on the regular endpoint
-    if (data.pagination) {
-      return {
-        files: data.files || [],
-        hasMore: data.pagination.hasMore || false,
-        total: data.pagination.total || 0,
-        page: data.pagination.page || page,
-        limit: data.pagination.limit || limit
-      };
-    } else {
-      // No pagination requested, return all files
-      return {
-        files: data.files || [],
-        hasMore: false,
-        total: data.files?.length || 0,
-        page,
-        limit
-      };
-    }
+  // Backend now supports pagination on the regular endpoint
+  if (data.pagination) {
+    return {
+      files: data.files || [],
+      hasMore: data.pagination.hasMore || false,
+      total: data.pagination.total || 0,
+      page: data.pagination.page || page,
+      limit: data.pagination.limit || limit
+    };
   } else {
-    throw new Error(data.message || 'Failed to fetch paginated dataset output files list');
+    // No pagination requested, return all files
+    return {
+      files: data.files || [],
+      hasMore: false,
+      total: data.files?.length || 0,
+      page,
+      limit
+    };
   }
 };
 
 /**
- * Get output files for a dataset with pagination for progressive loading
- * @param {string} datasetName - Name of the dataset
- * @param {string} processorType - Type of processor (starlight, ppxf, etc.)
- * @param {number} limit - Number of files to return (default: 50)
- * @param {number} offset - Starting offset for pagination (default: 0)
+ * Get paginated output files for a dataset (special endpoint optimized for large datasets)
+ * @param {string} datasetName - The name of the dataset
+ * @param {string} processorType - The processor type (starlight, ppxf, etc.)
+ * @param {number} limit - Number of files to return per page
+ * @param {number} offset - Starting position (0-based)
  * @returns {Promise<Object>} - Object with files array, total, hasMore, offset, limit
  */
 export const getDatasetOutputFilesPaginated = async (datasetName, processorType, limit = 50, offset = 0) => {
@@ -475,125 +444,90 @@ export const getDatasetOutputFilesPaginated = async (datasetName, processorType,
     throw new Error('getDatasetOutputFilesPaginated: processorType is required');
   }
   
-  try {
-    const response = await fetch(`${API_BASE_URL}/datasets/output-files-paginated?dataset=${encodeURIComponent(datasetName)}&app=${encodeURIComponent(processorType)}&limit=${limit}&offset=${offset}`);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch paginated output files: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    if (!data.success) {
-      throw new Error(data.message || 'Failed to fetch paginated output files');
-    }
-    
-    // Filter for PDF files that are in cell subdirectories (contain "/")
-    const pdfFiles = data.files.filter(file => 
-      file.name.includes('/') && 
-      file.name.toLowerCase().endsWith('.pdf')
-    );
-    
-    // Sort PDF files by cell number (numeric sort)
-    pdfFiles.sort((a, b) => {
-      const cellA = parseInt(a.name.split('/')[0]);
-      const cellB = parseInt(b.name.split('/')[0]);
-      return cellA - cellB;
-    });
-    
-    return {
-      files: pdfFiles,
-      total: data.total,
-      hasMore: data.hasMore,
-      offset: offset,
-      limit: limit
-    };
-  } catch (error) {
-    throw error;
-  }
+  const data = await apiRequest('datasets/output-files-paginated', {
+    params: { 
+      dataset: datasetName, 
+      app: processorType, 
+      limit, 
+      offset 
+    },
+    context: 'fetch paginated output files'
+  });
+  
+  // Filter for PDF files that are in cell subdirectories (contain "/")
+  const pdfFiles = data.files.filter(file => 
+    file.name.includes('/') && 
+    file.name.toLowerCase().endsWith('.pdf')
+  );
+  
+  // Sort PDF files by cell number (numeric sort)
+  pdfFiles.sort((a, b) => {
+    const cellA = parseInt(a.name.split('/')[0]);
+    const cellB = parseInt(b.name.split('/')[0]);
+    return cellA - cellB;
+  });
+  
+  return {
+    files: pdfFiles,
+    total: data.total,
+    hasMore: data.hasMore,
+    offset: offset,
+    limit: limit
+  };
 };
 
 // Pipeline Progress API functions
 export const getAllPipelineProgress = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/progress/all`);
-    
+    const data = await apiRequest('progress/all', { 
+      context: 'fetch all pipeline progress' 
+    });
+    return data.progress || {};
+  } catch (error) {
     // Handle 404 or other "not found" responses gracefully
-    if (!response.ok) {
-      if (response.status === 404) {
-        // Progress endpoint doesn't exist or no data available - return empty object
-        return {};
-      }
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    
-    if (data.success) {
-      return data.progress || {};
-    } else {
-      // If API returns success: false, treat as "no data available"
+    if (error.message.includes('404') || error.message.includes('Failed to fetch all pipeline progress: 404')) {
+      // Progress endpoint doesn't exist or no data available - return empty object
       return {};
     }
-  } catch (error) {
+    
     // Handle network errors or other fetch failures
     if (error.message.includes('fetch') || error.name === 'TypeError') {
       return {}; // Return empty object for graceful fallback
     }
+    
     throw error; // Re-throw for genuine errors
   }
 };
 
 export const getDatasetPipelineProgress = async (datasetId) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/progress?dataset_id=${encodeURIComponent(datasetId)}`);
-    
+    const data = await apiRequest('progress', {
+      params: { dataset_id: datasetId },
+      context: 'fetch dataset pipeline progress'
+    });
+    return data.progress;
+  } catch (error) {
     // Handle 404 or other "not found" responses gracefully
-    if (!response.ok) {
-      if (response.status === 404) {
-        // Progress endpoint doesn't exist or no data available - return null
-        return null;
-      }
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    
-    if (data.success) {
-      return data.progress;
-    } else {
-      // If API returns success: false, treat as "no data available"
+    if (error.message.includes('404') || error.message.includes('Failed to fetch dataset pipeline progress: 404')) {
+      // Progress endpoint doesn't exist or no data available - return null
       return null;
     }
-  } catch (error) {
+    
     // Handle network errors or other fetch failures
     if (error.message.includes('fetch') || error.name === 'TypeError') {
       return null; // Return null for graceful fallback
     }
+    
     throw error; // Re-throw for genuine errors
   }
 };
 
 export const updatePipelineProgress = async (progressData) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/progress/update`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(progressData),
-    });
-    
-    const data = await response.json();
-    
-    if (data.success) {
-      return data;
-    } else {
-      throw new Error(data.message || 'Failed to update progress');
-    }
-  } catch (error) {
-    throw error;
-  }
+  return apiRequest('progress/update', {
+    method: 'POST',
+    body: progressData,
+    context: 'update pipeline progress'
+  });
 };
 
 /**
@@ -603,59 +537,31 @@ export const updatePipelineProgress = async (progressData) => {
  * @returns {Promise<Object>} - Processing response
  */
 export const startProcessing = async (datasetName, processorType) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/datasets/process`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        dataset: datasetName,
-        processorType: processorType
-      }),
-    });
-    
-    const data = await response.json();
-    
-    if (data.success) {
-      return data;
-    } else {
-      throw new Error(data.message || 'Failed to start processing');
-    }
-  } catch (error) {
-    throw error;
-  }
+  return apiRequest('datasets/process', {
+    method: 'POST',
+    body: {
+      dataset: datasetName,
+      processorType: processorType
+    },
+    context: 'start processing'
+  });
 };
 
 /**
- * Start processing for a single file
- * @param {string} datasetName - The name of the dataset containing the file
- * @param {string} fileName - The name of the specific file to process
+ * Start processing for a single file in a dataset
+ * @param {string} datasetName - The name of the dataset
+ * @param {string} fileName - The name of the file to process
  * @param {string} processorType - The processor type (starlight, ppxf, steckmap)
  * @returns {Promise<Object>} - Processing response
  */
 export const startSingleFileProcessing = async (datasetName, fileName, processorType) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/files/process`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        dataset: datasetName,
-        fileName: fileName,
-        processorType: processorType
-      }),
-    });
-    
-    const data = await response.json();
-    
-    if (data.success) {
-      return data;
-    } else {
-      throw new Error(data.message || 'Failed to start single file processing');
-    }
-  } catch (error) {
-    throw error;
-  }
+  return apiRequest('files/process', {
+    method: 'POST',
+    body: {
+      dataset: datasetName,
+      fileName: fileName,
+      processorType: processorType
+    },
+    context: 'start single file processing'
+  });
 }; 

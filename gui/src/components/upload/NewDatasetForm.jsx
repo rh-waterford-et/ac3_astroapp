@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import PropTypes from 'prop-types';
 
 function NewDatasetForm({
@@ -13,6 +13,39 @@ function NewDatasetForm({
 }) {
   const isPPXF = (processorType || '').toLowerCase() === 'ppxf';
 
+  // Memoized handlers to prevent object recreation on every keystroke
+  const handleRedshiftChange = useCallback((e) => {
+    const value = parseFloat(e.target.value) || 0;
+    setPpxfConfig(prev => ({ ...prev, redshift: value }));
+  }, [setPpxfConfig]);
+
+  const handleVelocityDispChange = useCallback((e) => {
+    const value = parseFloat(e.target.value) || 0;
+    setPpxfConfig(prev => ({ ...prev, velocityDisp: value }));
+  }, [setPpxfConfig]);
+
+  const handleWaveStartChange = useCallback((e) => {
+    const value = parseFloat(e.target.value) || 0;
+    setPpxfConfig(prev => ({ ...prev, waveRangeStart: value }));
+  }, [setPpxfConfig]);
+
+  const handleWaveEndChange = useCallback((e) => {
+    const value = parseFloat(e.target.value) || 0;
+    setPpxfConfig(prev => ({ ...prev, waveRangeEnd: value }));
+  }, [setPpxfConfig]);
+
+  const handleSpsNameChange = useCallback((e) => {
+    setPpxfConfig(prev => ({ ...prev, spsName: e.target.value }));
+  }, [setPpxfConfig]);
+
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Enter') {
+      onCreate?.();
+    } else if (e.key === 'Escape') {
+      onCancel?.();
+    }
+  }, [onCreate, onCancel]);
+
   return (
     <div className="new-dataset-form">
       <div className="new-dataset-input-group">
@@ -22,13 +55,7 @@ function NewDatasetForm({
           placeholder="Dataset Name (eg: NGC7025)"
           value={newDatasetName}
           onChange={(e) => setNewDatasetName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              onCreate?.();
-            } else if (e.key === 'Escape') {
-              onCancel?.();
-            }
-          }}
+          onKeyDown={handleKeyDown}
         />
       </div>
 
@@ -46,7 +73,7 @@ function NewDatasetForm({
                   step="0.000001"
                   className="new-dataset-input"
                   value={ppxfConfig.redshift}
-                  onChange={(e) => setPpxfConfig({ ...ppxfConfig, redshift: parseFloat(e.target.value) || 0 })}
+                  onChange={handleRedshiftChange}
                 />
               </div>
               <div className="ppxf-config-field" style={{ flex: '1 1 0', minWidth: 0 }}>
@@ -56,7 +83,7 @@ function NewDatasetForm({
                   step="0.1"
                   className="new-dataset-input"
                   value={ppxfConfig.velocityDisp}
-                  onChange={(e) => setPpxfConfig({ ...ppxfConfig, velocityDisp: parseFloat(e.target.value) || 0 })}
+                  onChange={handleVelocityDispChange}
                 />
               </div>
             </div>
@@ -67,7 +94,7 @@ function NewDatasetForm({
                   type="number"
                   className="new-dataset-input"
                   value={ppxfConfig.waveRangeStart}
-                  onChange={(e) => setPpxfConfig({ ...ppxfConfig, waveRangeStart: parseInt(e.target.value) || 0 })}
+                  onChange={handleWaveStartChange}
                 />
               </div>
               <div className="ppxf-config-field" style={{ flex: '1 1 0', minWidth: 0 }}>
@@ -76,7 +103,7 @@ function NewDatasetForm({
                   type="number"
                   className="new-dataset-input"
                   value={ppxfConfig.waveRangeEnd}
-                  onChange={(e) => setPpxfConfig({ ...ppxfConfig, waveRangeEnd: parseInt(e.target.value) || 0 })}
+                  onChange={handleWaveEndChange}
                 />
               </div>
             </div>
@@ -86,7 +113,7 @@ function NewDatasetForm({
                 <select
                   className="new-dataset-input"
                   value={ppxfConfig.spsName}
-                  onChange={(e) => setPpxfConfig({ ...ppxfConfig, spsName: e.target.value })}
+                  onChange={handleSpsNameChange}
                 >
                   <option value="emiles">EMILES</option>
                   <option value="fsps">FSPS</option>

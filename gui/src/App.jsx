@@ -106,7 +106,7 @@ function AppContent({ onGalleryOperationsReady }) {
           {activeTab === 'pipeline' && (
             <div className="pipeline-full-view">
               {/* Pipeline Monitor with full space */}
-              <DatasetsList selectedApp={selectedApp} />
+              <DatasetsList processorType={selectedApp} />
             </div>
           )}
         </div>

@@ -31,7 +31,6 @@ let handleKeyDown = null;
  * @param {Object} aladin - The Aladin Lite instance
  */
 const setupMouseInteractions = (aladin) => {
-  console.log('Setting up mouse interactions...');
   
   // Get the Aladin container element for direct mouse event handling
   const aladinContainer = document.getElementById('aladin-lite-div');
@@ -61,9 +60,7 @@ const setupMouseInteractions = (aladin) => {
     catalog.addSources(sampleSources);
     aladin.addCatalog(catalog);
     
-    console.log('Sample catalog added for interaction testing');
   } catch (error) {
-    console.log('Could not add sample catalog:', error);
   }
 
   // Set up the available event listeners for Aladin Lite
@@ -71,7 +68,6 @@ const setupMouseInteractions = (aladin) => {
     // Object hover event (works with catalog objects)
     aladin.on('objectHovered', function(object) {
       if (object) {
-        console.log('Hovered over object:', object);
         // Update status if possible
         const statusElement = document.getElementById('current-status');
         if (statusElement && object.ra && object.dec) {
@@ -83,7 +79,6 @@ const setupMouseInteractions = (aladin) => {
     // Object click event (works with catalog objects)
     aladin.on('objectClicked', function(object) {
       if (object) {
-        console.log('Clicked on astronomical object:', object);
         // Center on the object and zoom in
         aladin.gotoRaDec(object.ra, object.dec);
         const currentFov = aladin.getFov();
@@ -97,7 +92,6 @@ const setupMouseInteractions = (aladin) => {
       }
     });
     
-    console.log('Aladin Lite event listeners setup complete');
   } catch (error) {
     console.error('Error setting up Aladin event listeners:', error);
   }
@@ -127,7 +121,6 @@ const setupMouseInteractions = (aladin) => {
           const worldCoords = aladin.pix2world(x, y);
           if (worldCoords) {
             const [ra, dec] = worldCoords;
-            console.log(`Clicked at RA: ${ra.toFixed(4)}°, Dec: ${dec.toFixed(4)}°`);
             
             // Center on clicked position
             aladin.gotoRaDec(ra, dec);
@@ -140,7 +133,6 @@ const setupMouseInteractions = (aladin) => {
             updateStatusDisplays(aladin);
           }
         } catch (error) {
-          console.log('Could not convert pixel to world coordinates');
           // Just zoom in at current center
           const currentFov = aladin.getFov();
           aladin.setFov(currentFov * 0.8);
@@ -172,7 +164,6 @@ const setupMouseInteractions = (aladin) => {
     }
   });
 
-  console.log('Mouse interactions setup complete!');
 };
 
 /**
@@ -236,7 +227,6 @@ const setupKeyboardShortcuts = (aladin) => {
   };
 
   document.addEventListener('keydown', handleKeyDown);
-  console.log('Keyboard shortcuts set up: +/- (zoom), R (reset), G (goto), H (help)');
 };
 
 /**
@@ -254,7 +244,6 @@ const updateStatusDisplays = (aladin) => {
       statusElement.textContent = `Center: RA ${position[0].toFixed(4)}°, Dec ${position[1].toFixed(4)}° | FOV: ${fov.toFixed(3)}°`;
     }
   } catch (error) {
-    console.log('Could not update status displays:', error);
   }
 };
 

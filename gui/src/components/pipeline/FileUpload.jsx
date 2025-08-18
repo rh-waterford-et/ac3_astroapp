@@ -6,6 +6,7 @@ import DatasetSelector from '../upload/DatasetSelector';
 import NewDatasetForm from '../upload/NewDatasetForm';
 import useDatasets from '../../hooks/data/useDatasets';
 import useUploadQueue from '../../hooks/data/useUploadQueue';
+import { getUploadStatusColor } from '../../utils/ui/statusColors';
 
 const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processorType, onDatasetCreated }, ref) => {
   const {
@@ -63,16 +64,6 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
       resetName('');
       await refreshDatasets(true, false);
       if (onDatasetCreated) onDatasetCreated(sanitizedName);
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'ready': return '#A0AEC0';
-      case 'uploading': return '#4FD1C5';
-      case 'completed': return '#68D391';
-      case 'error': return '#FC8181';
-      default: return '#A0AEC0';
     }
   };
 
@@ -165,7 +156,7 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
             <UploadQueueList 
               uploadQueue={uploadQueue}
               onRemove={removeFile}
-              getStatusColor={getStatusColor}
+              getStatusColor={getUploadStatusColor}
             />
           </div>
         </div>
