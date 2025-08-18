@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { MAP_CHECKBOX_IDS, KINEMATICS_CHECKBOXES, POPULATION_CHECKBOXES, DISPLAY_CHECKBOXES } from '../../utils/constants';
+import { MAP_CHECKBOX_IDS, KINEMATICS_CHECKBOXES, POPULATION_CHECKBOXES, DISPLAY_CHECKBOXES } from '../../utils/constants/constants';
 import { useGallery } from '../../contexts/GalleryContext';
 
 const areAllMapsSelected = (checkboxStates) => {

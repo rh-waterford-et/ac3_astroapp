@@ -4,7 +4,7 @@ import {
   isAtObjectCoordinates,
   tryGetObjectImage
 } from '../../utils/gallery/galleryUtils';
-import { IMAGE_MAP, MAP_TYPES } from '../../utils/galleryConstants';
+import { IMAGE_MAP, MAP_TYPES } from '../../utils/constants/galleryConstants';
 import { useAppState } from '../../contexts/AppStateContext';
 
 export const useImageLoader = ({

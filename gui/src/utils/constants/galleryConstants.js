@@ -1,14 +1,14 @@
 // Gallery constants and static data
 // Import NGC7025 images from assets
-import NGC7025_stellar_velocity from '../assets/NGC7025_stellar_velocity.jpg';
-import NGC7025_stellar_velocity_error from '../assets/NGC7025_stellar_velocity_error.jpg';
-import NGC7025_velocity_dispersion from '../assets/NGC7025_velocity_dispersion.jpg';
-import NGC7025_velocity_dispersion_error from '../assets/NGC7025_velocity_dispersion_error.jpg';
-import NGC7025_h3 from '../assets/NGC7025_h3.jpg';
-import NGC7025_h4 from '../assets/NGC7025_h4.jpg';
-import NGC7025_age from '../assets/NGC7025_age.jpeg';
-import NGC7025_age_mass_weighted from '../assets/NGC7025_age_mass_weighted.jpg';
-import NGC7025_metallicity from '../assets/NGC7025_metallicity.jpg';
+import NGC7025_stellar_velocity from '../../assets/NGC7025_stellar_velocity.jpg';
+import NGC7025_stellar_velocity_error from '../../assets/NGC7025_stellar_velocity_error.jpg';
+import NGC7025_velocity_dispersion from '../../assets/NGC7025_velocity_dispersion.jpg';
+import NGC7025_velocity_dispersion_error from '../../assets/NGC7025_velocity_dispersion_error.jpg';
+import NGC7025_h3 from '../../assets/NGC7025_h3.jpg';
+import NGC7025_h4 from '../../assets/NGC7025_h4.jpg';
+import NGC7025_age from '../../assets/NGC7025_age.jpeg';
+import NGC7025_age_mass_weighted from '../../assets/NGC7025_age_mass_weighted.jpg';
+import NGC7025_metallicity from '../../assets/NGC7025_metallicity.jpg';
 
 // Image mapping for specific objects (can be extended for other objects)
 // To add support for other objects, import their images and add them to this map

@@ -1,5 +1,5 @@
 // Gallery utility functions - pure functions with no side effects
-import { COORDINATE_TOLERANCE } from '../galleryConstants';
+import { COORDINATE_TOLERANCE } from '../constants/galleryConstants';
 
 /**
  * Generate cache key for PDF data

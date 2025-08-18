@@ -1,5 +1,5 @@
 // PDF utilities - PDF.js integration and thumbnail generation
-import { PDF_CONFIG } from '../galleryConstants';
+import { PDF_CONFIG } from '../constants/galleryConstants';
 import { extractCellNumber } from './galleryUtils';
 
 /**

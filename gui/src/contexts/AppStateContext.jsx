@@ -14,7 +14,6 @@ export const AppStateProvider = ({ children }) => {
   const [currentLoadedObject, setCurrentLoadedObject] = useState(null);
   const [aladinInstance, setAladinInstance] = useState(null);
 
-  // Sync with window variables (for backward compatibility during transition)
   useEffect(() => {
     // Monitor window.currentLoadedObject changes
     const checkCurrentObject = () => {

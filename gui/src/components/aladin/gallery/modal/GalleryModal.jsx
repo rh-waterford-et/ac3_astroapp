@@ -5,7 +5,7 @@ import { Rnd } from 'react-rnd';
 import ModalNavigation from './ModalNavigation';
 import ModalImageViewer from './ModalImageViewer';
 import { useModalNavigation } from '../../../../hooks/modal/useModalNavigation';
-import { MODAL_DIMENSIONS } from '../../../../utils/constants';
+import { MODAL_DIMENSIONS } from '../../../../utils/constants/constants';
 
 const GalleryModal = ({ modalRndRef, onStatusUpdate }) => {
   const [transparency, setTransparency] = useState(95);

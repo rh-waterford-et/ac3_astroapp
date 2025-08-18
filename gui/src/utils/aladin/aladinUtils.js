@@ -253,7 +253,7 @@ export const loadScript = (src) => {
   });
 };
 
-const UtilsAladin = {
+const aladinUtils = {
   hideCoordinateElements,
   hideCoordinateFrames,
   setupKeyboardControls,
@@ -266,4 +266,4 @@ const UtilsAladin = {
   loadScript,
 };
 
-export default UtilsAladin;
+export default aladinUtils;
