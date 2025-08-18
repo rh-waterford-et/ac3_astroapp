@@ -21,7 +21,6 @@ export const useImageLoader = ({
 
   // Main image loading orchestration
   const loadObjectImages = useCallback(async (objectName) => {
-    console.log(`🔄 loadObjectImages called for: ${objectName}`);
     
     // Use context aladinInstance with fallback to prop and window (for backward compatibility)
     const currentAladinInstance = contextAladinInstance || aladinInstance || window.aladinInstance;

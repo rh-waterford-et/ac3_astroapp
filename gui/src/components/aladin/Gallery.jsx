@@ -8,9 +8,9 @@ import GalleryLoader from './gallery/ui/GalleryLoader';
 import { 
   initializePdfJs
 } from '../../utils/gallery/pdfUtils';
-import { usePdfLoader } from '../../hooks/gallery/usePdfLoader.js';
-import { useGalleryState } from '../../hooks/gallery/useGalleryState.js';
-import { useImageLoader } from '../../hooks/gallery/useImageLoader.js';
+import { usePdfLoader } from '../../hooks/gallery/usePdfLoader';
+import { useGalleryState } from '../../hooks/gallery/useGalleryState';
+import { useImageLoader } from '../../hooks/gallery/useImageLoader';
 import { useAppState } from '../../contexts/AppStateContext';
 
 const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}, onStatusUpdate }) => {
@@ -129,12 +129,13 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
   // Expose gallery operations to parent component for Context
   useEffect(() => {
     if (onGalleryOperationsReady) {
-      onGalleryOperationsReady({
+      const operations = {
         addMapToGallery: addPlaceholderItem,
         removeMapFromGallery: removeItemByMapType,
         clearGallery: clearGallery,
         loadObjectImages: loadObjectImages
-      });
+      };
+      onGalleryOperationsReady(operations);
     }
   }, [onGalleryOperationsReady, addPlaceholderItem, removeItemByMapType, clearGallery, loadObjectImages]);
 
