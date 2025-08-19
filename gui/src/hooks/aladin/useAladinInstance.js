@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { loadScript, hideCoordinateElements, hideCoordinateFrames, setupKeyboardControls } from '../../utils/aladin/aladinUtils';
+import { loadScript, hideCoordinateElements, hideCoordinateFrames } from '../../utils/aladin/aladinUtils';
 import { TIMEOUTS, RETICLE, DEFAULTS } from '../../utils/constants/constants';
 
 export const useAladinInstance = () => {
@@ -7,6 +7,8 @@ export const useAladinInstance = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [scriptLoaded, setScriptLoaded] = useState(false);
+  
+  // Track keyboard initialization separately (now handled by useAladinControls)
   const keyboardInitRef = useRef(false);
 
   const setupAladinInstance = (aladin) => {
@@ -73,14 +75,7 @@ export const useAladinInstance = () => {
     if (scriptLoaded) initializeAladin(); 
   }, [scriptLoaded]);
 
-  // Setup keyboard controls when instance is ready
-  useEffect(() => {
-    if (!aladinInstance) return;
-    if (!keyboardInitRef.current) { 
-      setupKeyboardControls(aladinInstance); 
-      keyboardInitRef.current = true; 
-    }
-  }, [aladinInstance]);
+  // Note: Keyboard controls are now handled by useAladinControls hook
 
   const retry = () => {
     setError(null);

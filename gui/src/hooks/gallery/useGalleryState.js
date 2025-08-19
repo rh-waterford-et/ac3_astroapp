@@ -1,11 +1,15 @@
 import { useState, useCallback } from 'react';
 import { isAtObjectCoordinates } from '../../utils/gallery/galleryUtils';
 
-export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
-  // Core gallery state
+export const useGalleryState = (checkboxStates, onStatusUpdate) => {
   const [galleryItems, setGalleryItems] = useState([]);
-  const [galleryState, setGalleryState] = useState('empty'); // 'empty', 'loading', 'loaded', 'no-images', 'no-options', 'navigate-to-object'
+  const [galleryState, setGalleryStateInternal] = useState('empty');
   const [currentObjectName, setCurrentObjectName] = useState(null);
+
+  // Wrapper to log state changes  
+  const setGalleryState = useCallback((newState) => {
+    setGalleryStateInternal(newState);
+  }, []);
 
   // Set loading state for an object
   const setLoadingState = useCallback((objectName) => {
@@ -36,6 +40,7 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
 
   // Add PDF item to gallery (called by PDF loader hook)
   const addPdfItem = useCallback((pdfItem) => {
+    
     // Check if this PDF already exists
     const existingPdf = galleryItems.find(item => 
       item.type === 'pdf' && item.pdfFile.key === pdfItem.pdfFile.key
@@ -45,14 +50,20 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
       return false; // Already exists, don't add
     }
     
-    setGalleryItems(prev => [...prev, pdfItem]);
+    setGalleryItems(prev => {
+      const updated = [...prev, pdfItem];
+      return updated;
+    });
     setGalleryState('loaded');
     return true; // Successfully added
   }, [galleryItems]);
 
   // Clear PDF items from gallery
   const clearPdfItems = useCallback(() => {
-    setGalleryItems(prev => prev.filter(item => item.type !== 'pdf'));
+    setGalleryItems(prev => {
+      const pdfCount = prev.filter(item => item.type === 'pdf').length;
+      return prev.filter(item => item.type !== 'pdf');
+    });
   }, []);
 
   // Add placeholder item to gallery
@@ -105,7 +116,7 @@ export const useGalleryState = (checkboxStates = {}, onStatusUpdate) => {
     
     // Show empty message if no items left
     setGalleryItems(prev => {
-      if (prev.length === 0) {
+      if (prev.length === 0 && galleryState !== 'loading') {
         setGalleryState('empty');
       }
       return prev;

@@ -1,62 +1,65 @@
 import React from 'react';
-import { useState, useRef } from 'react';
-import Sidebar from './components/aladin/Sidebar';
-import Gallery from './components/aladin/Gallery';
-import StatusBar from './components/aladin/StatusBar';
-import ErrorOverlay from './components/aladin/ErrorOverlay';
-import GalleryModal from './components/aladin/gallery/modal/GalleryModal';
 import TabNavigation from './components/ui/TabNavigation';
-import PipelineAppSelector from './components/pipeline/PipelineAppSelector';
-import HeaderControls from './components/aladin/HeaderControls';
-
+import Gallery from './components/aladin/Gallery';
+import Sidebar from './components/aladin/Sidebar';
 import AladinInteractions from './components/aladin/AladinInteractions';
-import { MODAL_DIMENSIONS } from './utils/constants/constants';
+import HeaderControls from './components/aladin/HeaderControls';
+import StatusBar from './components/aladin/StatusBar';
+import ImageModal from './components/ui/ImageModal';
+import GalleryModal from './components/aladin/gallery/modal/GalleryModal';
+import PipelineAppSelector from './components/pipeline/PipelineAppSelector';
 import DatasetsList from './components/pipeline/DatasetsList';
+import UploadZone from './components/upload/UploadZone';
 import logoImage from './assets/AC3-LogoConFrase.jpg';
-import { GalleryProvider, useGallery } from './contexts/GalleryContext';
 import { AppStateProvider } from './contexts/AppStateContext';
+import { GalleryProvider, useGallery } from './contexts/GalleryContext';
 import { useAladinInstance } from './hooks/aladin/useAladinInstance';
+import { useAladinControls } from './hooks/aladin/useAladinControls';
 import { useSidebarControls } from './hooks/ui/useSidebarControls';
-import { useGalaxySearch } from './hooks/ui/useGalaxySearch';
 import { useTabManager } from './hooks/ui/useTabManager';
-import { useSurveyControls } from './hooks/ui/useSurveyControls';
 import { useUploadWarning } from './hooks/ui/useUploadWarning';
 
-// Main App Content that uses Gallery Context
 function AppContent({ onGalleryOperationsReady }) {
-  // Use Aladin instance hook for all Aladin-related state and initialization
-  const { aladinInstance, isLoading, error, retry, scriptLoaded } = useAladinInstance();
-  
-  const [selectedApp, setSelectedApp] = useState('starlight'); 
-  const modalRndRef = useRef(null);
+  // Aladin instance and loading state
+  const { aladinInstance, isLoading, error, retry } = useAladinInstance();
 
-  // Use Gallery Context instead of window functions
+  // Use gallery context with proper hook
   const gallery = useGallery();
+
+  // Centralized Aladin controls - REPLACES multiple hooks
+  const {
+    survey,
+    format,
+    status,
+    searchTerm,
+    surveys,
+    formats,
+    handleSurveyChange,
+    handleFormatChange,
+    handleSearch,
+    setSearchTerm
+  } = useAladinControls(aladinInstance, gallery);
 
   // Use sidebar controls hook for all checkbox state and control logic
   const { sidebarState, handleCheckboxChange } = useSidebarControls(aladinInstance, gallery);
 
-  // Use galaxy search hook for search functionality
-  const { handleSearch } = useGalaxySearch(aladinInstance, gallery);
-
   // Use tab manager hook for tab state and gallery restoration
   const { activeTab, setActiveTab } = useTabManager(aladinInstance, sidebarState, gallery);
 
-  // Use survey controls hook for format and survey changes
-  const { handleFormatChange, handleSurveyChange } = useSurveyControls(aladinInstance);
-
   // Use upload warning hook for beforeunload protection
   useUploadWarning();
+
+  // Selected app state for pipeline tab
+  const [selectedApp, setSelectedApp] = React.useState('starlight');
 
   return (
     <div className="app">
       <header className="app-header">
         <div className="header-left">
           <div className="app-logo">
-            <img src={logoImage} alt="AC³ Logo" className="logo-image" />
+            <img src={logoImage} alt="AC3 Logo" className="logo-image" />
           </div>
-          {/* Tab Navigation */}
-          <TabNavigation activeTab={activeTab} onSelect={setActiveTab} />
+          <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
           {/* App Selection for Pipeline */}
           {activeTab === 'pipeline' && (
             <PipelineAppSelector selectedApp={selectedApp} onSelect={setSelectedApp} />
@@ -65,9 +68,15 @@ function AppContent({ onGalleryOperationsReady }) {
         {/* Integrated Controls */}
         {activeTab === 'maps' && (
           <HeaderControls
+            survey={survey}
+            format={format}
+            searchTerm={searchTerm}
+            surveys={surveys}
+            formats={formats}
             onFormatChange={handleFormatChange}
             onSurveyChange={handleSurveyChange}
             onSearch={handleSearch}
+            onSearchTermChange={setSearchTerm}
           />
         )}
       </header>
@@ -78,15 +87,20 @@ function AppContent({ onGalleryOperationsReady }) {
           <div className="loading-overlay">
             <div className="astro-loader-galaxy"></div>
             <p>
-              {!scriptLoaded ? 'Loading Aladin Lite v3 script...' : 'Initializing Aladin Lite v3...'}
+              Loading Aladin Lite
             </p>
           </div>
         )}
         {error && (
-          <ErrorOverlay
-            error={error}
-            onRetry={retry}
-          />
+          <div className="error-overlay">
+            <div className="error-content">
+              <h3>⚠️ Aladin Lite Failed to Load</h3>
+              <p>{error}</p>
+              <button onClick={retry} className="retry-button">
+                🔄 Retry Loading
+              </button>
+            </div>
+          </div>
         )}
         <div id="aladin-lite-div"></div>
       </div>
@@ -97,6 +111,7 @@ function AppContent({ onGalleryOperationsReady }) {
             <>
               {/* Right Sidebar */}
               <Sidebar 
+                aladinInstance={aladinInstance}
                 checkboxStates={sidebarState}
                 onCheckboxChange={handleCheckboxChange}
               />
@@ -117,7 +132,11 @@ function AppContent({ onGalleryOperationsReady }) {
         <>
           {/* Bottom Gallery */}
           <div className="bottom-overlay gallery-overlay">
-            <Gallery checkboxStates={sidebarState} onGalleryOperationsReady={onGalleryOperationsReady} />
+            <Gallery 
+              aladinInstance={aladinInstance} 
+              checkboxStates={sidebarState}
+              onGalleryOperationsReady={onGalleryOperationsReady}
+            />
           </div>
           {/* Status Bar */}
           <div className="bottom-overlay status-overlay">
@@ -129,23 +148,18 @@ function AppContent({ onGalleryOperationsReady }) {
       {/* Interactions Handler (invisible component) */}
       <AladinInteractions aladinInstance={aladinInstance} />
       
-      {/* Gallery Modal */}
-      <GalleryModal
-        ref={modalRndRef}
-        defaultPosition={{ x: 50, y: 50 }}
-        defaultSize={{ width: MODAL_DIMENSIONS.width, height: MODAL_DIMENSIONS.height }}
-      />
+      {/* Modal Components - Rendered at top level for full-screen display */}
+      <GalleryModal />
     </div>
   );
 }
 
-// Main App Wrapper with Contexts
 function App() {
-  const [galleryOperations, setGalleryOperations] = useState(null);
+  const [galleryOperations, setGalleryOperations] = React.useState(null);
 
-  const handleGalleryOperationsReady = (operations) => {
+  const handleGalleryOperationsReady = React.useCallback((operations) => {
     setGalleryOperations(operations);
-  };
+  }, []);
 
   return (
     <AppStateProvider>

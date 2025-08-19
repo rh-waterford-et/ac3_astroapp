@@ -72,21 +72,6 @@ const ModalImageViewer = ({ imageData, isVisible, onLoad, onError }) => {
         />
       )}
       
-      {/* Loading indicator */}
-      {!isImageLoaded && (
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          color: '#a0aec0',
-          fontSize: '14px',
-          pointerEvents: 'none',
-          zIndex: 10
-        }}>
-          Loading {isPdf ? 'PDF' : 'image'}...
-        </div>
-      )}
     </>
   );
 };

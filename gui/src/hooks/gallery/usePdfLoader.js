@@ -15,7 +15,6 @@ export const usePdfLoader = (onPdfLoaded, onClearPdfs) => {
   
   // Main entry point for loading PDF files
   const tryLoadPpxfPdfFiles = useCallback(async (objectName) => {
-    
     // Clear existing H4 items using callback
     if (onClearPdfs) {
       onClearPdfs();
@@ -26,7 +25,8 @@ export const usePdfLoader = (onPdfLoaded, onClearPdfs) => {
     
     try {
       // Progressive loading with cache
-      return await loadPdfsProgressively(normalizedObjectName, objectName, null);
+      const result = await loadPdfsProgressively(normalizedObjectName, objectName, null);
+      return result;
     } catch (error) {
       return 0;
     }

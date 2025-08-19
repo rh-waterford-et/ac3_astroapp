@@ -21,6 +21,7 @@ export const useImageLoader = ({
 
   // Main image loading orchestration
   const loadObjectImages = useCallback(async (objectName) => {
+    console.log(`🚀 loadObjectImages called for: ${objectName}`);
     
     // Use context aladinInstance with fallback to prop and window (for backward compatibility)
     const currentAladinInstance = contextAladinInstance || aladinInstance || window.aladinInstance;
@@ -63,9 +64,20 @@ export const useImageLoader = ({
       if (isChecked) {
         // Special handling for H4: load dynamic PDF files from S3
         if (mapType.key === 'h4') {
-          const pdfsLoaded = await tryLoadPpxfPdfFiles(objectName);
-          if (pdfsLoaded > 0) {
-            imagesLoaded += pdfsLoaded;
+          console.log(`🔥 H4 processing starting for ${objectName}`);
+          
+          if (!tryLoadPpxfPdfFiles) {
+            continue;
+          }
+          
+          try {
+            const pdfsLoaded = await tryLoadPpxfPdfFiles(objectName);
+            console.log(`🔥 H4 processing complete: ${pdfsLoaded} PDFs loaded`);
+            if (pdfsLoaded > 0) {
+              imagesLoaded += pdfsLoaded;
+            }
+          } catch (error) {
+            console.log(`❌ H4 processing error:`, error);
           }
         } else {
           // Use existing static image logic for other map types

@@ -1,6 +1,17 @@
 import React, { useRef, useEffect } from 'react';
+import PropTypes from 'prop-types';
 
-export default function HeaderControls({ onFormatChange, onSurveyChange, onSearch }) {
+export default function HeaderControls({ 
+  survey,
+  format, 
+  searchTerm,
+  surveys,
+  formats,
+  onFormatChange, 
+  onSurveyChange, 
+  onSearch,
+  onSearchTermChange 
+}) {
   const inputRef = useRef(null);
   const buttonRef = useRef(null);
 
@@ -26,14 +37,15 @@ export default function HeaderControls({ onFormatChange, onSurveyChange, onSearc
       <div className="header-control-group">
         <div className="select-wrapper">
           <select
-            id="format-select"
-            defaultValue="fits"
+            value={format}
             className="header-select"
             onChange={(e) => onFormatChange?.(e.target.value)}
           >
-            <option value="fits">FITS</option>
-            <option value="jpeg">JPEG</option>
-            <option value="png">PNG</option>
+            {formats.map(fmt => (
+              <option key={fmt} value={fmt}>
+                {fmt.toUpperCase()}
+              </option>
+            ))}
           </select>
           <div className="select-arrow">
             <svg width="10" height="6" viewBox="0 0 12 8" fill="none">
@@ -46,8 +58,7 @@ export default function HeaderControls({ onFormatChange, onSurveyChange, onSearc
       <div className="header-control-group">
         <div className="select-wrapper">
           <select
-            id="survey-select"
-            defaultValue="P/DSS2/color"
+            value={survey}
             className="header-select"
             onChange={(e) => onSurveyChange?.(e.target.value)}
           >
@@ -71,8 +82,10 @@ export default function HeaderControls({ onFormatChange, onSurveyChange, onSearc
             ref={inputRef}
             type="text"
             id="galaxy-search"
-            className="header-search-input"
+            value={searchTerm}
             placeholder="Enter galaxy name..."
+            className="header-search-input"
+            onChange={(e) => onSearchTermChange?.(e.target.value)}
           />
           <div className="header-search-icon">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -85,7 +98,7 @@ export default function HeaderControls({ onFormatChange, onSurveyChange, onSearc
           ref={buttonRef}
           id="search-galaxy-btn"
           className="header-search-btn"
-          onClick={() => onSearch?.(inputRef.current?.value.trim() ?? '')}
+          onClick={() => onSearch?.(searchTerm)}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
             <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
@@ -95,4 +108,16 @@ export default function HeaderControls({ onFormatChange, onSurveyChange, onSearc
       </div>
     </div>
   );
-} 
+}
+
+HeaderControls.propTypes = {
+  survey: PropTypes.string.isRequired,
+  format: PropTypes.string.isRequired,
+  searchTerm: PropTypes.string.isRequired,
+  surveys: PropTypes.arrayOf(PropTypes.string).isRequired,
+  formats: PropTypes.arrayOf(PropTypes.string).isRequired,
+  onFormatChange: PropTypes.func,
+  onSurveyChange: PropTypes.func,
+  onSearch: PropTypes.func,
+  onSearchTermChange: PropTypes.func
+}; 

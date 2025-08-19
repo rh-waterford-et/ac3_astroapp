@@ -51,7 +51,8 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
   useEffect(() => {
     if (!aladinInstance) return;
     
-    setupViewChangeMonitoring(aladinInstance);
+    // TEMPORARILY DISABLED to test H4 flashing issue
+    // setupViewChangeMonitoring(aladinInstance);
   }, [aladinInstance]);
 
   // Set up view change monitoring inside the component
@@ -64,8 +65,9 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
       // Debounce the view change to avoid too many updates
       clearTimeout(viewChangeTimeout);
       viewChangeTimeout = setTimeout(() => {
-        // Check if we have a current object and need to update gallery
-        if (currentLoadedObject) {
+        // Only trigger if we have a consistent current object in both places
+        // This prevents triggering during checkbox state transitions
+        if (currentLoadedObject && window.currentLoadedObject === currentLoadedObject) {
           loadObjectImages(currentLoadedObject);
         }
       }, 500); // Wait 500ms after view stops changing

@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { MAP_CONTROLS } from '../../utils/constants/constants';
+import { useAppState } from '../../contexts/AppStateContext';
 
 export const useSidebarControls = (aladinInstance, gallery) => {
+  // Import App state to compare with window global
+  const { currentLoadedObject: contextObject } = useAppState();
+  
   // Sidebar checkbox states
   const [sidebarState, setSidebarState] = useState({
     'map-stellar-velocity': false,
@@ -20,6 +24,10 @@ export const useSidebarControls = (aladinInstance, gallery) => {
   });
 
   const handleCheckboxChange = (checkboxId, isChecked) => {
+    if (checkboxId === 'map-h4') {
+      console.log(`📋 H4 checkbox changed to: ${isChecked}, currentObject: ${window.currentLoadedObject}`);
+    }
+    
     setSidebarState(prev => ({ ...prev, [checkboxId]: isChecked }));
     
     // Handle Aladin display controls
@@ -40,9 +48,9 @@ export const useSidebarControls = (aladinInstance, gallery) => {
     if (mapControls[checkboxId]) {
       const config = mapControls[checkboxId];
       const currentObject = window.currentLoadedObject;
-      if (currentObject) {
-        gallery.loadObjectImages(currentObject);
-      } else {
+      if (!currentObject) {
+        // Only handle placeholder logic when no object is loaded
+        // Gallery state management handles loading when object exists
         const mapType = checkboxId.replace('map-', '');
         if (isChecked) {
           gallery.addMapToGallery(mapType, config.label, config.icon);

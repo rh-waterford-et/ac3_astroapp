@@ -217,12 +217,6 @@ const setupKeyboardShortcuts = (aladin) => {
         }
         event.preventDefault();
         break;
-      case 'h':
-      case 'H':
-        // Show help
-        showKeyboardHelp();
-        event.preventDefault();
-        break;
     }
   };
 
@@ -245,36 +239,6 @@ const updateStatusDisplays = (aladin) => {
     }
   } catch (error) {
   }
-};
-
-/**
- * Show keyboard help dialog
- */
-const showKeyboardHelp = () => {
-  const helpText = `
-🚀 Universe Explorer - Keyboard Shortcuts:
-
-Navigation:
-• Click anywhere to center and zoom in
-• + or = : Zoom in
-• - : Zoom out
-• R : Reset to initial view (M101)
-• G : Go to object (enter name or coordinates)
-
-Controls:
-• F : Toggle image format (FITS/JPEG/PNG)
-• S : Cycle through surveys
-• H : Show this help
-
-Mouse:
-• Click: Center and zoom in
-• Drag: Pan around the sky
-• Hover: Show coordinates in status bar
-
-Enjoy exploring the universe! 🌌
-  `;
-  
-  alert(helpText);
 };
 
 AladinInteractions.propTypes = {
