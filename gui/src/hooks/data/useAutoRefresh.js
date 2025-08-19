@@ -1,12 +1,13 @@
 import { useEffect, useCallback } from 'react';
 
-export const useAutoRefresh = (selectedDataset, refreshCallbacks, intervalMs = 5000) => {
-  // Combined background refresh function
+export const useAutoRefresh = (selectedDataset, refreshCallbacks, intervalMs = 60000) => {
+
   const performBackgroundRefresh = useCallback(async () => {
     if (!selectedDataset) return;
     
     // Call all provided refresh callbacks
-    await Promise.all(refreshCallbacks.filter(callback => typeof callback === 'function'));
+    const validCallbacks = refreshCallbacks.filter(callback => typeof callback === 'function');
+    await Promise.all(validCallbacks.map(callback => callback()));
     
   }, [selectedDataset, refreshCallbacks]);
 

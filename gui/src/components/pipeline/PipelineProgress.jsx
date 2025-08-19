@@ -38,7 +38,7 @@ function PipelineProgress({ datasets, inputFiles, inputFilesTotalCount, outputFi
               </span>
             </button>
           )}
-          <h3>Pipeline Progress Monitor</h3>
+          <h3>Pipeline Progress</h3>
         </div>
         <div className="pane-header-right">
           <div className="pane-count">{datasets.length}</div>

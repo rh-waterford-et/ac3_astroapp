@@ -14,7 +14,27 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
   });
 
   const isRefreshing = useRef(false);
-  const abortController = useRef(null);
+  const currentProcessor = useRef(processorType);
+  const isProcessorChanging = useRef(false);
+
+  // Clear all data when processor type changes
+  useEffect(() => {
+    // Mark processor as changing to prevent stale loads
+    isProcessorChanging.current = true;
+    currentProcessor.current = processorType;
+    
+    setFiles([]);
+    setFilesLoaded(false);
+    setPagination({ offset: 0, hasMore: false, loading: false, total: 0 });
+    setError(null);
+    setLoading(false);
+    isRefreshing.current = false;
+    
+    // Reset processor changing flag after state updates
+    setTimeout(() => {
+      isProcessorChanging.current = false;
+    }, 0);
+  }, [processorType]);
 
   // Helper function to check if an item is a valid file (has extension, not a directory)
   const isValidFile = useCallback((fileName) => {
@@ -47,27 +67,18 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }, []);
 
-  // Cancel pending requests
-  const cancelRequests = useCallback(() => {
-    if (abortController.current) {
-      abortController.current.abort();
-      abortController.current = null;
-    }
-  }, [fileType]);
-
   // Load initial files with pagination
   const loadFiles = useCallback(async (silent = false) => {
-    if (!selectedDataset || isRefreshing.current) return;
+    if (!selectedDataset) return;
     
-    isRefreshing.current = true;
-    
-    // Cancel any existing request
-    if (abortController.current) {
-      abortController.current.abort();
+    if (isRefreshing.current) {
+      return;
     }
     
-    // Create new AbortController for this request
-    abortController.current = new AbortController();
+    const requestedDataset = selectedDataset; // Capture at request time
+    const requestedProcessor = processorType; // Capture at request time
+    
+    isRefreshing.current = true;
     
     if (!silent) {
       setLoading(true);
@@ -75,13 +86,20 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
     
     try {
       const response = await getDatasetFilesUnified(
-        selectedDataset, 
-        processorType, 
+        requestedDataset, 
+        requestedProcessor, 
         fileType, 
         0, 
-        50, 
-        abortController.current.signal
+        40
       );
+
+      const currentState = `${processorType}/${selectedDataset}`;
+      const requestState = `${requestedProcessor}/${requestedDataset}`;
+      
+      // Ignore if processor changed (cross-processor contamination) OR dataset changed (within processor)
+      if (processorType !== requestedProcessor || selectedDataset !== requestedDataset) {
+        return; // Ignore stale files
+      }
 
       // Process files
       const processedFiles = response.files
@@ -96,21 +114,19 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
 
       setFiles(processedFiles);
       setPagination({
-        offset: 50, // Next offset to load
-        hasMore: response.pagination.hasMore,
+        offset: processedFiles.length,
+        hasMore: response.pagination.total > processedFiles.length,
         loading: false,
         total: response.pagination.total
       });
       setFilesLoaded(true);
-    } catch (err) {
-      if (err.name === 'AbortError') {
+    } catch (error) {
+      // Ignore errors if processor or dataset changed
+      if (processorType !== requestedProcessor || selectedDataset !== requestedDataset) {
         return;
       }
       
-      if (!silent) {
-        setError(err.message || `Failed to load ${fileType} files`);
-      }
-      setPagination({ offset: 0, hasMore: false, loading: false, total: 0 });
+      setError(error.message || 'Failed to load files');
     } finally {
       if (!silent) {
         setLoading(false);
@@ -123,19 +139,23 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
   const loadMoreFiles = useCallback(async () => {
     if (!selectedDataset || pagination.loading || !pagination.hasMore) return;
 
+    const requestedDataset = selectedDataset; // Capture at request time
+    const requestedProcessor = processorType; // Capture at request time
     setPagination(prev => ({ ...prev, loading: true }));
 
     try {
-      // Load 100 files per batch for subsequent loads (after initial 50)
-      
       const response = await getDatasetFilesUnified(
-        selectedDataset, 
-        processorType, 
+        requestedDataset, 
+        requestedProcessor, 
         fileType,
         pagination.offset, 
-        100,
-        abortController.current?.signal
+        50  
       );
+
+      // Ignore if processor changed (cross-processor contamination) OR dataset changed (within processor)
+      if (processorType !== requestedProcessor || selectedDataset !== requestedDataset) {
+        return; // Ignore stale files
+      }
 
       // Process new files
       const newFiles = response.files
@@ -148,15 +168,20 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
           key: file.key
         }));
 
-      // ADDITIVE: Append to existing files, never overwrite
+      // Append to existing files
       setFiles(prev => [...prev, ...newFiles]);
       setPagination({
-        offset: pagination.offset + 100,
-        hasMore: response.pagination.hasMore,
+        offset: pagination.offset + 50,
+        hasMore: response.pagination.total > (pagination.offset + newFiles.length),
         loading: false,
         total: response.pagination.total
       });
-    } catch (err) {
+    } catch (error) {
+      // Ignore errors if processor or dataset changed
+      if (processorType !== requestedProcessor || selectedDataset !== requestedDataset) {
+        return;
+      }
+      
       setPagination(prev => ({ ...prev, loading: false }));
     }
   }, [selectedDataset, processorType, fileType, pagination.offset, pagination.loading, pagination.hasMore, isValidFile, formatFileSize]);
@@ -165,9 +190,17 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
   const refreshFilesCount = useCallback(async () => {
     if (!selectedDataset || isRefreshing.current || pagination.loading) return;
     
+    const requestedDataset = selectedDataset; // Capture at request time
+    const requestedProcessor = processorType; // Capture at request time
+    
     try {
       // Just check the first page to get updated total count
-      const response = await getDatasetFilesUnified(selectedDataset, processorType, fileType, 0, 1);
+      const response = await getDatasetFilesUnified(requestedDataset, requestedProcessor, fileType, 0, 1);
+      
+      // Ignore if processor changed (cross-processor contamination) OR dataset changed (within processor)
+      if (processorType !== requestedProcessor || selectedDataset !== requestedDataset) {
+        return; // Ignore stale count
+      }
       
       // Only update the total count if it has changed
       if (response.pagination.total !== pagination.total) {
@@ -178,6 +211,11 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
         }));
       }
     } catch (err) {
+      // Ignore errors if processor or dataset changed
+      if (processorType !== requestedProcessor || selectedDataset !== requestedDataset) {
+        return;
+      }
+      // Silently fail for auto-refresh
     }
   }, [selectedDataset, processorType, fileType, pagination.total, pagination.offset, pagination.loading]);
 
@@ -214,37 +252,31 @@ export const usePaginatedFiles = (selectedDataset, fileType, processorType) => {
 
   // Manual refresh
   const refresh = useCallback(async () => {
-    if (!selectedDataset) return;
-    
-    // Reset pagination and reload from start, but preserve current total
-    const currentTotal = pagination.total;
-    setFiles([]);
-    setPagination({ offset: 0, hasMore: false, loading: false, total: currentTotal });
-    setFilesLoaded(false);
     setError(null); // Clear any previous errors
-    await loadFiles();
-  }, [selectedDataset, fileType, pagination.total, loadFiles]);
+    await loadFiles(false);
+  }, [loadFiles]);
 
   // Clear files when dataset selection changes
   useEffect(() => {
+    
+    // Don't load files if processor is changing or if dataset is from wrong processor
+    if (isProcessorChanging.current) {
+      return;
+    }
+    
     if (selectedDataset) {
       setFilesLoaded(false);
       setFiles([]); // Clear files when changing datasets
       setPagination({ offset: 0, hasMore: false, loading: false, total: 0 }); // Reset pagination
+      isRefreshing.current = false; // Reset refreshing state to allow new calls
       loadFiles();
     } else {
       setFiles([]);
       setFilesLoaded(false);
       setPagination({ offset: 0, hasMore: false, loading: false, total: 0 });
+      isRefreshing.current = false; // Reset refreshing state
     }
   }, [selectedDataset, loadFiles]);
-
-  // Cleanup: cancel requests when component unmounts
-  useEffect(() => {
-    return () => {
-      cancelRequests();
-    };
-  }, [fileType, cancelRequests]);
 
   return {
     // State

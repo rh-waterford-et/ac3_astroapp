@@ -21,7 +21,12 @@ const VirtualizedFileList = ({
   itemHeight = 60,
   truncateFileName = (name) => name,
   isInputFile = true,
-  processorType = 'starlight'
+  processorType = 'starlight',
+  // Dataset-specific props
+  isDatasetMode = false,
+  selectedDatasetId = null,
+  onSelectDataset = null,
+  onStartProcessing = null
 }) => {
   const listRef = useRef();
 
@@ -47,7 +52,7 @@ const VirtualizedFileList = ({
 
   // File item component - styled to match current theme
   const FileItem = React.memo(({ index, style }) => {
-    const file = items[index];
+    const item = items[index];
     
     // If index is beyond our loaded items, show loader only at the boundary
     if (index >= items.length) {
@@ -57,7 +62,7 @@ const VirtualizedFileList = ({
             <div className="file-loader-item">
               <div className="astro-loading-container" style={{ padding: '0.5rem 0', gap: '0.5rem' }}>
                 <div className="astro-loader-galaxy" style={{ width: '16px', height: '16px' }}></div>
-                <div className="astro-loading-text" style={{ fontSize: '10px' }}>Loading more files...</div>
+                <div className="astro-loading-text" style={{ fontSize: '10px' }}>Loading more {isDatasetMode ? 'datasets' : 'files'}...</div>
               </div>
             </div>
           </div>
@@ -66,21 +71,68 @@ const VirtualizedFileList = ({
       return <div style={style}></div>;
     }
 
-    // Regular file item
-    if (!file) {
+    // Regular item (file or dataset)
+    if (!item) {
       return <div style={style}></div>;
     }
 
+    // Dataset item rendering
+    if (isDatasetMode) {
+      const isSelected = selectedDatasetId === item.id;
+      
+      return (
+        <div style={style}>
+          <div className={`dataset-item-container ${isSelected ? 'active' : ''}`}>
+            <button
+              className="dataset-item"
+              onClick={() => onSelectDataset && onSelectDataset(item.id)}
+            >
+              <div className="dataset-info">
+                <div className="dataset-name">{item.name}</div>
+              </div>
+            </button>
+            <div className="dataset-actions">
+              {onStartProcessing && (
+                <button
+                  className="dataset-process-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStartProcessing(item.name);
+                  }}
+                  title={`Start processing "${item.name}"`}
+                >
+                  ▶
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  className="dataset-delete-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(item.id, item.name);
+                  }}
+                  title={`Delete dataset "${item.name}"`}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // File item rendering (existing logic)
     return (
       <div style={style}>
         <div className="file-item-container">
           <div className="file-item">
             <div className="file-info">
-              <div className="file-name" title={file.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>
-                {truncateFileName(file.name)}
+              <div className="file-name" title={item.name} style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                {truncateFileName(item.name)}
               </div>
               <div className="file-details">
-                <div className="file-size">{file.size}</div>
+                <div className="file-size">{item.size}</div>
               </div>
             </div>
 
@@ -89,26 +141,26 @@ const VirtualizedFileList = ({
             <button 
               type="button"
               className="file-process-btn"
-              aria-label={`Process file ${file.name} with ${processorType}`}
+              aria-label={`Process file ${item.name} with ${processorType}`}
               onClick={(e) => {
                 e.stopPropagation();
-                onProcessFile(file.name);
+                onProcessFile(item.name);
               }}
-              title={`Process file "${file.name}" with ${processorType}`}
+              title={`Process file "${item.name}" with ${processorType}`}
             >
               ▶
             </button>
           )}
-          {onDelete && (
+          {onDelete && !isDatasetMode && (
             <button 
               type="button"
               className="file-delete-btn"
-              aria-label={`Delete file ${file.name}`}
+              aria-label={`Delete file ${item.name}`}
               onClick={(e) => {
                 e.stopPropagation();
-                onDelete(file.key, file.name, isInputFile);
+                onDelete(item.key, item.name, isInputFile);
               }}
-              title={`Delete file "${file.name}"`}
+              title={`Delete file "${item.name}"`}
             >
               ×
             </button>
@@ -121,7 +173,7 @@ const VirtualizedFileList = ({
   FileItem.displayName = 'FileItem';
 
   // Empty state
-  if (!selectedDataset) {
+  if (!isDatasetMode && !selectedDataset) {
     return (
       <div className="empty-pane">
         <div className="empty-icon">📂</div>
@@ -214,7 +266,12 @@ VirtualizedFileList.propTypes = {
   truncateFileName: PropTypes.func,
 
   isInputFile: PropTypes.bool,
-  processorType: PropTypes.string
+  processorType: PropTypes.string,
+  // Dataset-specific props
+  isDatasetMode: PropTypes.bool,
+  selectedDatasetId: PropTypes.string,
+  onSelectDataset: PropTypes.func,
+  onStartProcessing: PropTypes.func
 };
 
 export default VirtualizedFileList; 

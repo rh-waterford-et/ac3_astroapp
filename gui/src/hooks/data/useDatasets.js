@@ -23,6 +23,14 @@ export default function useDatasets(processorType) {
     }
   }, [processorType, currentDataset]);
 
+  // Clear all data when processor type changes
+  useEffect(() => {
+    setAvailableDatasets([]);
+    setCurrentDataset('');
+    setError(null);
+    setLoading(false);
+  }, [processorType]);
+
   useEffect(() => {
     // Initial fetch for this processor; keep previous list until new data arrives
     refresh(true, true);

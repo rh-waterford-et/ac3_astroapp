@@ -14,7 +14,15 @@ function DatasetsList({ processorType }) {
   // Extract data management into hooks
   const datasetOps = useDatasetOperations(processorType);
   const inputFilesData = usePaginatedFiles(datasetOps.selectedDataset, 'input', processorType);
-  const outputFilesData = usePaginatedFiles(datasetOps.selectedDataset, 'output', processorType);
+  
+  // Output files should only load after input files have completed (prevents backend overload)
+  const outputFilesData = usePaginatedFiles(
+    inputFilesData.filesLoaded && inputFilesData.files.length > 0 && !inputFilesData.loading
+      ? datasetOps.selectedDataset 
+      : null, 
+    'output', 
+    processorType
+  );
   
   // Consolidated collapse state - simple and clean
   const [collapseState, setCollapseState] = useState({
@@ -28,11 +36,13 @@ function DatasetsList({ processorType }) {
     setCollapseState(prev => ({ ...prev, [section]: !prev[section] }));
   }, []);
 
-  // Auto-refresh for file counts
-  useAutoRefresh(datasetOps.selectedDataset, [
-    inputFilesData.refreshFilesCount,
-    outputFilesData.refreshFilesCount
-  ]);
+  // Auto-refresh for file counts (respect input→output sequencing)
+  const refreshCallbacks = [inputFilesData.refreshFilesCount];
+  if (inputFilesData.filesLoaded) {
+    refreshCallbacks.push(outputFilesData.refreshFilesCount);
+  }
+  
+  useAutoRefresh(datasetOps.selectedDataset, refreshCallbacks, 60000); // 60 seconds - standard for file management
 
   const fileUploadRef = useRef(null);
 
@@ -116,15 +126,12 @@ function DatasetsList({ processorType }) {
             {/* Left Pane - Dataset Selection */}
             <DatasetsPane
               datasetOps={datasetOps}
-              inputFiles={inputFilesData.files}
-              outputFiles={outputFilesData.files}
               processorType={processorType}
-              onDeleteFile={handleDeleteFile}
             />
 
             {/* Middle Pane - Input Files */}
             <FilesPane
-              title={`Input Files - ${datasetName}`}
+              title={`Input - ${datasetName}`}
               filesData={inputFilesData}
               selectedDataset={datasetOps.selectedDataset}
               onDeleteFile={handleDeleteFile}
@@ -134,7 +141,7 @@ function DatasetsList({ processorType }) {
 
             {/* Right Pane - Output Files */}
             <FilesPane
-              title={`Output Files - ${datasetName}`}
+              title={`Output - ${datasetName}`}
               filesData={outputFilesData}
               selectedDataset={datasetOps.selectedDataset}
               onDeleteFile={handleDeleteFile}

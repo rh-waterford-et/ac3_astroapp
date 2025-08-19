@@ -52,21 +52,18 @@ export const normalizeObjectName = (objectName) => {
  * @returns {boolean} - True if at object coordinates
  */
 export const isAtObjectCoordinates = (objectName, aladinInstance) => {
-  // If no coordinates stored or no object loaded, don't show images
+  // Check if we have the required data
   if (!window.currentObjectCoords || !window.currentLoadedObject) {
-    console.log(`📍 No coordinates stored (coords: ${!!window.currentObjectCoords}, object: ${window.currentLoadedObject})`);
     return false;
   }
-  
-  // Only check coordinates if this is the currently loaded object
-  if (window.currentLoadedObject !== objectName) {
-    console.log(`📍 Object mismatch: requested ${objectName}, loaded ${window.currentLoadedObject}`);
+
+  // Check if this is the correct object
+  if (objectName !== window.currentLoadedObject) {
     return false;
   }
-  
-  // Get current Aladin position
-  if (!aladinInstance) {
-    console.log(`📍 No Aladin instance available`);
+
+  // Check if Aladin instance is available
+  if (!window.aladinInstance) {
     return false;
   }
   
@@ -74,9 +71,9 @@ export const isAtObjectCoordinates = (objectName, aladinInstance) => {
     const currentPos = aladinInstance.getRaDec();
     const objectCoords = window.currentObjectCoords;
     
+    // Validate coordinate data
     // Validate coordinates
     if (!currentPos || !objectCoords || currentPos.length < 2 || objectCoords.length < 2) {
-      console.log(`📍 Invalid coordinate data: current=${currentPos}, object=${objectCoords}`);
       return false;
     }
     
@@ -85,7 +82,6 @@ export const isAtObjectCoordinates = (objectName, aladinInstance) => {
     const deltaDec = Math.abs(currentPos[1] - objectCoords[1]);
     
     const isNear = deltaRA < COORDINATE_TOLERANCE && deltaDec < COORDINATE_TOLERANCE;
-    console.log(`📍 Coordinate check: Current(${currentPos[0].toFixed(3)}, ${currentPos[1].toFixed(3)}) vs Object(${objectCoords[0].toFixed(3)}, ${objectCoords[1].toFixed(3)}) - Distance: RA=${deltaRA.toFixed(3)}°, Dec=${deltaDec.toFixed(3)}° - Near: ${isNear}`);
     
     return isNear;
   } catch (error) {
@@ -121,7 +117,6 @@ export const tryGetObjectImage = (mapType, objectName, imageMap) => {
   
   // Check if we have an image map for this object
   if (!imageMap[normalizedName]) {
-    console.log(`No image map found for object: ${normalizedName}`);
     return null;
   }
   
@@ -129,14 +124,12 @@ export const tryGetObjectImage = (mapType, objectName, imageMap) => {
   const imageSrc = imageMap[normalizedName][mapType.suffix];
   
   if (imageSrc) {
-    console.log(`✅ Found image for ${objectName} ${mapType.label}: ${mapType.suffix}`);
     return {
       imageSrc,
       mapType,
       objectName
     };
   } else {
-    console.log(`❌ No image found for ${objectName} ${mapType.label}: ${mapType.suffix}`);
     return null;
   }
 };

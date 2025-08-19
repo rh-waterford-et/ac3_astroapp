@@ -12,15 +12,6 @@ export const useDatasetOperations = (processorType) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const isRefreshing = useRef(false);
-  const abortController = useRef(null);
-
-  // Cancel pending requests
-  const cancelRequests = useCallback(() => {
-    if (abortController.current) {
-      abortController.current.abort();
-      abortController.current = null;
-    }
-  }, []);
 
   // Load datasets with auto-selection logic
   const loadDatasets = useCallback(async (silent = false, forceAutoSelect = false) => {
@@ -35,6 +26,7 @@ export const useDatasetOperations = (processorType) => {
     
     try {
       const datasetNames = await getDatasets(processorType);
+      
       const datasetObjects = datasetNames
         .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
         .map(name => ({
@@ -69,14 +61,14 @@ export const useDatasetOperations = (processorType) => {
     }
   }, [processorType]);
 
-  // Delete dataset with selection management
+  // Delete dataset
   const deleteDataset = useCallback(async (datasetId, datasetName) => {
     const confirmed = window.confirm(`Are you sure you want to delete the dataset "${datasetName}"?`);
     
     if (!confirmed) {
       return { success: false, cancelled: true };
     }
-
+    
     try {
       setLoading(true);
       
@@ -92,7 +84,11 @@ export const useDatasetOperations = (processorType) => {
           if (remainingDatasets.length > 0) {
             // Select the first remaining dataset (alphabetically sorted)
             const nextDataset = remainingDatasets[0];
-            setSelectedDataset(nextDataset.id);
+            if (nextDataset) {
+              setSelectedDataset(nextDataset.id);
+            } else {
+              setSelectedDataset('');
+            }
           } else {
             // No datasets left, clear everything
             setSelectedDataset('');
@@ -126,7 +122,6 @@ export const useDatasetOperations = (processorType) => {
     }
 
     try {
-      
       const result = await apiStartProcessing(datasetName, processorType);
       
       if (result.success) {
@@ -152,7 +147,6 @@ export const useDatasetOperations = (processorType) => {
     }
 
     try {
-      
       const result = await apiStartSingleFileProcessing(selectedDataset, fileName, processorType);
       
       if (result.success) {
@@ -167,7 +161,10 @@ export const useDatasetOperations = (processorType) => {
 
   // Handle dataset creation callback
   const handleDatasetCreated = useCallback((datasetName) => {
-    loadDatasets(true, false); // Silent reload, no force auto-select
+    setSelectedDataset(datasetName);
+    
+    // Refresh the datasets list to include the new dataset
+    loadDatasets(false, false);
   }, [loadDatasets]);
 
   // Manual refresh
@@ -179,9 +176,6 @@ export const useDatasetOperations = (processorType) => {
   // Clear all data when processor type changes
   useEffect(() => {
     
-    // Cancel any pending requests first
-    cancelRequests();
-    
     // Clear all state immediately
     setDatasets([]);
     setSelectedDataset('');
@@ -189,17 +183,9 @@ export const useDatasetOperations = (processorType) => {
     setLoading(false);
     isRefreshing.current = false;
     
-    
     // Start fresh - force auto-select first dataset on processor switch
     loadDatasets(false, true); // forceAutoSelect = true
-  }, [processorType, cancelRequests, loadDatasets]);
-
-  // Cleanup: cancel requests when component unmounts
-  useEffect(() => {
-    return () => {
-      cancelRequests();
-    };
-  }, [cancelRequests]);
+  }, [processorType, loadDatasets]);
 
   return {
     // State
