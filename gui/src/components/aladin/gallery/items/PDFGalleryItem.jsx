@@ -23,24 +23,15 @@ const PDFGalleryItem = ({ pdfFile, objectName, onStatusUpdate }) => {
   }, [pdfFile.key, cellNumber]);
 
   const handleClick = () => {
-    console.log(`📄 Clicked on ${objectName} H4 PDF: Cell ${cellNumber}`);
-    console.log(`📄 PDF Key: ${pdfFile.key}`);
-    console.log(`📄 window.openImageModal available:`, typeof window.openImageModal);
-    
     // Create PDF URL for modal display
     const pdfUrl = createPdfModalUrl(pdfFile.key);
-    console.log(`📄 PDF URL:`, pdfUrl);
     
     // Open PDF in modal using existing modal system
     if (window.openImageModal) {
-      console.log(`📄 Calling window.openImageModal`);
       // Find the actual DOM element for compatibility with existing modal system
       const galleryItems = document.getElementById('gallery-items');
       const clickedItem = galleryItems?.querySelector(`[data-cell-number="${cellNumber}"]`);
-      console.log(`📄 Found clickedItem:`, clickedItem);
       window.openImageModal(pdfUrl, `${displayName} PDF`, objectName, clickedItem, true);
-    } else {
-      console.log(`📄 window.openImageModal not available!`);
     }
     
     // Update status

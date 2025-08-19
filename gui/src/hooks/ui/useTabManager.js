@@ -11,8 +11,6 @@ export const useTabManager = (aladinInstance, sidebarState, gallery) => {
 
   // Handle tab switching with gallery restoration for maps tab
   useEffect(() => {
-    console.log(`📂 useTabManager useEffect triggered, activeTab: ${activeTab}`);
-    
     if (activeTab === 'maps') {
       // Clear any existing timeout
       if (tabTimeoutRef.current) clearTimeout(tabTimeoutRef.current);
@@ -25,7 +23,6 @@ export const useTabManager = (aladinInstance, sidebarState, gallery) => {
         
         // Clear existing gallery items using React hook method
         if (galleryRef.current?.clearGallery) {
-          console.log(`🗑️ useTabManager: clearGallery called by timeout`);
           galleryRef.current.clearGallery();
         }
         

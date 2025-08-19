@@ -61,11 +61,8 @@ export const handleGalaxySearch = (aladin, input, gallery = null) => {
   // Use Aladin's gotoObject method
   aladin.gotoObject(cleanInput, {
     success: (coords) => {
-      console.log(`🌟 aladinUtils success callback for: ${cleanInput}, currentObject: ${window.currentLoadedObject}`);
-      
       // Only block if currentLoadedObject is set to a DIFFERENT object  
       if (window.currentLoadedObject && window.currentLoadedObject !== cleanInput) {
-        console.log(`🛑 aladinUtils blocked: ${cleanInput} !== ${window.currentLoadedObject}`);
         return;
       }
       

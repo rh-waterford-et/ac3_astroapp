@@ -75,19 +75,12 @@ export const useAladinControls = (aladinInstance, gallery = null) => {
       // Use Aladin's gotoObject method
       aladinInstance.gotoObject(searchValue, {
         success: (coords) => {
-          console.log(`🎯 Aladin success callback fired for: ${searchValue}, currentObject: ${window.currentLoadedObject}`);
-          
           // Only block if currentLoadedObject is set to a DIFFERENT object
           if (window.currentLoadedObject && window.currentLoadedObject !== searchValue) {
-            console.log(`🛑 Blocked stale callback: ${searchValue} !== ${window.currentLoadedObject}`);
             return;
           }
           
-          console.log(`✅ Guard passed, proceeding with: ${searchValue}`);
-          
           if (coords && coords.length >= 2) {
-            console.log(`🎯 Aladin success: loading images for ${searchValue}`);
-            
             // Store coordinates globally for compatibility
             window.currentObjectCoords = coords;
             window.currentLoadedObject = searchValue;

@@ -5,8 +5,6 @@ import GalleryItem from './GalleryItem';
 
 const PlaceholderGalleryItem = ({ mapType, label, icon, onStatusUpdate }) => {
   const handleClick = () => {
-    console.log(`Clicked on map: ${mapType}`);
-    
     // Update status
     const statusElement = document.getElementById('current-status');
     if (statusElement) {

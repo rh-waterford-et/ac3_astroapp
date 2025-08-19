@@ -20,9 +20,7 @@ export const useImageLoader = ({
   const { aladinInstance: contextAladinInstance } = useAppState();
 
   // Main image loading orchestration
-  const loadObjectImages = useCallback(async (objectName) => {
-    console.log(`🚀 loadObjectImages called for: ${objectName}`);
-    
+  const loadObjectImages = useCallback(async (objectName, overrideCheckboxStates = null) => {
     // Use context aladinInstance with fallback to prop and window (for backward compatibility)
     const currentAladinInstance = contextAladinInstance || aladinInstance || window.aladinInstance;
     
@@ -38,8 +36,11 @@ export const useImageLoader = ({
     // Normalize object name for file naming (remove spaces, make lowercase)
     const normalizedName = normalizeObjectName(objectName);
     
+    // Use override checkbox states if provided, otherwise use props
+    const currentCheckboxStates = overrideCheckboxStates || checkboxStates;
+    
     // Process image loading for checked map types
-    const imagesLoaded = await processImageLoading(MAP_TYPES, normalizedName, objectName, IMAGE_MAP);
+    const imagesLoaded = await processImageLoading(MAP_TYPES, normalizedName, objectName, IMAGE_MAP, currentCheckboxStates);
     
     // Handle final status
     updateLoadingStatus(imagesLoaded, MAP_TYPES, objectName);
@@ -55,29 +56,27 @@ export const useImageLoader = ({
   ]);
 
   // Process image loading for all map types
-  const processImageLoading = useCallback(async (mapTypes, normalizedName, objectName, imageMap) => {
+  const processImageLoading = useCallback(async (mapTypes, normalizedName, objectName, imageMap, currentCheckboxStates = null) => {
     let imagesLoaded = 0;
+    const activeCheckboxStates = currentCheckboxStates || checkboxStates;
     
     for (const mapType of mapTypes) {
-      const isChecked = checkboxStates[mapType.checkboxId] || false;
+      const isChecked = activeCheckboxStates[mapType.checkboxId] || false;
       
       if (isChecked) {
         // Special handling for H4: load dynamic PDF files from S3
         if (mapType.key === 'h4') {
-          console.log(`🔥 H4 processing starting for ${objectName}`);
-          
           if (!tryLoadPpxfPdfFiles) {
             continue;
           }
           
           try {
             const pdfsLoaded = await tryLoadPpxfPdfFiles(objectName);
-            console.log(`🔥 H4 processing complete: ${pdfsLoaded} PDFs loaded`);
             if (pdfsLoaded > 0) {
               imagesLoaded += pdfsLoaded;
             }
           } catch (error) {
-            console.log(`❌ H4 processing error:`, error);
+            // Silent error handling for H4 processing
           }
         } else {
           // Use existing static image logic for other map types

@@ -5,8 +5,6 @@ import GalleryItem from './GalleryItem';
 
 const ImageGalleryItem = ({ imageSrc, mapType, objectName, onStatusUpdate }) => {
   const handleClick = () => {
-    console.log(`Clicked on ${objectName} map: ${mapType.key}`);
-    
     // Open modal with full-size image
     if (window.openImageModal) {
       // Find the actual DOM element for compatibility with existing modal system

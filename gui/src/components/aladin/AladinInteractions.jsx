@@ -208,7 +208,6 @@ const setupKeyboardShortcuts = (aladin) => {
         if (target && target.trim()) {
           try {
             aladin.gotoObject(target.trim());
-            console.log('Successfully went to:', target);
             updateStatusDisplays(aladin);
           } catch (error) {
             console.error('Could not go to target:', target, error);

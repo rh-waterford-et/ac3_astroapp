@@ -135,7 +135,7 @@ const setupSidebarControls = (aladin, checkboxStates, onCheckboxChange) => {
           }
         });
       },
-      onError: (error) => console.log('Label display control not available:', error)
+      onError: (error) => {} // Label display control not available
     },
     {
       id: 'display-healpix',

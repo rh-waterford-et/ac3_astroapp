@@ -24,10 +24,6 @@ export const useSidebarControls = (aladinInstance, gallery) => {
   });
 
   const handleCheckboxChange = (checkboxId, isChecked) => {
-    if (checkboxId === 'map-h4') {
-      console.log(`📋 H4 checkbox changed to: ${isChecked}, currentObject: ${window.currentLoadedObject}`);
-    }
-    
     setSidebarState(prev => ({ ...prev, [checkboxId]: isChecked }));
     
     // Handle Aladin display controls
@@ -56,6 +52,14 @@ export const useSidebarControls = (aladinInstance, gallery) => {
           gallery.addMapToGallery(mapType, config.label, config.icon);
         } else {
           gallery.removeMapFromGallery(mapType);
+        }
+      } else {
+        // When an object is loaded, trigger gallery reload for newly checked/unchecked maps
+        if (gallery?.loadObjectImages) {
+          // Create updated checkbox state with the new value
+          const updatedCheckboxStates = { ...sidebarState, [checkboxId]: isChecked };
+          // Pass the updated state directly to bypass prop propagation delay
+          gallery.loadObjectImages(currentObject, updatedCheckboxStates);
         }
       }
     }

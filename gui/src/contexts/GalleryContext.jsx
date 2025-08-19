@@ -26,9 +26,9 @@ export const GalleryProvider = ({ children, galleryOperations }) => {
       }
     }, [galleryOperations]),
 
-    loadObjectImages: useCallback((objectName) => {
+    loadObjectImages: useCallback((objectName, overrideCheckboxStates = null) => {
       if (galleryOperations?.loadObjectImages) {
-        galleryOperations.loadObjectImages(objectName);
+        galleryOperations.loadObjectImages(objectName, overrideCheckboxStates);
       }
     }, [galleryOperations]),
 
