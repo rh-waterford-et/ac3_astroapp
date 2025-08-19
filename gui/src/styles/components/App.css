@@ -1,0 +1,251 @@
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background-color: #1a202c;
+  color: #e2e8f0;
+  position: relative;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0.125rem 0.5rem 0.5rem 0;
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.content-layout {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+  justify-content: flex-start;
+  padding-left: 0.5rem;
+}
+
+.bottom-overlay {
+  position: fixed;
+  right: 0.5rem;
+  left: 16rem;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.gallery-overlay {
+  bottom: 5rem;
+}
+
+.status-overlay {
+  bottom: 0.5rem;
+}
+
+#aladin-lite-div {
+  min-height: 300px;
+  width: 100%;
+}
+
+#aladin-lite-div canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+#aladin-lite-div .aladin-box {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+#aladin-lite-div * {
+  box-sizing: border-box;
+}
+
+.aladin-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.aladin-background #aladin-lite-div {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+#aladin-lite-div .aladin-location,
+#aladin-lite-div .aladin-location-text,
+#aladin-lite-div .aladin-coord-text,
+#aladin-lite-div .aladin-statusBar,
+#aladin-lite-div .aladin-box-coord,
+#aladin-lite-div .aladin-coordinate-display,
+#aladin-lite-div .aladin-coordinates,
+#aladin-lite-div .aladin-position,
+#aladin-lite-div [class*="coord"],
+#aladin-lite-div [class*="position"],
+#aladin-lite-div [class*="location"] {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+#aladin-lite-div div:not(.aladin-reticle):not(.aladin-canvas) {
+  /* Only hide if the text content looks like coordinates */
+}
+
+#aladin-lite-div > div > div[style*="position: absolute"][style*="top"] {
+  /* This targets positioned divs that might be coordinate displays */
+}
+
+.pdf-thumbnail-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.pdf-loading-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 4px;
+}
+
+.pdf-loading-indicator .loading-text {
+  font-size: 10px;
+  color: #888;
+  text-align: center;
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(26, 32, 44, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.loading-spinner {
+  color: #a0aec0;
+  font-size: 0.6875rem;
+  font-style: italic;
+  width: 40px;
+  height: 40px;
+  border: 4px solid #2d3748;
+  border-top: 4px solid var(--blue-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+.error-overlay {
+	position: absolute;
+	top: 45%;
+	left: calc(50% + 7.5rem);
+	transform: translate(-50%, -50%);
+	background-color: #2D3748;
+	border: 2px solid #FC8181;
+	border-radius: 8px;
+	padding: 20px;
+	max-width: 400px;
+	text-align: center;
+	z-index: 1000;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.error-overlay .error-title {
+	color: #FC8181;
+	font-size: 18px;
+	font-weight: 600;
+	margin-bottom: 12px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+}
+
+.error-overlay .error-message {
+	color: #E2E8F0;
+	font-size: 14px;
+	margin-bottom: 12px;
+	line-height: 1.4;
+}
+
+.error-overlay .error-hint {
+	color: #A0AEC0;
+	font-size: 12px;
+	margin-bottom: 16px;
+}
+
+.error-overlay .retry-btn {
+	background-color: #4FD1C5;
+	color: #1A202C;
+	border: none;
+	border-radius: 4px;
+	padding: 8px 16px;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.error-overlay .retry-btn:hover {
+	background-color: #38B2AC;
+}
