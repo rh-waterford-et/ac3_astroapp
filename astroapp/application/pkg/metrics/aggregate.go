@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
 )
 
 type EventSummary struct {
@@ -59,18 +62,22 @@ func (ms *MetricsStore) ExportEventBatchesToS3(ctx context.Context, eventID stri
 	content := []byte(b.String())
 
 	// Resolve output path inside bucket: metrics/METRICS_<eventID>.txt
-	metricsPrefix := "metrics"
+	metricsPrefix := os.Getenv("METRICS")
 	fileName := fmt.Sprintf("METRICS_%s.txt", eventID)
-	folderPath := metricsPrefix
+	s3Bucket := s3bucket.NewS3Bucket()
+	err = s3Bucket.UploadFileToBucket(metricsPrefix, fileName, content)
+	if err != nil {
+		return fmt.Errorf("failed to upload metrics to S3: %w", err)
+	}
 
-	// Write via S3 client available through Redis client context? We do not have S3 here.
-	// Instead, publish the content into Redis under a special key; cleanup routine can persist via external actor.
-	// To meet the requirement using existing bucket writer, we will store the content in a dedicated Redis key for export pickup.
+	log.Printf("Successfully exported metrics for event %s to s3://%s/%s/%s",
+		eventID, s3Bucket.GetBucketName(), metricsPrefix, fileName)
+
 	key := filepath.Join(ms.keyPrefix, "export", fmt.Sprintf("%s:%s", eventID, fileName))
 	if err := ms.redis.Set(ctx, key, string(content), ms.ttl); err != nil {
 		return fmt.Errorf("failed to stage export content: %w", err)
 	}
-	log.Printf("Staged metrics export for event %s at redis key %s (to be written to bucket path %s/%s)", eventID, key, folderPath, fileName)
+	log.Printf("Staged metrics export for event %s at redis key %s (to be written to bucket path %s/%s)", eventID, key, metricsPrefix, fileName)
 	return nil
 }
 

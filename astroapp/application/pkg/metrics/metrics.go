@@ -223,6 +223,11 @@ func (ms *MetricsStore) RecordMetricsBatch(ctx context.Context, metrics []*Metri
 }
 
 func (ms *MetricsStore) CleanupBatches(ctx context.Context, eventID string) error {
+	
+	if err := ms.ExportEventBatchesToS3(ctx, eventID); err != nil {
+		log.Printf("WARNING: failed to export metrics for event %s before cleanup: %v", eventID, err)
+	}
+
 	pattern := ms.getEventPattern(eventID)
 	keys, err := ms.redis.Keys(ctx, pattern)
 	if err != nil {
