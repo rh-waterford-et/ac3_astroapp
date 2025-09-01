@@ -12,8 +12,6 @@ type EventSummary struct {
 	FirstJobQueueStartTime time.Time `json:"first_job_queue_start_time"`
 	FirstJobExitQueueTime  time.Time `json:"first_job_exit_queue_time"`
 	LastJobEndTime         time.Time `json:"last_job_end_time"`
-	/* 	AvgQueueTime        time.Duration `json:"avg_queue_time_s"`
-	   	AvgProcessingTime   time.Duration `json:"avg_processing_time_s"` */
 	TotalEventDuration time.Duration `json:"total_event_duration_s"`
 }
 
@@ -30,8 +28,6 @@ func (ms *MetricsStore) StoreEventSummary(ctx context.Context, summary *EventSum
 		"first_job_queue_start_time": summary.FirstJobQueueStartTime.Format(time.RFC3339Nano),
 		"first_job_exit_queue_time":  summary.FirstJobExitQueueTime.Format(time.RFC3339Nano),
 		"last_job_end_time":      summary.LastJobEndTime.Format(time.RFC3339Nano),
-		/* 	"avg_queue_time_s":       summary.AvgQueueTime.Seconds(),
-		"avg_processing_time_s":  summary.AvgProcessingTime.Seconds(), */
 		"total_event_duration_s": summary.TotalEventDuration.Seconds(),
 	}
 
@@ -99,9 +95,7 @@ func (ms *MetricsStore) GetEventSummary(ctx context.Context, eventID string) (*E
 		return time.Duration(secs * float64(time.Second))
 	}
 
-	/* summary.AvgQueueTime = parseSeconds("avg_queue_time_s")
-	summary.AvgProcessingTime = parseSeconds("avg_processing_time_s")
-	 */summary.TotalEventDuration = parseSeconds("total_event_duration_s")
+	summary.TotalEventDuration = parseSeconds("total_event_duration_s")
 
 	return summary, nil
 }

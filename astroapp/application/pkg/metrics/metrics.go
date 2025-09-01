@@ -14,7 +14,11 @@ type MetricRecord struct {
 	JobID            string    `json:"job_id"`
 	QueueStartTime   time.Time `json:"queue_start_time"`   // Time of sending batch to queue
 	QueueReceiveTime time.Time `json:"queue_receive_time"` // Time of receiving batch from queue
-	JobEndTime     time.Time `json:"job_end_time"`     // Time of batch processing completion
+	JobEndTime       time.Time `json:"job_end_time"`       // Time of batch processing completion
+
+	QueueDuration       float64   `json:"queue_duration"`       // Duration of batch in queue
+	ProcessingDuration float64   `json:"processing_duration"`  // Duration of batch processing
+	TotalDuration      float64   `json:"total_duration"`       // Total duration of batch processing
 }
 
 type MetricsStore struct {
@@ -49,14 +53,19 @@ func (ms *MetricsStore) getEventPattern(eventID string) string {
 }
 
 func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) error {
+	ms.calculateDurations(metric)
 	key := ms.GetBatchKey(metric.BatchID, metric.JobID)
 
 	values := map[string]interface{}{
-		"batch_id":           metric.BatchID,
-		"job_id":             metric.JobID,
-		"queue_start_time":   metric.QueueStartTime.Format(time.RFC3339Nano),
-		"queue_receive_time": metric.QueueReceiveTime.Format(time.RFC3339Nano),
-		"job_processed_end_time":     metric.JobEndTime.Format(time.RFC3339Nano),
+		"batch_id":               metric.BatchID,
+		"job_id":                 metric.JobID,
+		"queue_start_time":       metric.QueueStartTime.Format(time.RFC3339Nano),
+		"queue_receive_time":     metric.QueueReceiveTime.Format(time.RFC3339Nano),
+		"job_processed_end_time": metric.JobEndTime.Format(time.RFC3339Nano),
+		
+		"queue_duration":         metric.QueueDuration,
+		"processing_duration":    metric.ProcessingDuration,
+		"total_duration":         metric.TotalDuration,
 	}
 
 	err := ms.redis.HSet(ctx, key, values)
@@ -72,6 +81,23 @@ func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) 
 	}
 
 	return nil
+}
+
+func (ms *MetricsStore) calculateDurations(metric *MetricRecord) {
+	// Queue duration 
+	if !metric.QueueStartTime.IsZero() && !metric.QueueReceiveTime.IsZero() {
+		metric.QueueDuration = metric.QueueReceiveTime.Sub(metric.QueueStartTime).Seconds()
+	}
+
+	// Processing duration 
+	if !metric.QueueReceiveTime.IsZero() && !metric.JobEndTime.IsZero() {
+		metric.ProcessingDuration = metric.JobEndTime.Sub(metric.QueueReceiveTime).Seconds()
+	}
+
+	// Total duration 
+	if !metric.QueueStartTime.IsZero() && !metric.JobEndTime.IsZero() {
+		metric.TotalDuration = metric.JobEndTime.Sub(metric.QueueStartTime).Seconds()
+	}
 }
 
 func (ms *MetricsStore) GetMetric(ctx context.Context, eventID, batchID string) (*MetricRecord, error) {
@@ -112,6 +138,29 @@ func (ms *MetricsStore) parseMetric(data map[string]string) (*MetricRecord, erro
 		}
 	}
 
+	if data["queue_duration"] != "" {
+		if _, err := fmt.Sscanf(data["queue_duration"], "%f", &result.QueueDuration); err != nil {
+			log.Printf("WARNING: failed to parse queue_duration: %v", err)
+		}
+	}
+
+	if data["processing_duration"] != "" {
+		if _, err := fmt.Sscanf(data["processing_duration"], "%f", &result.ProcessingDuration); err != nil {
+			log.Printf("WARNING: failed to parse processing_duration: %v", err)
+		}
+	}
+
+	if data["total_duration"] != "" {
+		if _, err := fmt.Sscanf(data["total_duration"], "%f", &result.TotalDuration); err != nil {
+			log.Printf("WARNING: failed to parse total_duration: %v", err)
+		}
+	}
+
+	// If durations were not saved, recalculate them
+	if result.QueueDuration == 0 || result.ProcessingDuration == 0 || result.TotalDuration == 0 {
+		ms.calculateDurations(&result)
+	}
+	
 	return &result, nil
 }
 
@@ -208,7 +257,7 @@ func (ms *MetricsStore) RecordMetricsBatch(ctx context.Context, metrics []*Metri
 			"batch_id":           metric.BatchID,
 			"queue_start_time":   metric.QueueStartTime.Format(time.RFC3339Nano),
 			"queue_receive_time": metric.QueueReceiveTime.Format(time.RFC3339Nano),
-			"job_end_time":     metric.JobEndTime.Format(time.RFC3339Nano),
+			"job_end_time":       metric.JobEndTime.Format(time.RFC3339Nano),
 		}
 
 		pipe.HSet(ctx, key, values)
@@ -221,9 +270,9 @@ func (ms *MetricsStore) RecordMetricsBatch(ctx context.Context, metrics []*Metri
 	return err
 }
 
-func (ms *MetricsStore) CleanupBatches(ctx context.Context, eventID string) error {
+func (ms *MetricsStore) CleanupBatches(ctx context.Context, eventID string, timeParam string) error {
 
-	if err := ms.ExportEventBatchesToS3(ctx, eventID); err != nil {
+	if err := ms.ExportEventBatchesToS3(ctx, eventID, timeParam); err != nil {
 		log.Printf("WARNING: failed to export metrics for event %s before cleanup: %v", eventID, err)
 	}
 
