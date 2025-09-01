@@ -13,16 +13,7 @@ import (
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
 )
 
-type EventSummary struct {
-	EventID             string        `json:"event_id"`
-	BatchCount          int           `json:"batch_count"`
-	FirstQueueStartTime time.Time     `json:"first_queue_start_time"`
-	FirstBatchEndTime   time.Time     `json:"first_batch_end_time"`
-	LastBatchEndTime    time.Time     `json:"last_batch_end_time"`
-	AvgQueueTime        time.Duration `json:"avg_queue_time_s"`
-	AvgProcessingTime   time.Duration `json:"avg_processing_time_s"`
-	TotalEventDuration  time.Duration `json:"total_event_duration_s"`
-}
+
 
 // ExportEventBatchesToS3 writes a consolidated text file with all batch metrics for an event
 func (ms *MetricsStore) ExportEventBatchesToS3(ctx context.Context, eventID string) error {
@@ -45,17 +36,17 @@ func (ms *MetricsStore) ExportEventBatchesToS3(ctx context.Context, eventID stri
 	b.WriteString(fmt.Sprintf("METRICS: %s\n", eventID))
 	for idx, rec := range batches {
 		b.WriteString("----------------------------------------\n")
-		b.WriteString(fmt.Sprintf("Batch %d\n", idx+1))
-		b.WriteString(fmt.Sprintf("event_id: %s\n", rec.EventID))
+		b.WriteString(fmt.Sprintf("Job %d\n", idx+1))
 		b.WriteString(fmt.Sprintf("batch_id: %s\n", rec.BatchID))
+		b.WriteString(fmt.Sprintf("job_id: %s\n", rec.JobID))
 		if !rec.QueueStartTime.IsZero() {
 			b.WriteString(fmt.Sprintf("queue_start_time: %s\n", rec.QueueStartTime.Format(time.RFC3339Nano)))
 		}
 		if !rec.QueueReceiveTime.IsZero() {
 			b.WriteString(fmt.Sprintf("queue_receive_time: %s\n", rec.QueueReceiveTime.Format(time.RFC3339Nano)))
 		}
-		if !rec.BatchEndTime.IsZero() {
-			b.WriteString(fmt.Sprintf("batch_end_time: %s\n", rec.BatchEndTime.Format(time.RFC3339Nano)))
+		if !rec.JobEndTime.IsZero() {
+			b.WriteString(fmt.Sprintf("job_processed_end_time: %s\n", rec.JobEndTime.Format(time.RFC3339Nano)))
 		}
 	}
 
@@ -63,7 +54,7 @@ func (ms *MetricsStore) ExportEventBatchesToS3(ctx context.Context, eventID stri
 
 	// Resolve output path inside bucket: metrics/METRICS_<eventID>.txt
 	metricsPrefix := os.Getenv("METRICS")
-	fileName := fmt.Sprintf("METRICS_%s.txt", eventID)
+	fileName := fmt.Sprintf("METRICS_%s_%s.txt", eventID, time.Now().Format("15-04"))
 	s3Bucket := s3bucket.NewS3Bucket()
 	err = s3Bucket.UploadFileToBucket(metricsPrefix, fileName, content)
 	if err != nil {
@@ -92,14 +83,14 @@ func (ms *MetricsStore) AggregateEventMetrics(ctx context.Context, eventID strin
 	}
 
 	summary := &EventSummary{
-		EventID:    eventID,
-		BatchCount: len(batches),
+		BatchID:  eventID,
+		JobCount: len(batches),
 	}
 
 	// Initialize with first batch values
-	summary.FirstQueueStartTime = batches[0].QueueStartTime
-	summary.FirstBatchEndTime = batches[0].BatchEndTime
-	summary.LastBatchEndTime = batches[0].BatchEndTime
+	summary.FirstJobQueueStartTime = batches[0].QueueStartTime
+	summary.FirstJobExitQueueTime = batches[0].QueueReceiveTime
+	summary.LastJobEndTime = batches[0].JobEndTime
 
 	var (
 		totalQueueTime      time.Duration
@@ -108,21 +99,21 @@ func (ms *MetricsStore) AggregateEventMetrics(ctx context.Context, eventID strin
 
 	for _, batch := range batches {
 		// Update first and last times
-		if batch.QueueStartTime.Before(summary.FirstQueueStartTime) {
-			summary.FirstQueueStartTime = batch.QueueStartTime
+		if batch.QueueStartTime.Before(summary.FirstJobQueueStartTime) {
+			summary.FirstJobQueueStartTime = batch.QueueStartTime
 		}
 
-		if batch.BatchEndTime.Before(summary.FirstBatchEndTime) {
-			summary.FirstBatchEndTime = batch.BatchEndTime
+		if batch.QueueReceiveTime.Before(summary.FirstJobExitQueueTime) {
+			summary.FirstJobExitQueueTime = batch.JobEndTime
 		}
 
-		if batch.BatchEndTime.After(summary.LastBatchEndTime) {
-			summary.LastBatchEndTime = batch.BatchEndTime
+		if batch.JobEndTime.After(summary.LastJobEndTime) {
+			summary.LastJobEndTime = batch.JobEndTime
 		}
 
 		// Calculate durations
 		queueTime := batch.QueueReceiveTime.Sub(batch.QueueStartTime)
-		processingTime := batch.BatchEndTime.Sub(batch.QueueReceiveTime)
+		processingTime := batch.JobEndTime.Sub(batch.QueueReceiveTime)
 
 		// Update totals
 		totalQueueTime += queueTime
@@ -131,11 +122,11 @@ func (ms *MetricsStore) AggregateEventMetrics(ctx context.Context, eventID strin
 
 	// Calculate averages
 	if len(batches) > 0 {
-		summary.AvgQueueTime = totalQueueTime / time.Duration(len(batches))
-		summary.AvgProcessingTime = totalProcessingTime / time.Duration(len(batches))
+		/* 	summary.AvgQueueTime = totalQueueTime / time.Duration(len(batches))
+		summary.AvgProcessingTime = totalProcessingTime / time.Duration(len(batches)) */
 	}
 
-	summary.TotalEventDuration = summary.LastBatchEndTime.Sub(summary.FirstQueueStartTime)
+	summary.TotalEventDuration = summary.LastJobEndTime.Sub(summary.FirstJobQueueStartTime)
 
 	return summary, nil
 }
@@ -203,13 +194,16 @@ func (as *AggregationService) AggregateAllEvents(ctx context.Context) error {
 			log.Printf("Failed to aggregate event %s: %v", eventID, err)
 			continue
 		}
-
-		log.Printf("Aggregated event %s: batches=%d, duration=%v, queue_time=(avg:%v, min:%v, max:%v), processing_time=(avg:%v, min:%v, max:%v)",
+		log.Printf("Aggregated batch %s: jobs=%d, duration=%v",
 			eventID,
-			summary.BatchCount,
+			summary.JobCount,
+			summary.TotalEventDuration.Round(time.Second))
+		/* log.Printf("Aggregated batch %s: jobs=%d, duration=%v, queue_time=avg:%v, processing_time=avg:%v",
+			eventID,
+			summary.JobCount,
 			summary.TotalEventDuration.Round(time.Second),
 			summary.AvgQueueTime.Round(time.Second),
-			summary.AvgProcessingTime.Round(time.Second))
+			summary.AvgProcessingTime.Round(time.Second)) */
 
 		successCount++
 	}

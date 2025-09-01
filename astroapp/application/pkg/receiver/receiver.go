@@ -160,7 +160,7 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	}
 
 	// Process standard text message
-	r.processStandardMessage(d, side, appName, eventID, batchID, batchN)
+	r.processStandardMessage(d, side, appName, eventID, batchID)
 }
 
 func (r *Receiver) createBatchInfoFile(appName, eventID, batchID, filenamesHeader string) error {
@@ -283,7 +283,7 @@ func (r *Receiver) updateExistingMetricRecord(metricsStore *metrics.MetricsStore
 	}
 }
 
-func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, eventID, batchID, batchN string) {
+func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, eventID, batchID string) {
 	log.Printf("│ Processing standard text event for %s", appName)
 	r.updateProgress(appName, batchID, api.StageProcessing, 20.0)
 
@@ -300,19 +300,19 @@ func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, eventI
 	}
 
 	// Determine output path based on side and app
-	outputPath := r.getOutputPath(side, appName, batchID)
+	outputPath := r.getOutputPath(side, appName)
 	if outputPath == "" {
 		return
 	}
 
 	// Process files
-	successCount, inFileName, inFileContent, spectrumFiles := r.processFiles(msgBody, side, appName, outputPath, batchSize)
+	successCount, inFileName, inFileContent, spectrumFiles := r.processFiles(msgBody, side, appName, outputPath)
 
 	// Handle application-specific processing
 	r.handleApplicationProcessing(side, appName, batchID, successCount, batchSize, inFileName, inFileContent, spectrumFiles)
 
 	// Finalize batch processing
-	r.finalizeBatchProcessing(d, side, appName, eventID, batchID, batchN, successCount, batchSize)
+	r.finalizeBatchProcessing(d, side, appName, eventID, batchID, successCount, batchSize)
 }
 
 func (r *Receiver) validateBatchMetadata(d amqp.Delivery, batchID string) (int32, []string, bool) {
@@ -372,7 +372,7 @@ func (r *Receiver) processMessageBody(d amqp.Delivery, batchID string, batchSize
 	return msgBody, true
 }
 
-func (r *Receiver) getOutputPath(side, appName, batchID string) string {
+func (r *Receiver) getOutputPath(side, appName string) string {
 	var outputPath string
 	if side == "producer" {
 		switch appName {
@@ -402,7 +402,7 @@ func (r *Receiver) getOutputPath(side, appName, batchID string) string {
 	return outputPath
 }
 
-func (r *Receiver) processFiles(msgBody api.MessageBody, side, appName, outputPath string, batchSize int32) (int, string, string, []api.DataFile) {
+func (r *Receiver) processFiles(msgBody api.MessageBody, side, appName, outputPath string) (int, string, string, []api.DataFile) {
 	successCount := 0
 	var inFileName string
 	var inFileContent string
@@ -431,7 +431,7 @@ func (r *Receiver) processFiles(msgBody api.MessageBody, side, appName, outputPa
 		}
 
 		if side == "producer" {
-			successCount += r.handleProducerFile(file, outputPath, appName)
+			successCount += r.handleProducerFile(file, outputPath)
 		} else {
 			successCount += r.handleProcessorFile(file, outputPath, appName, ppxf)
 		}
@@ -440,7 +440,7 @@ func (r *Receiver) processFiles(msgBody api.MessageBody, side, appName, outputPa
 	return successCount, inFileName, inFileContent, spectrumFiles
 }
 
-func (r *Receiver) handleProducerFile(file api.DataFile, outputPath, appName string) int {
+func (r *Receiver) handleProducerFile(file api.DataFile, outputPath string) int {
 	batchName := r.extractBatchNameFromFilename(file.Name)
 	var uploadPath string
 
@@ -524,7 +524,7 @@ func (r *Receiver) handleStarlightReceivedInFile(starlight *app.Starlight, inFil
 	r.updateProgress("STARLIGHT", batchID, api.StageAnalysis, 70.0)
 }
 
-func (r *Receiver) finalizeBatchProcessing(d amqp.Delivery, side, appName, eventID, batchID, batchN string, successCount int, batchSize int32) {
+func (r *Receiver) finalizeBatchProcessing(d amqp.Delivery, side, appName, eventID, batchID string, successCount int, batchSize int32) {
 	if successCount == int(batchSize) {
 		err := d.Ack(false)
 		if err != nil {
@@ -533,7 +533,7 @@ func (r *Receiver) finalizeBatchProcessing(d amqp.Delivery, side, appName, event
 		log.Printf("│ ✔ Successfully processed all %d files", batchSize)
 
 		if side == "producer" && r.RedisClient != nil {
-			r.recordBatchEndTime(eventID, batchID)
+			r.recordJobEndTime(eventID, batchID)
 		}
 		if side == "processor" {
 			if filenamesHeader, ok := d.Headers["filenames"].(string); ok {
@@ -555,9 +555,9 @@ func (r *Receiver) finalizeBatchProcessing(d amqp.Delivery, side, appName, event
 	log.Printf("■■■ BATCH COMPLETE [%s] ■■■", batchID)
 }
 
-func (r *Receiver) recordBatchEndTime(eventID, batchID string) {
+func (r *Receiver) recordJobEndTime(eventID, batchID string) {
 	metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
-	err := metricsStore.UpdateMetricField(context.Background(), eventID, "batch_end_time", batchID, time.Now())
+	err := metricsStore.UpdateMetricField(context.Background(), eventID, "job_end_time", batchID, time.Now())
 	if err != nil {
 		log.Printf("│ ✗ Failed to record batch end time: %v", err)
 	} else {

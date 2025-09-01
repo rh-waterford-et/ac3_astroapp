@@ -105,7 +105,7 @@ func (p *Producer) SendBatch(appName string) {
 		batchID := p.Utils.GenerateUUID()
 		if p.Side == "processor" {
 			// Set batchID to match the directory name
-			batchID = p.FileSource.(*LocalFileSource).GetBaseInputDir() 
+			batchID = p.FileSource.(*LocalFileSource).GetBaseInputDir()
 		}
 		event := api.Event{
 			ID:      p.EventID,

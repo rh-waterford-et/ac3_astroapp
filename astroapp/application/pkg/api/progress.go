@@ -72,11 +72,11 @@ func (pt *ProgressTracker) UpdateBatchProgress(datasetID string, batchSize int, 
 	if isComplete {
 		dataset.BatchesProcessed++
 		dataset.FilesProcessed += batchSize
-		
+
 		// Calculate progress based on files processed
 		if dataset.FilesTotal > 0 {
 			fileProgress := float64(dataset.FilesProcessed) / float64(dataset.FilesTotal)
-			
+
 			// Map to pipeline stages
 			switch {
 			case fileProgress >= 1.0:
@@ -98,7 +98,7 @@ func (pt *ProgressTracker) UpdateBatchProgress(datasetID string, batchSize int, 
 	}
 
 	dataset.LastUpdated = time.Now()
-	log.Printf("Progress: Batch update for dataset %s - %d/%d files processed", 
+	log.Printf("Progress: Batch update for dataset %s - %d/%d files processed",
 		datasetID, dataset.FilesProcessed, dataset.FilesTotal)
 }
 
@@ -156,11 +156,11 @@ func (pt *ProgressTracker) CleanupCompleted(maxAge time.Duration) {
 	defer pt.mu.Unlock()
 
 	cutoff := time.Now().Add(-maxAge)
-	
+
 	for id, dataset := range pt.datasets {
 		if dataset.Stage == StageComplete && dataset.LastUpdated.Before(cutoff) {
 			delete(pt.datasets, id)
 			log.Printf("Progress: Cleaned up completed dataset %s", id)
 		}
 	}
-} 
+}

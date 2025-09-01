@@ -6,21 +6,32 @@ import (
 	"time"
 )
 
+type EventSummary struct {
+	BatchID                string    `json:"batch_id"`
+	JobCount               int       `json:"job_count"`
+	FirstJobQueueStartTime time.Time `json:"first_job_queue_start_time"`
+	FirstJobExitQueueTime  time.Time `json:"first_job_exit_queue_time"`
+	LastJobEndTime         time.Time `json:"last_job_end_time"`
+	/* 	AvgQueueTime        time.Duration `json:"avg_queue_time_s"`
+	   	AvgProcessingTime   time.Duration `json:"avg_processing_time_s"` */
+	TotalEventDuration time.Duration `json:"total_event_duration_s"`
+}
+
 func (ms *MetricsStore) GetEventSummaryKey(eventID string) string {
 	return fmt.Sprintf("%s:summary:%s", ms.keyPrefix, eventID)
 }
 
 func (ms *MetricsStore) StoreEventSummary(ctx context.Context, summary *EventSummary) error {
-	key := fmt.Sprintf("%s:summary:%s", ms.keyPrefix, summary.EventID)
+	key := fmt.Sprintf("%s:summary:%s", ms.keyPrefix, summary.BatchID)
 
 	values := map[string]interface{}{
-		"event_id":               summary.EventID,
-		"batch_count":            summary.BatchCount,
-		"first_queue_start_time": summary.FirstQueueStartTime.Format(time.RFC3339Nano),
-		"first_batch_end_time":   summary.FirstBatchEndTime.Format(time.RFC3339Nano),
-		"last_batch_end_time":    summary.LastBatchEndTime.Format(time.RFC3339Nano),
-		"avg_queue_time_s":       summary.AvgQueueTime.Seconds(),
-		"avg_processing_time_s":  summary.AvgProcessingTime.Seconds(),
+		"batch_id":               summary.BatchID,
+		"job_count":              summary.JobCount,
+		"first_job_queue_start_time": summary.FirstJobQueueStartTime.Format(time.RFC3339Nano),
+		"first_job_exit_queue_time":  summary.FirstJobExitQueueTime.Format(time.RFC3339Nano),
+		"last_job_end_time":      summary.LastJobEndTime.Format(time.RFC3339Nano),
+		/* 	"avg_queue_time_s":       summary.AvgQueueTime.Seconds(),
+		"avg_processing_time_s":  summary.AvgProcessingTime.Seconds(), */
 		"total_event_duration_s": summary.TotalEventDuration.Seconds(),
 	}
 
@@ -50,11 +61,11 @@ func (ms *MetricsStore) GetEventSummary(ctx context.Context, eventID string) (*E
 		return nil, nil
 	}
 
-	summary := &EventSummary{EventID: eventID}
+	summary := &EventSummary{BatchID: eventID}
 	var parseErr error
 
-	if data["batch_count"] != "" {
-		fmt.Sscanf(data["batch_count"], "%d", &summary.BatchCount)
+	if data["job_count"] != "" {
+		fmt.Sscanf(data["job_count"], "%d", &summary.JobCount)
 	}
 
 	parseTime := func(field string) (time.Time, error) {
@@ -64,19 +75,19 @@ func (ms *MetricsStore) GetEventSummary(ctx context.Context, eventID string) (*E
 		return time.Parse(time.RFC3339Nano, data[field])
 	}
 
-	summary.FirstQueueStartTime, parseErr = parseTime("first_queue_start_time")
+	summary.FirstJobQueueStartTime, parseErr = parseTime("first_job_queue_start_time")
 	if parseErr != nil {
-		return nil, fmt.Errorf("failed to parse first_queue_start_time: %w", parseErr)
+		return nil, fmt.Errorf("failed to parse first_job_queue_start_time: %w", parseErr)
 	}
 
-	summary.FirstBatchEndTime, parseErr = parseTime("first_batch_end_time")
+	summary.FirstJobExitQueueTime, parseErr = parseTime("first_job_exit_queue_time")
 	if parseErr != nil {
-		return nil, fmt.Errorf("failed to parse first_batch_end_time: %w", parseErr)
+		return nil, fmt.Errorf("failed to parse first_job_exit_queue_time: %w", parseErr)
 	}
 
-	summary.LastBatchEndTime, parseErr = parseTime("last_batch_end_time")
+	summary.LastJobEndTime, parseErr = parseTime("last_job_end_time")
 	if parseErr != nil {
-		return nil, fmt.Errorf("failed to parse last_batch_end_time: %w", parseErr)
+		return nil, fmt.Errorf("failed to parse last_job_end_time: %w", parseErr)
 	}
 
 	parseSeconds := func(field string) time.Duration {
@@ -88,9 +99,9 @@ func (ms *MetricsStore) GetEventSummary(ctx context.Context, eventID string) (*E
 		return time.Duration(secs * float64(time.Second))
 	}
 
-	summary.AvgQueueTime = parseSeconds("avg_queue_time_s")
+	/* summary.AvgQueueTime = parseSeconds("avg_queue_time_s")
 	summary.AvgProcessingTime = parseSeconds("avg_processing_time_s")
-	summary.TotalEventDuration = parseSeconds("total_event_duration_s")
+	 */summary.TotalEventDuration = parseSeconds("total_event_duration_s")
 
 	return summary, nil
 }

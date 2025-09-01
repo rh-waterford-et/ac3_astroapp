@@ -10,11 +10,11 @@ import (
 )
 
 type MetricRecord struct {
-	EventID          string    `json:"event_id"`
 	BatchID          string    `json:"batch_id"`
+	JobID            string    `json:"job_id"`
 	QueueStartTime   time.Time `json:"queue_start_time"`   // Time of sending batch to queue
 	QueueReceiveTime time.Time `json:"queue_receive_time"` // Time of receiving batch from queue
-	BatchEndTime     time.Time `json:"batch_end_time"`     // Time of batch processing completion
+	JobEndTime     time.Time `json:"job_end_time"`     // Time of batch processing completion
 }
 
 type MetricsStore struct {
@@ -49,14 +49,14 @@ func (ms *MetricsStore) getEventPattern(eventID string) string {
 }
 
 func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) error {
-	key := ms.GetBatchKey(metric.EventID, metric.BatchID)
+	key := ms.GetBatchKey(metric.BatchID, metric.JobID)
 
 	values := map[string]interface{}{
-		"event_id":           metric.EventID,
 		"batch_id":           metric.BatchID,
+		"job_id":             metric.JobID,
 		"queue_start_time":   metric.QueueStartTime.Format(time.RFC3339Nano),
 		"queue_receive_time": metric.QueueReceiveTime.Format(time.RFC3339Nano),
-		"batch_end_time":     metric.BatchEndTime.Format(time.RFC3339Nano),
+		"job_processed_end_time":     metric.JobEndTime.Format(time.RFC3339Nano),
 	}
 
 	err := ms.redis.HSet(ctx, key, values)
@@ -91,8 +91,8 @@ func (ms *MetricsStore) parseMetric(data map[string]string) (*MetricRecord, erro
 	var result MetricRecord
 	var err error
 
-	result.EventID = data["event_id"]
 	result.BatchID = data["batch_id"]
+	result.JobID = data["job_id"]
 
 	if data["queue_start_time"] != "" {
 		if result.QueueStartTime, err = time.Parse(time.RFC3339Nano, data["queue_start_time"]); err != nil {
@@ -106,9 +106,9 @@ func (ms *MetricsStore) parseMetric(data map[string]string) (*MetricRecord, erro
 		}
 	}
 
-	if data["batch_end_time"] != "" {
-		if result.BatchEndTime, err = time.Parse(time.RFC3339Nano, data["batch_end_time"]); err != nil {
-			return nil, fmt.Errorf("failed to parse batch_end_time: %w", err)
+	if data["job_end_time"] != "" {
+		if result.JobEndTime, err = time.Parse(time.RFC3339Nano, data["job_end_time"]); err != nil {
+			return nil, fmt.Errorf("failed to parse job_end_time: %w", err)
 		}
 	}
 
@@ -170,7 +170,7 @@ func (ms *MetricsStore) UpdateMetricField(ctx context.Context, eventID, field, b
 					}
 					return nil
 				}
-			case "batch_end_time":
+			case "job_end_time":
 				// Keep latest timestamp
 				if !value.After(t) {
 					// Existing value is later or equal; keep it
@@ -203,13 +203,12 @@ func (ms *MetricsStore) RecordMetricsBatch(ctx context.Context, metrics []*Metri
 	pipe := ms.redis.Pipeline()
 
 	for _, metric := range metrics {
-		key := ms.GetBatchKey(metric.EventID, metric.BatchID)
+		key := ms.GetBatchKey(metric.BatchID, metric.JobID)
 		values := map[string]interface{}{
-			"event_id":           metric.EventID,
 			"batch_id":           metric.BatchID,
 			"queue_start_time":   metric.QueueStartTime.Format(time.RFC3339Nano),
 			"queue_receive_time": metric.QueueReceiveTime.Format(time.RFC3339Nano),
-			"batch_end_time":     metric.BatchEndTime.Format(time.RFC3339Nano),
+			"job_end_time":     metric.JobEndTime.Format(time.RFC3339Nano),
 		}
 
 		pipe.HSet(ctx, key, values)
@@ -223,7 +222,7 @@ func (ms *MetricsStore) RecordMetricsBatch(ctx context.Context, metrics []*Metri
 }
 
 func (ms *MetricsStore) CleanupBatches(ctx context.Context, eventID string) error {
-	
+
 	if err := ms.ExportEventBatchesToS3(ctx, eventID); err != nil {
 		log.Printf("WARNING: failed to export metrics for event %s before cleanup: %v", eventID, err)
 	}
