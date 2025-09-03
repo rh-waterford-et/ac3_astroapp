@@ -59,7 +59,7 @@ func (r *Receiver) Start(side string) {
 	}
 
 	// Start aggregation service in background (only on processor side to avoid duplication)
-	if side == "processor" && r.AggregationService != nil {
+	if side == "producer" && r.AggregationService != nil {
 		ctx := context.Background()
 		go func() {
 			// Wait a bit before starting aggregation to let the system initialize
@@ -67,7 +67,7 @@ func (r *Receiver) Start(side string) {
 			// Run aggregation every 5 minutes
 			r.AggregationService.Run(ctx)
 		}()
-		log.Printf("🔄 Started event metrics aggregation service (5-minute intervals)")
+		log.Printf("🔄 Started batch metrics aggregation service (5-minute intervals)")
 	}
 
 	var queueName string
@@ -236,7 +236,7 @@ func (r *Receiver) recordQueueFirstReceiveTime(batchID, jobID string) {
 	ctx := context.Background()
 	metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
 
-	key := metricsStore.GetBatchKey(batchID, jobID)
+	key := metricsStore.GetJobKey(batchID, jobID)
 	log.Printf("│ DEBUG: Redis key = %s", key)
 
 	exists, err := r.RedisClient.Exists(ctx, key)
@@ -278,23 +278,23 @@ func (r *Receiver) updateExistingMetricRecord(metricsStore *metrics.MetricsStore
 		if err != nil {
 			log.Printf("│ ✗ Failed to update queue receive time: %v", err)
 		} else {
-			log.Printf("│ ✓ Updated queue receive time for event %s", batchID)
+			log.Printf("│ ✓ Updated queue receive time for batch %s", batchID)
 		}
 	}
 }
 
 func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, batchID, jobID string) {
-	log.Printf("│ Processing standard text event for %s", appName)
+	log.Printf("│ Processing standard text batch for %s", appName)
 	r.updateProgress(appName, jobID, api.StageProcessing, 20.0)
 
 	// Validate batch metadata
-	batchSize, _, ok := r.validateBatchMetadata(d, jobID)
+	jobSize, _, ok := r.validateJobMetadata(d, jobID)
 	if !ok {
 		return
 	}
 
 	// Process message body
-	msgBody, ok := r.processMessageBody(d, jobID, batchSize)
+	msgBody, ok := r.processMessageBody(d, jobID, jobSize)
 	if !ok {
 		return
 	}
@@ -309,13 +309,13 @@ func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, batchI
 	successCount, inFileName, inFileContent, spectrumFiles := r.processFiles(msgBody, side, appName, outputPath)
 
 	// Handle application-specific processing
-	r.handleApplicationProcessing(side, appName, jobID, successCount, batchSize, inFileName, inFileContent, spectrumFiles)
+	r.handleApplicationProcessing(side, appName, jobID, successCount, jobSize, inFileName, inFileContent, spectrumFiles)
 
 	// Finalize batch processing
-	r.finalizeBatchProcessing(d, side, appName, batchID, jobID, successCount, batchSize)
+	r.finalizeBatchProcessing(d, side, appName, batchID, jobID, successCount, jobSize)
 }
 
-func (r *Receiver) validateBatchMetadata(d amqp.Delivery, jobID string) (int32, []string, bool) {
+func (r *Receiver) validateJobMetadata(d amqp.Delivery, jobID string) (int32, []string, bool) {
 	// Log headers if present
 	if len(d.Headers) > 0 {
 		headers, err := json.Marshal(d.Headers)
@@ -325,9 +325,9 @@ func (r *Receiver) validateBatchMetadata(d amqp.Delivery, jobID string) (int32, 
 		log.Printf("│ Headers:    %s", headers)
 	}
 
-	batchSize, ok := d.Headers["batch_size"].(int32)
+	jobSize, ok := d.Headers["job_size"].(int32)
 	if !ok {
-		log.Printf("│ ERROR: 'batch_size' header missing or invalid")
+		log.Printf("│ ERROR: 'job_size' header missing or invalid")
 		r.requeueWithLog(d, jobID)
 		return 0, nil, false
 	}
@@ -340,18 +340,18 @@ func (r *Receiver) validateBatchMetadata(d amqp.Delivery, jobID string) (int32, 
 	}
 
 	filenames := strings.Split(filenamesHeader, ",")
-	if len(filenames) != int(batchSize) {
-		log.Printf("│ ERROR: Filenames count doesn't match batch_size")
+	if len(filenames) != int(jobSize) {
+		log.Printf("│ ERROR: Filenames count doesn't match job_size")
 		r.requeueWithLog(d, jobID)
 		return 0, nil, false
 	}
 
 	//log.Printf("│ Processing batch of %d files:", batchSize)
-	for i, filename := range filenames {
+	/* for i, filename := range filenames {
 		log.Printf("│ %d. %s", i+1, filename)
-	}
+	} */
 
-	return batchSize, filenames, true
+	return jobSize, filenames, true
 }
 
 func (r *Receiver) processMessageBody(d amqp.Delivery, jobID string, batchSize int32) (api.MessageBody, bool) {
@@ -561,7 +561,7 @@ func (r *Receiver) recordJobEndTime(batchID, jobID string) {
 	if err != nil {
 		log.Printf("│ ✗ Failed to record batch end time: %v", err)
 	} else {
-		log.Printf("│ ✓ Recorded batch end time for event %s", batchID)
+		log.Printf("│ ✓ Recorded job end time for %s", jobID)
 	}
 }
 

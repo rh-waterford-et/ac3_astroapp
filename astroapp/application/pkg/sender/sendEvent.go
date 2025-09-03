@@ -16,8 +16,8 @@ import (
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 )
 
-type EventSender interface {
-	SendEvent(event api.Event, appName string, side string, q queue.QueueInterface)
+type BatchSender interface {
+	SendBatch(batch api.Batch, appName string, side string, q queue.QueueInterface)
 }
 
 type RabbitMQSender struct {
@@ -34,7 +34,7 @@ func NewRabbitMQSender(queue queue.QueueInterface, utils common.UtilsInterface, 
 	}
 }
 
-func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string, q queue.QueueInterface) {
+func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string, q queue.QueueInterface) {
 	var queueName string
 
 	if side == "producer" {
@@ -57,34 +57,34 @@ func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string,
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	eventJSON, err := json.Marshal(event)
+	batchJSON, err := json.Marshal(batch)
 	if err != nil {
-		s.Utils.FailOnError("Failed to marshal event", err)
+		s.Utils.FailOnError("Failed to marshal batch", err)
 	}
 
 	headers := make(amqp.Table)
-	headers["batch_size"] = len(event.Files)
+	headers["job_size"] = len(batch.Files)
 	headers["app_name"] = appName
-	headers["event_id"] = event.ID
-	headers["batch_id"] = event.BatchID
+	headers["batch_id"] = batch.ID
+	headers["job_id"] = batch.JobID
 
 	filenames := []string{}
-	for _, f := range event.Files {
+	for _, f := range batch.Files {
 		filenames = append(filenames, f.Name)
 	}
 	headers["filenames"] = strings.Join(filenames, ",")
 
-	err = q.Publish(ctx, queueName, eventJSON, headers)
+	err = q.Publish(ctx, queueName, batchJSON, headers)
 	if err != nil {
 		s.Utils.FailOnError("Failed to publish message: %v", err)
 	}
 
-	// Record queue start time for each batch (individual batch tracking)
+	// Record queue start time for each job (individual job tracking)
 	if s.RedisClient != nil {
 		metricsStore := metrics.NewMetricsStore(s.RedisClient, 168*time.Hour)
 
-		// Record queue start time for this specific batch
-		err = metricsStore.UpdateMetricField(ctx, event.ID, "queue_start_time", event.BatchID, time.Now())
+		// Record queue start time for this specific job
+		err = metricsStore.UpdateMetricField(ctx, batch.ID, "queue_start_time", batch.JobID, time.Now())
 		if err != nil {
 			log.Printf("Failed to record queue start time: %v", err)
 		}
@@ -93,6 +93,6 @@ func (s *RabbitMQSender) SendEvent(event api.Event, appName string, side string,
 	}
 
 	log.Printf("DEBUG: Published message to queue %s", queueName)
-	log.Printf(" [x] Sent batch with %d files for app %s\n", len(event.Files), appName)
+	log.Printf(" [x] Sent job with %d files for app %s\n", len(batch.Files), appName)
 	log.Printf("     Files: %s\n", strings.Join(filenames, ", "))
 }

@@ -14,9 +14,9 @@ import (
 )
 
 type StarlightInterface interface {
-	UpdateInFile(batch []api.DataFile) (string, string)
+	UpdateInFile(job []api.DataFile) (string, string)
 	GetKinematicValues(fileName string) (string, error)
-	RemoveInFileFromBatch(batch []api.DataFile) []api.DataFile
+	RemoveInFileFromJob(job []api.DataFile) []api.DataFile
 	UpdateToProcessList(inFileName string, fileContent []byte)
 }
 
@@ -24,13 +24,13 @@ type Starlight struct {
 	Utils common.UtilsInterface
 }
 
-func NewStarlight(batch []api.DataFile, utils common.UtilsInterface) *Starlight {
+func NewStarlight(job []api.DataFile, utils common.UtilsInterface) *Starlight {
 	return &Starlight{
 		Utils: utils,
 	}
 }
 
-func (s *Starlight) UpdateInFile(batch []api.DataFile) (string, string) {
+func (s *Starlight) UpdateInFile(job []api.DataFile) (string, string) {
 	templateInFilePath := os.Getenv("TEMPLATE_IN_FILE_PATH")
 	inFileOutputPath := os.Getenv("IN_FILE_OUTPUT_PATH")
 	// #nosec G404
@@ -57,16 +57,16 @@ func (s *Starlight) UpdateInFile(batch []api.DataFile) (string, string) {
 		if i == 16 {
 			// Replace the input file name in the .in file
 			res := strings.Split(scanner.Text(), "  ")
-			for j := 0; j < len(batch); j++ {
+			for j := 0; j < len(job); j++ {
 
 
 				// Use only the filename (basename) without directory structure
-				filename := filepath.Base(batch[j].Name)
+				filename := filepath.Base(job[j].Name)
 				res[0] = filename
 				// Get kinematic values for the current file
-				/* 				kinematicValues, err := s.GetKinematicValues(batch[j].Name)
+				/* 				kinematicValues, err := s.GetKinematicValues(job[j].Name)
 				   				if err != nil {
-				   					log.Printf("Error getting kinematic values for file %s: %v", batch[j].Name, err)
+				   					log.Printf("Error getting kinematic values for file %s: %v", job[j].Name, err)
 				   					continue
 				   				}
 				   				res[4] = "CAL " + kinematicValues  */ // Update the 4th and 5th parameters with Velocity and Sigma
@@ -127,13 +127,13 @@ func (s *Starlight) GetKinematicValues(fileName string) (string, error) {
 	return "", fmt.Errorf("file %s not found in kinematic information", fileName)
 }
 
-func (s *Starlight) RemoveInFileFromBatch(batch []api.DataFile) []api.DataFile {
+func (s *Starlight) RemoveInFileFromJob(job []api.DataFile) []api.DataFile {
 
-	filteredBatch := make([]api.DataFile, 0, len(batch))
+	filteredJob := make([]api.DataFile, 0, len(job))
 
-	for _, file := range batch {
+	for _, file := range job {
 		if !strings.HasSuffix(file.Name, ".in") {
-			filteredBatch = append(filteredBatch, file)
+			filteredJob = append(filteredJob, file)
 		} else {
 			inFilePath := filepath.Join(os.Getenv("IN_FILE_OUTPUT_PATH"), file.Name)
 			if err := os.Remove(inFilePath); err != nil {
@@ -143,7 +143,7 @@ func (s *Starlight) RemoveInFileFromBatch(batch []api.DataFile) []api.DataFile {
 			} */
 		}
 	}
-	return filteredBatch
+	return filteredJob
 }
 
 func (s *Starlight) UpdateToProcessList(inFileName string, fileContent []byte) {

@@ -31,8 +31,8 @@ func (pt *ProgressTracker) StartDataset(datasetID, datasetName string, filesTota
 		Progress:         0.0,
 		FilesTotal:       filesTotal,
 		FilesProcessed:   0,
-		BatchesTotal:     0,
-		BatchesProcessed: 0,
+		JobesTotal:     0,
+		JobesProcessed: 0,
 		StartTime:        time.Now(),
 		LastUpdated:      time.Now(),
 	}
@@ -58,20 +58,20 @@ func (pt *ProgressTracker) UpdateProgress(datasetID string, stage PipelineStage,
 	log.Printf("Progress: Updated dataset %s to stage %s (%.1f%%)", datasetID, stage, progress)
 }
 
-// UpdateBatchProgress updates batch-specific progress
-func (pt *ProgressTracker) UpdateBatchProgress(datasetID string, batchSize int, isComplete bool) {
+// UpdateJobProgress updates job-specific progress
+func (pt *ProgressTracker) UpdateJobProgress(datasetID string, jobSize int, isComplete bool) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
 
 	dataset, exists := pt.datasets[datasetID]
 	if !exists {
-		log.Printf("Progress: Dataset %s not found for batch update", datasetID)
+		log.Printf("Progress: Dataset %s not found for job update", datasetID)
 		return
 	}
 
 	if isComplete {
-		dataset.BatchesProcessed++
-		dataset.FilesProcessed += batchSize
+		dataset.JobesProcessed++
+		dataset.FilesProcessed += jobSize
 
 		// Calculate progress based on files processed
 		if dataset.FilesTotal > 0 {
@@ -94,11 +94,11 @@ func (pt *ProgressTracker) UpdateBatchProgress(datasetID string, batchSize int, 
 			}
 		}
 	} else {
-		dataset.BatchesTotal++
+		dataset.JobesTotal++
 	}
 
 	dataset.LastUpdated = time.Now()
-	log.Printf("Progress: Batch update for dataset %s - %d/%d files processed",
+	log.Printf("Progress: Job update for dataset %s - %d/%d files processed",
 		datasetID, dataset.FilesProcessed, dataset.FilesTotal)
 }
 

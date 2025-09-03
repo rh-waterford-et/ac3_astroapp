@@ -24,25 +24,25 @@ type FileSource interface {
 
 // ProducerInterface defines the producer operations
 type ProducerInterface interface {
-	CreateEvent(appName string, side string, q queue.QueueInterface)
+	CreateBatch(appName string, side string, q queue.QueueInterface)
 	ProcessFiles(appName string)
 }
 
 type Producer struct {
-	BatchSize   int
-	Batch       []api.DataFile
-	EventQueue  chan api.Event
+	JobSize   int
+	Job       []api.DataFile
+	BatchQueue  chan api.Batch
 	FileSource  FileSource
 	Utils       common.UtilsInterface
 	Side        string
-	EventID     string
+	BatchID     string
 	RedisClient *metrics.RedisClient
-	Sender      sender.EventSender
+	Sender      sender.BatchSender
 }
 
-func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event, utils common.UtilsInterface, side string, eventID string, redisClient *metrics.RedisClient) *Producer {
+func NewProducer(jobSize int, fileSource FileSource, batchQueue chan api.Batch, utils common.UtilsInterface, side string, batchID string, redisClient *metrics.RedisClient) *Producer {
 	// Initialize sender with Redis client
-	var senderInstance sender.EventSender
+	var senderInstance sender.BatchSender
 	if redisClient != nil {
 		senderInstance = sender.NewRabbitMQSender(nil, utils, redisClient)
 	} else {
@@ -54,13 +54,13 @@ func NewProducer(batchSize int, fileSource FileSource, eventQueue chan api.Event
 	}
 
 	return &Producer{
-		BatchSize:   batchSize,
-		Batch:       make([]api.DataFile, 0, batchSize),
-		EventQueue:  eventQueue,
+		JobSize:   jobSize,
+		Job:       make([]api.DataFile, 0, jobSize),
+		BatchQueue:  batchQueue,
 		FileSource:  fileSource,
 		Utils:       utils,
 		Side:        side,
-		EventID:     eventID,
+		BatchID:     batchID,
 		RedisClient: redisClient,
 		Sender:      senderInstance,
 	}
@@ -70,11 +70,11 @@ var starlight app.StarlightInterface = &app.Starlight{
 	Utils: &common.Utils{},
 }
 
-func (p *Producer) CreateEvent(appName string, side string, q queue.QueueInterface) {
+func (p *Producer) CreateBatch(appName string, side string, q queue.QueueInterface) {
 	go func() {
-		for event := range p.EventQueue {
-			log.Printf("Sending event (ID: %s, BatchID: %s) with %d files\n", p.EventID, event.BatchID, len(event.Files))
-			p.Sender.SendEvent(event, appName, side, q)
+		for batch := range p.BatchQueue {
+			log.Printf("Sending batch (ID: %s, JobID: %s) with %d files\n", p.BatchID, batch.JobID, len(batch.Files))
+			p.Sender.SendBatch(batch, appName, side, q)
 		}
 	}()
 
@@ -82,49 +82,49 @@ func (p *Producer) CreateEvent(appName string, side string, q queue.QueueInterfa
 }
 
 func (p *Producer) AddFile(file api.DataFile, appName string) {
-	p.Batch = append(p.Batch, file)
-	if len(p.Batch) >= p.BatchSize {
-		p.SendBatch(appName)
+	p.Job = append(p.Job, file)
+	if len(p.Job) >= p.JobSize {
+		p.SendJob(appName)
 	}
 }
 
-func (p *Producer) SendBatch(appName string) {
-	if len(p.Batch) > 0 {
-		// Update the .in file before sending the batch
+func (p *Producer) SendJob(appName string) {
+	if len(p.Job) > 0 {
+		// Update the .in file before sending the Job
 		if appName == "STARLIGHT" && p.Side == "producer" {
-			inFileName, content := starlight.UpdateInFile(p.Batch)
+			inFileName, content := starlight.UpdateInFile(p.Job)
 			//println(content)
 			if inFileName != "" && content != "" {
-				p.Batch = append(p.Batch, api.DataFile{Name: inFileName, Content: content})
+				p.Job = append(p.Job, api.DataFile{Name: inFileName, Content: content})
 			}
 		}
 
 		// Update progress to queued stage
 		p.updateProgress(appName, api.StageQueued, 10.0)
 
-		batchID := p.Utils.GenerateUUID()
+		jobID := p.Utils.GenerateUUID()
 		if p.Side == "processor" {
-			// Set batchID to match the directory name
-			batchID = p.FileSource.(*LocalFileSource).GetBaseInputDir()
+			// Set JobID to match the directory name
+			jobID = p.FileSource.(*LocalFileSource).GetBaseInputDir()
 		}
-		event := api.Event{
-			ID:      p.EventID,
-			BatchID: batchID,
-			Files:   p.Batch,
+		batch := api.Batch{
+			ID:      p.BatchID,
+			JobID: jobID,
+			Files:   p.Job,
 		}
-		p.EventQueue <- event
+		p.BatchQueue <- batch
 
 		if appName == "STARLIGHT" && p.Side == "producer" {
-			p.Batch = starlight.RemoveInFileFromBatch(p.Batch)
+			p.Job = starlight.RemoveInFileFromJob(p.Job)
 		}
 
 		p.DeleteProcessedFiles()
-		p.Batch = make([]api.DataFile, 0, p.BatchSize)
+		p.Job = make([]api.DataFile, 0, p.JobSize)
 	}
 }
 
 func (p *Producer) DeleteProcessedFiles() {
-	for _, file := range p.Batch {
+	for _, file := range p.Job {
 		err := p.FileSource.DeleteFile(file.Name)
 		if err != nil {
 			log.Printf("Error deleting file %s: %v\n", file.Name, err)
@@ -149,20 +149,20 @@ func (p *Producer) ProcessFiles(appName string) {
 		p.AddFile(api.DataFile{Name: filename, Content: string(content)}, appName)
 	}
 
-	p.SendBatch(appName)
+	p.SendJob(appName)
 }
 
 // updateProgress sends a progress update to the API server
 func (p *Producer) updateProgress(appName string, stage api.PipelineStage, progress float64) {
-	// Extract dataset name from the first file in the batch
-	if len(p.Batch) == 0 {
+	// Extract dataset name from the first file in the Job
+	if len(p.Job) == 0 {
 		return
 	}
 
 	// For producer side, we use the app name as dataset ID
 	datasetID := appName
 	if p.Side == "producer" {
-		datasetID = appName + "_" + p.EventID
+		datasetID = appName + "_" + p.BatchID
 	}
 
 	request := api.ProgressUpdateRequest{
@@ -170,7 +170,7 @@ func (p *Producer) updateProgress(appName string, stage api.PipelineStage, progr
 		DatasetName: appName,
 		Stage:       stage,
 		Progress:    progress,
-		FilesTotal:  len(p.Batch),
+		FilesTotal:  len(p.Job),
 	}
 
 	// Send progress update to local API server

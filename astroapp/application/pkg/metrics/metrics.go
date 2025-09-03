@@ -12,13 +12,13 @@ import (
 type MetricRecord struct {
 	BatchID          string    `json:"batch_id"`
 	JobID            string    `json:"job_id"`
-	QueueStartTime   time.Time `json:"queue_start_time"`   // Time of sending batch to queue
-	QueueReceiveTime time.Time `json:"queue_receive_time"` // Time of receiving batch from queue
-	JobEndTime       time.Time `json:"job_end_time"`       // Time of batch processing completion
+	QueueStartTime   time.Time `json:"queue_start_time"`   // Time of sending job to queue
+	QueueReceiveTime time.Time `json:"queue_receive_time"` // Time of receiving job from queue
+	JobEndTime       time.Time `json:"job_end_time"`       // Time of job processing completion
 
-	QueueDuration       float64   `json:"queue_duration"`       // Duration of batch in queue
-	ProcessingDuration float64   `json:"processing_duration"`  // Duration of batch processing
-	TotalDuration      float64   `json:"total_duration"`       // Total duration of batch processing
+	QueueDuration      float64 `json:"queue_duration"`      // Duration of job in queue
+	ProcessingDuration float64 `json:"processing_duration"` // Duration of job processing
+	TotalDuration      float64 `json:"total_duration"`      // Total duration of job processing
 }
 
 type MetricsStore struct {
@@ -44,28 +44,28 @@ func (ms *MetricsStore) WithKeyPrefix(prefix string) *MetricsStore {
 	return ms
 }
 
-func (ms *MetricsStore) GetBatchKey(eventID, batchID string) string {
-	return fmt.Sprintf("%s:%s:%s", ms.keyPrefix, eventID, batchID)
+func (ms *MetricsStore) GetJobKey(batchID, jobID string) string {
+	return fmt.Sprintf("%s:%s:%s", ms.keyPrefix, batchID, jobID)
 }
 
-func (ms *MetricsStore) getEventPattern(eventID string) string {
-	return fmt.Sprintf("%s:%s:*", ms.keyPrefix, eventID)
+func (ms *MetricsStore) getBatchPattern(batchID string) string {
+	return fmt.Sprintf("%s:%s:*", ms.keyPrefix, batchID)
 }
 
 func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) error {
 	ms.calculateDurations(metric)
-	key := ms.GetBatchKey(metric.BatchID, metric.JobID)
+	key := ms.GetJobKey(metric.JobID, metric.JobID)
 
 	values := map[string]interface{}{
-		"batch_id":               metric.BatchID,
+		"batch_id":                 metric.BatchID,
 		"job_id":                 metric.JobID,
 		"queue_start_time":       metric.QueueStartTime.Format(time.RFC3339Nano),
 		"queue_receive_time":     metric.QueueReceiveTime.Format(time.RFC3339Nano),
 		"job_processed_end_time": metric.JobEndTime.Format(time.RFC3339Nano),
-		
-		"queue_duration":         metric.QueueDuration,
-		"processing_duration":    metric.ProcessingDuration,
-		"total_duration":         metric.TotalDuration,
+
+		"queue_duration":      metric.QueueDuration,
+		"processing_duration": metric.ProcessingDuration,
+		"total_duration":      metric.TotalDuration,
 	}
 
 	err := ms.redis.HSet(ctx, key, values)
@@ -84,24 +84,24 @@ func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) 
 }
 
 func (ms *MetricsStore) calculateDurations(metric *MetricRecord) {
-	// Queue duration 
+	// Queue duration
 	if !metric.QueueStartTime.IsZero() && !metric.QueueReceiveTime.IsZero() {
 		metric.QueueDuration = metric.QueueReceiveTime.Sub(metric.QueueStartTime).Seconds()
 	}
 
-	// Processing duration 
+	// Processing duration
 	if !metric.QueueReceiveTime.IsZero() && !metric.JobEndTime.IsZero() {
 		metric.ProcessingDuration = metric.JobEndTime.Sub(metric.QueueReceiveTime).Seconds()
 	}
 
-	// Total duration 
+	// Total duration
 	if !metric.QueueStartTime.IsZero() && !metric.JobEndTime.IsZero() {
 		metric.TotalDuration = metric.JobEndTime.Sub(metric.QueueStartTime).Seconds()
 	}
 }
 
-func (ms *MetricsStore) GetMetric(ctx context.Context, eventID, batchID string) (*MetricRecord, error) {
-	key := ms.GetBatchKey(eventID, batchID)
+func (ms *MetricsStore) GetMetric(ctx context.Context, batchID, jobID string) (*MetricRecord, error) {
+	key := ms.GetJobKey(batchID, jobID)
 	data, err := ms.redis.HGetAll(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get metric: %w", err)
@@ -117,7 +117,7 @@ func (ms *MetricsStore) parseMetric(data map[string]string) (*MetricRecord, erro
 	var result MetricRecord
 	var err error
 
-	result.BatchID = data["batch_id"]
+	result.JobID = data["job_id"]
 	result.JobID = data["job_id"]
 
 	if data["queue_start_time"] != "" {
@@ -160,43 +160,43 @@ func (ms *MetricsStore) parseMetric(data map[string]string) (*MetricRecord, erro
 	if result.QueueDuration == 0 || result.ProcessingDuration == 0 || result.TotalDuration == 0 {
 		ms.calculateDurations(&result)
 	}
-	
+
 	return &result, nil
 }
 
-func (ms *MetricsStore) GetEventBatches(ctx context.Context, eventID string) ([]*MetricRecord, error) {
-	pattern := ms.getEventPattern(eventID)
+func (ms *MetricsStore) GetBatchJobes(ctx context.Context, batchID string) ([]*MetricRecord, error) {
+	pattern := ms.getBatchPattern(batchID)
 	keys, err := ms.redis.Keys(ctx, pattern)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get batch keys: %w", err)
+		return nil, fmt.Errorf("failed to get job keys: %w", err)
 	}
 
-	var batches []*MetricRecord
+	var jobes []*MetricRecord
 	for _, key := range keys {
 		data, err := ms.redis.HGetAll(ctx, key)
 		if err != nil {
 			continue
 		}
 
-		batch, err := ms.parseMetric(data)
+		job, err := ms.parseMetric(data)
 		if err == nil {
-			batches = append(batches, batch)
+			jobes = append(jobes, job)
 		}
 	}
 
-	sort.Slice(batches, func(i, j int) bool {
-		return batches[i].QueueStartTime.Before(batches[j].QueueStartTime)
+	sort.Slice(jobes, func(i, j int) bool {
+		return jobes[i].QueueStartTime.Before(jobes[j].QueueStartTime)
 	})
 
-	return batches, nil
+	return jobes, nil
 }
 
-func (ms *MetricsStore) UpdateMetricField(ctx context.Context, eventID, field, batchID string, value time.Time) error {
-	key := ms.GetBatchKey(eventID, batchID)
+func (ms *MetricsStore) UpdateMetricField(ctx context.Context, batchID, field, jobID string, value time.Time) error {
+	key := ms.GetJobKey(batchID, jobID)
 	log.Printf("DEBUG: UpdateMetricField - key: %s, field: %s, value: %s", key, field, value.Format(time.RFC3339Nano))
 
 	// Always set basic fields
-	err := ms.redis.HSet(ctx, key, "event_id", eventID, "batch_id", batchID)
+	err := ms.redis.HSet(ctx, key, "batch_id", batchID, "job_id", jobID)
 	if err != nil {
 		return fmt.Errorf("failed to set basic fields: %w", err)
 	}
@@ -248,13 +248,13 @@ func (ms *MetricsStore) UpdateMetricField(ctx context.Context, eventID, field, b
 	return nil
 }
 
-func (ms *MetricsStore) RecordMetricsBatch(ctx context.Context, metrics []*MetricRecord) error {
+func (ms *MetricsStore) RecordMetricsJob(ctx context.Context, metrics []*MetricRecord) error {
 	pipe := ms.redis.Pipeline()
 
 	for _, metric := range metrics {
-		key := ms.GetBatchKey(metric.BatchID, metric.JobID)
+		key := ms.GetJobKey(metric.JobID, metric.JobID)
 		values := map[string]interface{}{
-			"batch_id":           metric.BatchID,
+			"job_id":             metric.JobID,
 			"queue_start_time":   metric.QueueStartTime.Format(time.RFC3339Nano),
 			"queue_receive_time": metric.QueueReceiveTime.Format(time.RFC3339Nano),
 			"job_end_time":       metric.JobEndTime.Format(time.RFC3339Nano),
@@ -270,16 +270,18 @@ func (ms *MetricsStore) RecordMetricsBatch(ctx context.Context, metrics []*Metri
 	return err
 }
 
-func (ms *MetricsStore) CleanupBatches(ctx context.Context, eventID string, timeParam string) error {
+func (ms *MetricsStore) CleanupJobes(ctx context.Context, batchID string, timeParam string) error {
 
-	if err := ms.ExportEventBatchesToS3(ctx, eventID, timeParam); err != nil {
-		log.Printf("WARNING: failed to export metrics for event %s before cleanup: %v", eventID, err)
+	if err := ms.ExportBatchJobesToS3(ctx, batchID, timeParam); err != nil {
+		log.Printf("WARNING: failed to export metrics for batch %s before cleanup: %v", batchID, err)
 	}
 
-	pattern := ms.getEventPattern(eventID)
+	log.Printf("DEBUG: Starting CleanupJobes timeParam: %s", timeParam)
+
+	pattern := ms.getBatchPattern(batchID)
 	keys, err := ms.redis.Keys(ctx, pattern)
 	if err != nil {
-		return fmt.Errorf("failed to get batch keys: %w", err)
+		return fmt.Errorf("failed to get job keys: %w", err)
 	}
 
 	for _, key := range keys {
@@ -293,23 +295,23 @@ func (ms *MetricsStore) CleanupBatches(ctx context.Context, eventID string, time
 	return nil
 }
 
-func (ms *MetricsStore) GetAllEventIDs(ctx context.Context) ([]string, error) {
+func (ms *MetricsStore) GetAllBatchIDs(ctx context.Context) ([]string, error) {
 	pattern := fmt.Sprintf("%s:*", ms.keyPrefix)
 	keys, err := ms.redis.Keys(ctx, pattern)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get keys: %w", err)
 	}
 
-	eventIDs := make(map[string]struct{})
+	batchIDs := make(map[string]struct{})
 	for _, key := range keys {
 		parts := strings.Split(key, ":")
 		if len(parts) >= 2 && !strings.Contains(key, ":summary:") {
-			eventIDs[parts[1]] = struct{}{}
+			batchIDs[parts[1]] = struct{}{}
 		}
 	}
 
-	result := make([]string, 0, len(eventIDs))
-	for id := range eventIDs {
+	result := make([]string, 0, len(batchIDs))
+	for id := range batchIDs {
 		result = append(result, id)
 	}
 

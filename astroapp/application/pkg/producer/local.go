@@ -196,7 +196,7 @@ func (l *LocalFileSource) isSystemFile(filename string) bool {
 	systemFiles := []string{
 		"mask.txt",           // pPXF mask file
 		"ppxf_config.json",   // pPXF user configuration file
-		".batch_placeholder", // Old build remnant
+		".job_placeholder", // Old build remnant
 		".gitkeep",           // Git keep files
 		".DS_Store",          // macOS system files
 		"Thumbs.db",          // Windows thumbnail cache

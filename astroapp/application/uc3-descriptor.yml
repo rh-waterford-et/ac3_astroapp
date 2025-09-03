@@ -105,7 +105,7 @@ Microservices_configuration:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: EXPLORED_STARLIGHT
           value: "starlight/input"
         - name: EXPLORED_PPFX
@@ -174,7 +174,7 @@ Microservices_configuration:
         - name: BATCH_SIZE
           value: "5"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: EXPLORED_STARLIGHT
           value: "/processing_data/starlight/data/output"
         - name: OUTPUT_STARLIGHT
@@ -369,7 +369,7 @@ Microservices_configuration:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: IN_FILE_OUTPUT_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST
