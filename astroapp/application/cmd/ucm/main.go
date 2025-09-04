@@ -166,16 +166,16 @@ func LaunchProducer(side string) error {
 				return
 			}
 
-			batchName := triggerData.Dataset
+			jobName := triggerData.Dataset
 			processorType := triggerData.Processor
 			appType := strings.ToUpper(processorType)
 
-			log.Printf("HTTP trigger received: batch=%s, processor=%s", batchName, processorType)
+			log.Printf("HTTP trigger received: job=%s, processor=%s", jobName, processorType)
 
-			// Run the watcher for this specific batch
+			// Run the watcher for this specific job
 			go func() {
-				appRunner.RunForBatch(appType, batchName, side, utils, queue, redis)
-				log.Printf("Completed processing for batch: %s", batchName)
+				appRunner.RunForJob(appType, jobName, side, utils, queue, redis)
+				log.Printf("Completed processing for job: %s", jobName)
 			}()
 
 			w.Header().Set("Content-Type", "application/json")
@@ -199,18 +199,18 @@ func LaunchProducer(side string) error {
 				return
 			}
 
-			batchName := triggerData.Dataset
+			jobName := triggerData.Dataset
 			fileName := triggerData.FileName
 			processorType := triggerData.Processor
 			appType := strings.ToUpper(processorType)
 
-			log.Printf("HTTP single file trigger received: batch=%s, file=%s, processor=%s",
-				batchName, fileName, processorType)
+			log.Printf("HTTP single file trigger received: job=%s, file=%s, processor=%s",
+				jobName, fileName, processorType)
 
 			// Run the watcher for this specific file
 			go func() {
-				appRunner.RunForSingleFile(appType, batchName, fileName, side, utils, queue, redis)
-				log.Printf("Completed processing for file: %s in batch: %s", fileName, batchName)
+				appRunner.RunForSingleFile(appType, jobName, fileName, side, utils, queue, redis)
+				log.Printf("Completed processing for file: %s in job: %s", fileName, jobName)
 			}()
 
 			w.Header().Set("Content-Type", "application/json")

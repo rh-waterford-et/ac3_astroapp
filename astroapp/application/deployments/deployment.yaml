@@ -35,7 +35,7 @@ spec:
           value: "rabbitmq"
         - name: RABBITMQ_PORT
           value: "5672"
-        - name: BATCH_SIZE
+        - name: JOB_SIZE
           value: "5"
         - name: AWS_ACCESS_KEY_ID
           value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
@@ -46,7 +46,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: EXPLORED_STARLIGHT
           value: "starlight/input"
         - name: EXPLORED_PPXF
@@ -75,6 +75,8 @@ spec:
           value: "6379"
         - name: REDIS_PASSWORD
           value: ""
+        - name: METRICS
+          value: "metrics/"
         ports:
         - containerPort: 5672
         volumeMounts:
@@ -97,7 +99,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: SERVER_PORT
           value: "8080"
         - name: CORS_ALLOWED_ORIGINS
@@ -173,7 +175,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: IN_FILE_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST
@@ -191,5 +193,5 @@ spec:
         - name: REDIS_PASSWORD
           value: ""
         - name: METRICS
-          value: "metrics"
+          value: "metrics/"
 

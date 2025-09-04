@@ -15,75 +15,75 @@ import (
 
 // BinaryProducer handles binary files for PPXF
 type BinaryProducer struct {
-	BatchSize        int
-	BinaryBatch      []api.BinaryDataFile
-	BinaryEventQueue chan api.BinaryEvent
+	JobSize          int
+	BinaryJob        []api.BinaryDataFile
+	BinaryBatchQueue chan api.BinaryBatch
 	FileSource       FileSource
 	Utils            common.UtilsInterface
 	Side             string
-	EventID          string
+	BatchID          string
 }
 
-func NewBinaryProducer(batchSize int, fileSource FileSource, eventQueue chan api.BinaryEvent, utils common.UtilsInterface, side string, eventID string) *BinaryProducer {
+func NewBinaryProducer(jobSize int, fileSource FileSource, batchQueue chan api.BinaryBatch, utils common.UtilsInterface, side string, batchID string) *BinaryProducer {
 	return &BinaryProducer{
-		BatchSize:        batchSize,
-		BinaryBatch:      make([]api.BinaryDataFile, 0, batchSize),
-		BinaryEventQueue: eventQueue,
+		JobSize:          jobSize,
+		BinaryJob:        make([]api.BinaryDataFile, 0, jobSize),
+		BinaryBatchQueue: batchQueue,
 		FileSource:       fileSource,
 		Utils:            utils,
 		Side:             side,
-		EventID:          eventID,
+		BatchID:          batchID,
 	}
 }
 
-// CreateBinaryEvent handles binary event processing for PPXF
-func (bp *BinaryProducer) CreateBinaryEvent(appName string, side string, queue queue.QueueInterface, eventQueue chan api.BinaryEvent) {
+// CreateBinaryBatch handles binary batch processing for PPXF
+func (bp *BinaryProducer) CreateBinaryBatch(appName string, side string, queue queue.QueueInterface, batchQueue chan api.BinaryBatch) {
 	go func() {
-		for event := range eventQueue {
-			log.Printf("Sending binary event (ID: %s, BatchID: %s) with %d files\n", event.ID, event.BatchID, len(event.Files))
-			bp.SendBinaryEvent(event, appName, side, queue)
+		for batch := range batchQueue {
+			log.Printf("Sending binary batch (ID: %s, JobID: %s) with %d files\n", batch.ID, batch.JobID, len(batch.Files))
+			bp.SendBinaryBatch(batch, appName, side, queue)
 		}
 	}()
 
 	bp.ProcessBinaryFiles(appName)
 }
 
-// SendBinaryEvent sends binary events via RabbitMQ (handles .fits files safely)
-func (bp *BinaryProducer) SendBinaryEvent(event api.BinaryEvent, appName string, side string, queue queue.QueueInterface) {
+// SendBinaryBatch sends binary batchs via RabbitMQ (handles .fits files safely)
+func (bp *BinaryProducer) SendBinaryBatch(batch api.BinaryBatch, appName string, side string, queue queue.QueueInterface) {
 	binarySender := &sender.BinaryRabbitMQSender{}
-	binarySender.SendBinaryEvent(event, appName, side, queue)
+	binarySender.SendBinaryBatch(batch, appName, side, queue)
 }
 
 // AddBinaryFile handles binary files for PPXF
 func (bp *BinaryProducer) AddBinaryFile(file api.BinaryDataFile, appName string) {
-	bp.BinaryBatch = append(bp.BinaryBatch, file)
-	if len(bp.BinaryBatch) >= bp.BatchSize {
-		bp.SendBinaryBatch(appName)
+	bp.BinaryJob = append(bp.BinaryJob, file)
+	if len(bp.BinaryJob) >= bp.JobSize {
+		bp.SendBinaryJob(appName)
 	}
 }
 
-// SendBinaryBatch handles binary file batches for PPXF
-func (bp *BinaryProducer) SendBinaryBatch(appName string) {
-	if len(bp.BinaryBatch) > 0 {
+// SendBinaryJob handles binary file jobes for PPXF
+func (bp *BinaryProducer) SendBinaryJob(appName string) {
+	if len(bp.BinaryJob) > 0 {
 		// Update progress to queued stage
 		bp.updateBinaryProgress(appName, api.StageQueued, 10.0)
 
-		batchID := bp.Utils.GenerateUUID()
-		event := api.BinaryEvent{
-			ID:      bp.EventID,
-			BatchID: batchID,
-			Files:   bp.BinaryBatch,
+		jobID := bp.Utils.GenerateUUID()
+		batch := api.BinaryBatch{
+			ID:    bp.BatchID,
+			JobID: jobID,
+			Files: bp.BinaryJob,
 		}
-		bp.BinaryEventQueue <- event
+		bp.BinaryBatchQueue <- batch
 
 		bp.DeleteProcessedBinaryFiles()
-		bp.BinaryBatch = make([]api.BinaryDataFile, 0, bp.BatchSize)
+		bp.BinaryJob = make([]api.BinaryDataFile, 0, bp.JobSize)
 	}
 }
 
-// DeleteProcessedBinaryFiles handles file cleanup for binary batches
+// DeleteProcessedBinaryFiles handles file cleanup for binary jobes
 func (bp *BinaryProducer) DeleteProcessedBinaryFiles() {
-	for _, file := range bp.BinaryBatch {
+	for _, file := range bp.BinaryJob {
 		err := bp.FileSource.DeleteFile(file.Name)
 		if err != nil {
 			log.Printf("Error deleting binary file %s: %v\n", file.Name, err)
@@ -95,15 +95,15 @@ func (bp *BinaryProducer) DeleteProcessedBinaryFiles() {
 
 // updateBinaryProgress sends progress updates for binary processing
 func (bp *BinaryProducer) updateBinaryProgress(appName string, stage api.PipelineStage, progress float64) {
-	// Extract dataset name from the first file in the batch
-	if len(bp.BinaryBatch) == 0 {
+	// Extract dataset name from the first file in the job
+	if len(bp.BinaryJob) == 0 {
 		return
 	}
 
 	// For producer side, we use the app name as dataset ID
 	datasetID := appName
 	if bp.Side == "producer" {
-		datasetID = appName + "_" + bp.EventID
+		datasetID = appName + "_" + bp.BatchID
 	}
 
 	request := api.ProgressUpdateRequest{
@@ -111,7 +111,7 @@ func (bp *BinaryProducer) updateBinaryProgress(appName string, stage api.Pipelin
 		DatasetName: appName,
 		Stage:       stage,
 		Progress:    progress,
-		FilesTotal:  len(bp.BinaryBatch),
+		FilesTotal:  len(bp.BinaryJob),
 	}
 
 	// Send progress update to local API server
@@ -155,7 +155,7 @@ func (bp *BinaryProducer) ProcessBinaryFiles(appName string) {
 			log.Printf("Error reading binary file %s: %v\n", filename, err)
 			continue
 		}
-		// NO STRING CONVERSION - keep as []byte to prevent corruption
+		// NO STRING CONVERSION - keep as []byte to prbatch corruption
 		binaryFile := api.BinaryDataFile{
 			Name:    filename,
 			Content: content, // Keep as []byte - NO string(content)
@@ -164,5 +164,5 @@ func (bp *BinaryProducer) ProcessBinaryFiles(appName string) {
 		bp.AddBinaryFile(binaryFile, appName)
 	}
 
-	bp.SendBinaryBatch(appName)
+	bp.SendBinaryJob(appName)
 }

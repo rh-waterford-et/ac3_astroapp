@@ -19,7 +19,7 @@ type S3FileSource struct {
 	AppName   string
 	InputDir  string // S3 prefix
 	OutputDir string // S3 prefix
-	BatchName string // Optional batch filter
+	JobName   string // Optional job filter
 }
 
 // SingleFileSource handles single file operations
@@ -29,7 +29,7 @@ type SingleFileSource struct {
 	InputDir     string // S3 prefix for input
 	ProcessedDir string // S3 prefix for processed files
 	OutputDir    string // S3 prefix for output
-	BatchName    string // Batch name
+	JobName      string // Job name
 	FileName     string // Specific file name
 }
 
@@ -43,55 +43,55 @@ func NewS3FileSource(bucket s3bucket.S3BucketInterface, appName, inputDir, outpu
 }
 
 func (s *S3FileSource) ListFiles() ([]string, error) {
-	if s.BatchName != "" {
-		// Scan specific batch directory only
-		return s.ListFilesForBatch(s.BatchName)
+	if s.JobName != "" {
+		// Scan specific job directory only
+		return s.ListFilesForJob(s.JobName)
 	}
 	// Scan all directories (fallback)
 	return s.Bucket.GetNewAssets(s.InputDir)
 }
 
-// ListFilesForBatch scans files in a specific batch directory
-func (s *S3FileSource) ListFilesForBatch(batchName string) ([]string, error) {
-	batchPath := s.InputDir + "/" + batchName
-	files, err := s.Bucket.GetS3Objects(batchPath)
+// ListFilesForJob scans files in a specific job directory
+func (s *S3FileSource) ListFilesForJob(jobName string) ([]string, error) {
+	jobPath := s.InputDir + "/" + jobName
+	files, err := s.Bucket.GetS3Objects(jobPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// Add batch directory prefix to each file
-	var batchFiles []string
+	// Add job directory prefix to each file
+	var jobFiles []string
 	for _, file := range files {
 		if !strings.HasSuffix(file, "/") { // Skip directory markers
-			batchFiles = append(batchFiles, batchName+"/"+file)
+			jobFiles = append(jobFiles, jobName+"/"+file)
 		}
 	}
-	log.Printf("Found %d files in batch directory %s", len(batchFiles), batchName)
-	return batchFiles, nil
+	log.Printf("Found %d files in job directory %s", len(jobFiles), jobName)
+	return jobFiles, nil
 }
 
 // ListFiles implementation for SingleFileSource - returns single file if it exists
 func (s *SingleFileSource) ListFiles() ([]string, error) {
 	// First check the input directory
-	inputBatchPath := fmt.Sprintf("%s/%s", s.InputDir, s.BatchName)
-	objects, err := s.Bucket.GetS3Objects(inputBatchPath)
+	inputJobPath := fmt.Sprintf("%s/%s", s.InputDir, s.JobName)
+	objects, err := s.Bucket.GetS3Objects(inputJobPath)
 	if err == nil {
 		for _, obj := range objects {
 			if strings.HasSuffix(obj, s.FileName) {
-				log.Printf("Found file in input directory: %s/%s", inputBatchPath, s.FileName)
-				return []string{fmt.Sprintf("%s/%s", s.BatchName, s.FileName)}, nil
+				log.Printf("Found file in input directory: %s/%s", inputJobPath, s.FileName)
+				return []string{fmt.Sprintf("%s/%s", s.JobName, s.FileName)}, nil
 			}
 		}
 	}
 
 	// If not found in input, check the processed directory
-	processedBatchPath := fmt.Sprintf("%s/%s", s.ProcessedDir, s.BatchName)
-	objects, err = s.Bucket.GetS3Objects(processedBatchPath)
+	processedJobPath := fmt.Sprintf("%s/%s", s.ProcessedDir, s.JobName)
+	objects, err = s.Bucket.GetS3Objects(processedJobPath)
 	if err == nil {
 		for _, obj := range objects {
 			if strings.HasSuffix(obj, s.FileName) {
-				log.Printf("Found file in processed directory: %s/%s", processedBatchPath, s.FileName)
-				return []string{fmt.Sprintf("%s/%s", s.BatchName, s.FileName)}, nil
+				log.Printf("Found file in processed directory: %s/%s", processedJobPath, s.FileName)
+				return []string{fmt.Sprintf("%s/%s", s.JobName, s.FileName)}, nil
 			}
 		}
 	}
@@ -106,13 +106,13 @@ func (s *SingleFileSource) ReadFile(filename string) ([]byte, error) {
 	// For single file source, check both input and processed directories
 	var inputKey, processedKey string
 	if strings.Contains(filename, "/") {
-		// filename already includes batch (e.g., "batch/file.fits")
+		// filename already includes job (e.g., "job/file.fits")
 		inputKey = fmt.Sprintf("%s/%s", s.InputDir, filename)
 		processedKey = fmt.Sprintf("%s/%s", s.ProcessedDir, filename)
 	} else {
-		// just filename, add batch prefix
-		inputKey = fmt.Sprintf("%s/%s/%s", s.InputDir, s.BatchName, filename)
-		processedKey = fmt.Sprintf("%s/%s/%s", s.ProcessedDir, s.BatchName, filename)
+		// just filename, add job prefix
+		inputKey = fmt.Sprintf("%s/%s/%s", s.InputDir, s.JobName, filename)
+		processedKey = fmt.Sprintf("%s/%s/%s", s.ProcessedDir, s.JobName, filename)
 	}
 
 	// Try input directory first
@@ -137,13 +137,13 @@ func (s *SingleFileSource) DeleteFile(filename string) error {
 	// For single file source, check both input and processed directories
 	var inputKey, processedKey string
 	if strings.Contains(filename, "/") {
-		// filename already includes batch (e.g., "batch/file.fits")
+		// filename already includes job (e.g., "job/file.fits")
 		inputKey = fmt.Sprintf("%s/%s", s.InputDir, filename)
 		processedKey = fmt.Sprintf("%s/%s", s.ProcessedDir, filename)
 	} else {
-		// just filename, add batch prefix
-		inputKey = fmt.Sprintf("%s/%s/%s", s.InputDir, s.BatchName, filename)
-		processedKey = fmt.Sprintf("%s/%s/%s", s.ProcessedDir, s.BatchName, filename)
+		// just filename, add job prefix
+		inputKey = fmt.Sprintf("%s/%s/%s", s.InputDir, s.JobName, filename)
+		processedKey = fmt.Sprintf("%s/%s/%s", s.ProcessedDir, s.JobName, filename)
 	}
 
 	// Try to delete from input directory first
@@ -167,8 +167,8 @@ func (s *S3FileSource) ReadFile(filename string) ([]byte, error) {
 	s3Client := s.Bucket.GetS3Client()
 	bucketName := s.Bucket.GetBucketName()
 
-	// filename now includes batch directory (e.g., "NGC7025/spectrum_001.txt")
-	// Construct the full S3 key: inputDir/batchDir/filename
+	// filename now includes job directory (e.g., "NGC7025/spectrum_001.txt")
+	// Construct the full S3 key: inputDir/jobDir/filename
 	result, err := s3Client.GetObject(&s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String(filepath.Join(s.InputDir, filename)),
@@ -266,29 +266,29 @@ func (s *S3FileSource) DeleteFile(filename string) error {
 	return nil
 }
 
-// ExtractBatchName extracts the batch name from a file path
+// ExtractJobName extracts the job name from a file path
 // e.g., "NGC7025/spectrum_001.txt" -> "NGC7025"
-func (s *S3FileSource) ExtractBatchName(filename string) (string, error) {
+func (s *S3FileSource) ExtractJobName(filename string) (string, error) {
 	parts := strings.Split(filename, "/")
 	if len(parts) < 2 {
-		return "", fmt.Errorf("invalid filename format, expected batch/filename: %s", filename)
+		return "", fmt.Errorf("invalid filename format, expected job/filename: %s", filename)
 	}
 	return parts[0], nil
 }
 
-// GetBatchesWithFiles returns a map of batch names to their file counts
-func (s *S3FileSource) GetBatchesWithFiles() (map[string]int, error) {
+// GetJobesWithFiles returns a map of job names to their file counts
+func (s *S3FileSource) GetJobesWithFiles() (map[string]int, error) {
 	files, err := s.ListFiles()
 	if err != nil {
 		return nil, err
 	}
 
-	batchCounts := make(map[string]int)
+	jobCounts := make(map[string]int)
 	for _, file := range files {
-		if batch, err := s.ExtractBatchName(file); err == nil {
-			batchCounts[batch]++
+		if job, err := s.ExtractJobName(file); err == nil {
+			jobCounts[job]++
 		}
 	}
 
-	return batchCounts, nil
+	return jobCounts, nil
 }

@@ -194,12 +194,12 @@ func moveFile(source, destination string) error {
 // isSystemFile checks if a file is a system/configuration file that shouldn't be processed
 func (l *LocalFileSource) isSystemFile(filename string) bool {
 	systemFiles := []string{
-		"mask.txt",           // pPXF mask file
-		"ppxf_config.json",   // pPXF user configuration file
-		".batch_placeholder", // Old build remnant
-		".gitkeep",           // Git keep files
-		".DS_Store",          // macOS system files
-		"Thumbs.db",          // Windows thumbnail cache
+		"mask.txt",         // pPXF mask file
+		"ppxf_config.json", // pPXF user configuration file
+		".job_placeholder", // Old build remnant
+		".gitkeep",         // Git keep files
+		".DS_Store",        // macOS system files
+		"Thumbs.db",        // Windows thumbnail cache
 	}
 
 	for _, sysFile := range systemFiles {

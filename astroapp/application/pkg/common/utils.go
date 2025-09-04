@@ -67,7 +67,6 @@ func (u *Utils) EnsureDirectoriesExist() error {
 		os.Getenv("PROCESSED_STARLIGHT"),
 		os.Getenv("PROCESSED_PPXF"),
 		os.Getenv("BATCH_INFO_DIR"),
-		os.Getenv("METRICS"),
 	}
 
 	for _, dir := range requiredDirs {
@@ -94,6 +93,7 @@ func (u *Utils) EnsureBucketDirectoriesExist(bucket s3bucket.S3BucketInterface) 
 		os.Getenv("OUTPUT_STARLIGHT"),
 		os.Getenv("OUTPUT_PPXF"),
 		os.Getenv("OUTPUT_STECKMAP"),
+		os.Getenv("METRICS"),
 	}
 
 	for _, dir := range requiredDirs {

@@ -15,17 +15,17 @@ const (
 )
 
 type DatasetProgress struct {
-	DatasetID        string        `json:"dataset_id"`
-	DatasetName      string        `json:"dataset_name"`
-	Stage            PipelineStage `json:"stage"`
-	Progress         float64       `json:"progress"` // 0-100
-	FilesTotal       int           `json:"files_total"`
-	FilesProcessed   int           `json:"files_processed"`
-	BatchesTotal     int           `json:"batches_total"`
-	BatchesProcessed int           `json:"batches_processed"`
-	StartTime        time.Time     `json:"start_time"`
-	LastUpdated      time.Time     `json:"last_updated"`
-	ErrorMessage     string        `json:"error_message,omitempty"`
+	DatasetID      string        `json:"dataset_id"`
+	DatasetName    string        `json:"dataset_name"`
+	Stage          PipelineStage `json:"stage"`
+	Progress       float64       `json:"progress"` // 0-100
+	FilesTotal     int           `json:"files_total"`
+	FilesProcessed int           `json:"files_processed"`
+	JobesTotal     int           `json:"jobes_total"`
+	JobesProcessed int           `json:"jobes_processed"`
+	StartTime      time.Time     `json:"start_time"`
+	LastUpdated    time.Time     `json:"last_updated"`
+	ErrorMessage   string        `json:"error_message,omitempty"`
 }
 
 // Progress tracking responses
@@ -48,12 +48,12 @@ type ProgressUpdateRequest struct {
 	Stage       PipelineStage `json:"stage"`
 	Progress    float64       `json:"progress"`
 	FilesTotal  int           `json:"files_total,omitempty"`
-	BatchInfo   *BatchInfo    `json:"batch_info,omitempty"`
+	JobInfo     *JobInfo      `json:"job_info,omitempty"`
 }
 
-type BatchInfo struct {
-	BatchID    string `json:"batch_id"`
-	BatchSize  int    `json:"batch_size"`
+type JobInfo struct {
+	JobID      string `json:"job_id"`
+	JobSize    int    `json:"job_size"`
 	IsComplete bool   `json:"is_complete"`
 }
 
@@ -90,15 +90,15 @@ type BinaryMessageBody struct {
 	Files []BinaryDataFile `json:"Files"`
 }
 
-type Event struct {
-	ID      string     `json:"ID"`
-	BatchID string     `json:"BatchID"`
-	Files   []DataFile `json:"Files"`
+type Batch struct {
+	ID    string     `json:"ID"`
+	JobID string     `json:"JobID"`
+	Files []DataFile `json:"Files"`
 }
 
-// BinaryEvent for handling binary files
-type BinaryEvent struct {
-	ID      string           `json:"ID"`
-	BatchID string           `json:"BatchID"`
-	Files   []BinaryDataFile `json:"Files"`
+// BinaryBatch for handling binary files
+type BinaryBatch struct {
+	ID    string           `json:"ID"`
+	JobID string           `json:"JobID"`
+	Files []BinaryDataFile `json:"Files"`
 }

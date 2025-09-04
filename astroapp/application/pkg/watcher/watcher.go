@@ -30,7 +30,7 @@ func NewWatcher() *Watcher {
 	return &Watcher{}
 }
 
-func (w *Watcher) RunForBatch(appName string, batchName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
+func (w *Watcher) RunForJob(appName string, jobName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
 
 	inputDirEnv := "EXPLORED_" + appName
 	outputDirEnv := "OUTPUT_" + appName
@@ -39,16 +39,16 @@ func (w *Watcher) RunForBatch(appName string, batchName string, side string, uti
 	inputDir := os.Getenv(inputDirEnv)
 	outputDir := os.Getenv(outputDirEnv)
 	processedDir := os.Getenv(processedDirEnv)
-	batchSize, err := strconv.Atoi(os.Getenv("BATCH_SIZE"))
+	jobSize, err := strconv.Atoi(os.Getenv("JOB_SIZE"))
 	if err != nil {
-		log.Printf("Invalid batch size for %s: %v\n", appName, err)
+		log.Printf("Invalid job size for %s: %v\n", appName, err)
 		return
 	}
 
 	var fileSource producer.FileSource
 	var length = 0
-	batchCounts := make(map[string]int)
-	var eventID string
+	jobCounts := make(map[string]int)
+	var batchID string
 
 	switch side {
 	case "producer":
@@ -58,7 +58,7 @@ func (w *Watcher) RunForBatch(appName string, batchName string, side string, uti
 			AppName:   appName,
 			InputDir:  inputDir,
 			OutputDir: outputDir,
-			BatchName: batchName,
+			JobName:   jobName,
 		}
 		files, err := fileSource.ListFiles()
 		if err != nil {
@@ -70,13 +70,13 @@ func (w *Watcher) RunForBatch(appName string, batchName string, side string, uti
 			for _, file := range files {
 				parts := strings.Split(file, "/")
 				if len(parts) >= 1 {
-					batchName := parts[0]
-					eventID = batchName
-					batchCounts[batchName]++
+					jobName := parts[0]
+					batchID = jobName
+					jobCounts[jobName]++
 				}
 			}
-			for batch, count := range batchCounts {
-				log.Printf("  Batch %s: %d files", batch, count)
+			for job, count := range jobCounts {
+				log.Printf("  Batch %s: %d files", job, count)
 			}
 		}
 	case "processor":
@@ -96,9 +96,9 @@ func (w *Watcher) RunForBatch(appName string, batchName string, side string, uti
 		return
 	}
 
-	// Process files if we have batches (producer) or files (processor)
+	// Process files if we have jobes (producer) or files (processor)
 	shouldProcess := false
-	if side == "producer" && len(batchCounts) > 0 {
+	if side == "producer" && len(jobCounts) > 0 {
 		shouldProcess = true
 	} else if side == "processor" && length > 0 {
 		shouldProcess = true
@@ -109,20 +109,20 @@ func (w *Watcher) RunForBatch(appName string, batchName string, side string, uti
 
 		// Check if this app needs binary processing (PPXF)
 		if api.IsAppBinary(appName) {
-			log.Printf("Using binary processing for %s (prevents .fits corruption)", appName)
-			binaryEventQueue := make(chan api.BinaryEvent, 10)
-			binaryProducer := producer.NewBinaryProducer(batchSize, fileSource, binaryEventQueue, utils, side, eventID)
-			binaryProducer.CreateBinaryEvent(appName, side, queue, binaryEventQueue)
+			log.Printf("Using binary processing for %s (prbatchs .fits corruption)", appName)
+			binaryBatchQueue := make(chan api.BinaryBatch, 10)
+			binaryProducer := producer.NewBinaryProducer(jobSize, fileSource, binaryBatchQueue, utils, side, batchID)
+			binaryProducer.CreateBinaryBatch(appName, side, queue, binaryBatchQueue)
 		} else {
 			log.Printf("Using standard text processing for %s", appName)
-			eventQueue := make(chan api.Event, 10)
-			standardProducer := producer.NewProducer(batchSize, fileSource, eventQueue, utils, side, eventID, redisClient)
-			standardProducer.CreateEvent(appName, side, queue)
+			batchQueue := make(chan api.Batch, 10)
+			standardProducer := producer.NewProducer(jobSize, fileSource, batchQueue, utils, side, batchID, redisClient)
+			standardProducer.CreateBatch(appName, side, queue)
 		}
 	}
 }
 
-func (w *Watcher) RunForSingleFile(appName string, batchName string, fileName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
+func (w *Watcher) RunForSingleFile(appName string, jobName string, fileName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
 
 	inputDirEnv := "EXPLORED_" + appName
 	outputDirEnv := "OUTPUT_" + appName
@@ -133,7 +133,7 @@ func (w *Watcher) RunForSingleFile(appName string, batchName string, fileName st
 	processedDir := os.Getenv(processedDirEnv)
 
 	var fileSource producer.FileSource
-	var eventID string = fmt.Sprintf("%s-%s", batchName, fileName)
+	var batchID string = fmt.Sprintf("%s-%s", jobName, fileName)
 
 	switch side {
 	case "producer":
@@ -144,7 +144,7 @@ func (w *Watcher) RunForSingleFile(appName string, batchName string, fileName st
 			InputDir:     inputDir,     // Check input directory first
 			ProcessedDir: processedDir, // Also check processed directory
 			OutputDir:    outputDir,
-			BatchName:    batchName,
+			JobName:      jobName,
 			FileName:     fileName,
 		}
 		files, err := fileSource.ListFiles()
@@ -154,11 +154,11 @@ func (w *Watcher) RunForSingleFile(appName string, batchName string, fileName st
 		}
 
 		if len(files) == 0 {
-			log.Printf("No file found: %s in batch %s", fileName, batchName)
+			log.Printf("No file found: %s in job %s", fileName, jobName)
 			return
 		}
 
-		log.Printf("Processing single file: %s in batch %s", fileName, batchName)
+		log.Printf("Processing single file: %s in job %s", fileName, jobName)
 
 	case "processor":
 		fileSource = &producer.LocalFileSource{
@@ -180,49 +180,50 @@ func (w *Watcher) RunForSingleFile(appName string, batchName string, fileName st
 	log.Printf("Processing single %s file...\n", appName)
 
 	// Check if this app needs binary processing (PPXF)
-	w.ProcessBatch(appName, side, utils, queue, redisClient, fileSource, eventID)
+	w.ProcessJob(appName, side, utils, queue, redisClient, fileSource, batchID)
 }
 
 func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
-	batchInfoDir := os.Getenv("BATCH_INFO_DIR")
+	jobInfoDir := os.Getenv("BATCH_INFO_DIR")
 
 	log.Println("Checking for completed files...")
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
 
-	for range ticker.C {
-		// Process batch_info files for STARLIGHT (Kate's system)
-		files, err := os.ReadDir(batchInfoDir)
+	for {
+
+		files, err := os.ReadDir(jobInfoDir)
 		if err != nil {
 			fmt.Printf("Error reading directory: %v\n", err)
 		} else {
-			//log.Printf("DEBUG: Found %d files in %s", len(files), batchInfoDir)
+			log.Printf("DEBUG: Found %d files in %s", len(files), jobInfoDir)
 			for _, file := range files {
-				if file.IsDir() {
+				log.Printf("DEBUG: Processing file: %s", file.Name())
+				filePath := filepath.Join(jobInfoDir, file.Name())
+				log.Printf("DEBUG: File path: %s", filePath)
+				if err := w.processJobFile(filePath, side, utils, queue, redisClient); err != nil {
+					log.Printf("Error processing job file %s: %v\n", filePath, err)
 					continue
 				}
-
-				filePath := filepath.Join(batchInfoDir, file.Name())
-				if err := w.processBatchFile(filePath, side, utils, queue, redisClient); err != nil {
-					log.Printf("Error processing batch file %s: %v\n", filePath, err)
-					continue
-				}
-				log.Printf("DEBUG: Successfully processed batch file %s, removing file", filePath)
+				log.Printf("DEBUG: Successfully processed job file %s, removing file", filePath)
 				os.Remove(filePath)
 			}
 		}
 
 		// Check for pPXF output files (existing system)
-		//w.RunForBatch("PPXF", "NGC7025", side, utils, queue, redisClient)
+		//w.RunForJob("PPXF", "NGC7025", side, utils, queue, redisClient)
+
+		// Sleep for 10 seconds before next iteration
+		time.Sleep(10 * time.Second)
 	}
 }
-func (w *Watcher) processBatchFile(filePath, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) error {
+
+func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) error {
+	log.Printf("DEBUG: Processing job file: %s", filePath)
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
-	batchID := strings.SplitN(filepath.Base(filePath), ".", 2)[0]
+	jobID := strings.SplitN(filepath.Base(filePath), ".", 2)[0]
 
 	scanner := bufio.NewScanner(file)
 
@@ -232,11 +233,11 @@ func (w *Watcher) processBatchFile(filePath, side string, utils common.UtilsInte
 	}
 	inputDir := strings.TrimSpace(scanner.Text())
 	appName := strings.ToUpper(strings.SplitN(inputDir, "/", 2)[0])
-	// Read event ID (second line)
+	// Read batch ID (second line)
 	if !scanner.Scan() {
-		return fmt.Errorf("missing event ID")
+		return fmt.Errorf("missing batch ID")
 	}
-	eventID := strings.TrimSpace(scanner.Text())
+	batchID := strings.TrimSpace(scanner.Text())
 
 	// Read file list (third line)
 	if !scanner.Scan() {
@@ -245,11 +246,11 @@ func (w *Watcher) processBatchFile(filePath, side string, utils common.UtilsInte
 	fileList := strings.Split(strings.TrimSpace(scanner.Text()), ",")
 
 	processedDir := strings.Replace(inputDir, "/output", "/processed", 1)
-	processedDir = filepath.Join(processedDir, eventID)
+	processedDir = filepath.Join(processedDir, batchID)
 	if err := os.MkdirAll(processedDir, 0755); err != nil {
 		return fmt.Errorf("failed to create processed directory: %w", err)
 	}
-	batch := make([]api.DataFile, 0, len(fileList))
+	job := make([]api.DataFile, 0, len(fileList))
 	for len(fileList) > 0 {
 		remaining := []string{}
 
@@ -261,7 +262,7 @@ func (w *Watcher) processBatchFile(filePath, side string, utils common.UtilsInte
 				if err != nil {
 					return fmt.Errorf("failed to read file %s: %w", fileName, err)
 				}
-				batch = append(batch, api.DataFile{Name: fileName, Content: string(content)})
+				job = append(job, api.DataFile{Name: fileName, Content: string(content)})
 			} else {
 				remaining = append(remaining, fileName)
 			}
@@ -270,44 +271,46 @@ func (w *Watcher) processBatchFile(filePath, side string, utils common.UtilsInte
 	}
 
 	if len(fileList) == 0 {
-		event := api.Event{
-			ID:      eventID,
-			BatchID: batchID,
-			Files:   batch,
+		batch := api.Batch{
+			ID:    batchID,
+			JobID: jobID,
+			Files: job,
 		}
 		// Initialize sender
 		sender := sender.NewRabbitMQSender(queue, utils, redisClient)
-		sender.SendEvent(event, appName, side, queue)
+		sender.SendBatch(batch, appName, side, queue)
 		// Only move files after successful sending
-		for _, file := range batch {
+		for _, file := range job {
 			sourcePath := filepath.Join(inputDir, file.Name)
 			destPath := filepath.Join(processedDir, file.Name)
 			if err := os.Rename(sourcePath, destPath); err != nil {
 				return fmt.Errorf("failed to move file %s: %w", file.Name, err)
 			}
 		}
+
 	}
+	log.Printf("DEBUG: Successfully processed job file: %s", filePath)
 	return nil
 }
 
-func (w *Watcher) ProcessBatch(appName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient, fileSource producer.FileSource, eventID string) {
+func (w *Watcher) ProcessJob(appName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient, fileSource producer.FileSource, batchID string) {
 	log.Printf("Processing %s files...\n", appName)
-	batchSize, err := strconv.Atoi(os.Getenv("BATCH_SIZE"))
+	jobSize, err := strconv.Atoi(os.Getenv("JOB_SIZE"))
 	if err != nil {
-		log.Printf("Invalid batch size for %s: %v\n", appName, err)
+		log.Printf("Invalid job size for %s: %v\n", appName, err)
 		return
 	}
 
 	// Check if this app needs binary processing (PPXF)
 	if api.IsAppBinary(appName) {
-		log.Printf("Using binary processing for %s (prevents .fits corruption)", appName)
-		binaryEventQueue := make(chan api.BinaryEvent, 10)
-		binaryProducer := producer.NewBinaryProducer(batchSize, fileSource, binaryEventQueue, utils, side, eventID)
-		binaryProducer.CreateBinaryEvent(appName, side, queue, binaryEventQueue)
+		log.Printf("Using binary processing for %s (prbatchs .fits corruption)", appName)
+		binaryBatchQueue := make(chan api.BinaryBatch, 10)
+		binaryProducer := producer.NewBinaryProducer(jobSize, fileSource, binaryBatchQueue, utils, side, batchID)
+		binaryProducer.CreateBinaryBatch(appName, side, queue, binaryBatchQueue)
 	} else {
 		log.Printf("Using standard text processing for %s", appName)
-		eventQueue := make(chan api.Event, 10)
-		standardProducer := producer.NewProducer(batchSize, fileSource, eventQueue, utils, side, eventID, redisClient)
-		standardProducer.CreateEvent(appName, side, queue)
+		batchQueue := make(chan api.Batch, 10)
+		standardProducer := producer.NewProducer(jobSize, fileSource, batchQueue, utils, side, batchID, redisClient)
+		standardProducer.CreateBatch(appName, side, queue)
 	}
 }
