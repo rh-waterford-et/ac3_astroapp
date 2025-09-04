@@ -29,8 +29,8 @@ type ProducerInterface interface {
 }
 
 type Producer struct {
-	JobSize   int
-	Job       []api.DataFile
+	JobSize     int
+	Job         []api.DataFile
 	BatchQueue  chan api.Batch
 	FileSource  FileSource
 	Utils       common.UtilsInterface
@@ -54,8 +54,8 @@ func NewProducer(jobSize int, fileSource FileSource, batchQueue chan api.Batch, 
 	}
 
 	return &Producer{
-		JobSize:   jobSize,
-		Job:       make([]api.DataFile, 0, jobSize),
+		JobSize:     jobSize,
+		Job:         make([]api.DataFile, 0, jobSize),
 		BatchQueue:  batchQueue,
 		FileSource:  fileSource,
 		Utils:       utils,
@@ -108,9 +108,9 @@ func (p *Producer) SendJob(appName string) {
 			jobID = p.FileSource.(*LocalFileSource).GetBaseInputDir()
 		}
 		batch := api.Batch{
-			ID:      p.BatchID,
+			ID:    p.BatchID,
 			JobID: jobID,
-			Files:   p.Job,
+			Files: p.Job,
 		}
 		p.BatchQueue <- batch
 

@@ -25,16 +25,16 @@ func (pt *ProgressTracker) StartDataset(datasetID, datasetName string, filesTota
 	defer pt.mu.Unlock()
 
 	pt.datasets[datasetID] = &DatasetProgress{
-		DatasetID:        datasetID,
-		DatasetName:      datasetName,
-		Stage:            StageReady,
-		Progress:         0.0,
-		FilesTotal:       filesTotal,
-		FilesProcessed:   0,
+		DatasetID:      datasetID,
+		DatasetName:    datasetName,
+		Stage:          StageReady,
+		Progress:       0.0,
+		FilesTotal:     filesTotal,
+		FilesProcessed: 0,
 		JobesTotal:     0,
 		JobesProcessed: 0,
-		StartTime:        time.Now(),
-		LastUpdated:      time.Now(),
+		StartTime:      time.Now(),
+		LastUpdated:    time.Now(),
 	}
 
 	log.Printf("Progress: Started tracking dataset %s (%s) with %d files", datasetID, datasetName, filesTotal)

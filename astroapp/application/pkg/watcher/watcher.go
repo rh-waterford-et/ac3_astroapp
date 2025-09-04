@@ -58,7 +58,7 @@ func (w *Watcher) RunForJob(appName string, jobName string, side string, utils c
 			AppName:   appName,
 			InputDir:  inputDir,
 			OutputDir: outputDir,
-			JobName: jobName,
+			JobName:   jobName,
 		}
 		files, err := fileSource.ListFiles()
 		if err != nil {
@@ -144,7 +144,7 @@ func (w *Watcher) RunForSingleFile(appName string, jobName string, fileName stri
 			InputDir:     inputDir,     // Check input directory first
 			ProcessedDir: processedDir, // Also check processed directory
 			OutputDir:    outputDir,
-			JobName:    jobName,
+			JobName:      jobName,
 			FileName:     fileName,
 		}
 		files, err := fileSource.ListFiles()
@@ -187,22 +187,18 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 	jobInfoDir := os.Getenv("BATCH_INFO_DIR")
 
 	log.Println("Checking for completed files...")
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
 
-	for range ticker.C {
-		// Process job_info files for STARLIGHT (Kate's system)
+	for {
+
 		files, err := os.ReadDir(jobInfoDir)
 		if err != nil {
 			fmt.Printf("Error reading directory: %v\n", err)
 		} else {
-			//log.Printf("DEBUG: Found %d files in %s", len(files), jobInfoDir)
+			log.Printf("DEBUG: Found %d files in %s", len(files), jobInfoDir)
 			for _, file := range files {
-				if file.IsDir() {
-					continue
-				}
-
+				log.Printf("DEBUG: Processing file: %s", file.Name())
 				filePath := filepath.Join(jobInfoDir, file.Name())
+				log.Printf("DEBUG: File path: %s", filePath)
 				if err := w.processJobFile(filePath, side, utils, queue, redisClient); err != nil {
 					log.Printf("Error processing job file %s: %v\n", filePath, err)
 					continue
@@ -214,9 +210,14 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 
 		// Check for pPXF output files (existing system)
 		//w.RunForJob("PPXF", "NGC7025", side, utils, queue, redisClient)
+
+		// Sleep for 10 seconds before next iteration
+		time.Sleep(10 * time.Second)
 	}
 }
+
 func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) error {
+	log.Printf("DEBUG: Processing job file: %s", filePath)
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
@@ -271,9 +272,9 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 
 	if len(fileList) == 0 {
 		batch := api.Batch{
-			ID:      batchID,
+			ID:    batchID,
 			JobID: jobID,
-			Files:   job,
+			Files: job,
 		}
 		// Initialize sender
 		sender := sender.NewRabbitMQSender(queue, utils, redisClient)
@@ -286,8 +287,9 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 				return fmt.Errorf("failed to move file %s: %w", file.Name, err)
 			}
 		}
-		
+
 	}
+	log.Printf("DEBUG: Successfully processed job file: %s", filePath)
 	return nil
 }
 

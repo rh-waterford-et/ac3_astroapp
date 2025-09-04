@@ -19,7 +19,7 @@ type S3FileSource struct {
 	AppName   string
 	InputDir  string // S3 prefix
 	OutputDir string // S3 prefix
-	JobName string // Optional job filter
+	JobName   string // Optional job filter
 }
 
 // SingleFileSource handles single file operations
@@ -29,7 +29,7 @@ type SingleFileSource struct {
 	InputDir     string // S3 prefix for input
 	ProcessedDir string // S3 prefix for processed files
 	OutputDir    string // S3 prefix for output
-	JobName    string // Job name
+	JobName      string // Job name
 	FileName     string // Specific file name
 }
 

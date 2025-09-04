@@ -15,17 +15,17 @@ const (
 )
 
 type DatasetProgress struct {
-	DatasetID        string        `json:"dataset_id"`
-	DatasetName      string        `json:"dataset_name"`
-	Stage            PipelineStage `json:"stage"`
-	Progress         float64       `json:"progress"` // 0-100
-	FilesTotal       int           `json:"files_total"`
-	FilesProcessed   int           `json:"files_processed"`
+	DatasetID      string        `json:"dataset_id"`
+	DatasetName    string        `json:"dataset_name"`
+	Stage          PipelineStage `json:"stage"`
+	Progress       float64       `json:"progress"` // 0-100
+	FilesTotal     int           `json:"files_total"`
+	FilesProcessed int           `json:"files_processed"`
 	JobesTotal     int           `json:"jobes_total"`
 	JobesProcessed int           `json:"jobes_processed"`
-	StartTime        time.Time     `json:"start_time"`
-	LastUpdated      time.Time     `json:"last_updated"`
-	ErrorMessage     string        `json:"error_message,omitempty"`
+	StartTime      time.Time     `json:"start_time"`
+	LastUpdated    time.Time     `json:"last_updated"`
+	ErrorMessage   string        `json:"error_message,omitempty"`
 }
 
 // Progress tracking responses
@@ -48,12 +48,12 @@ type ProgressUpdateRequest struct {
 	Stage       PipelineStage `json:"stage"`
 	Progress    float64       `json:"progress"`
 	FilesTotal  int           `json:"files_total,omitempty"`
-	JobInfo   *JobInfo    `json:"job_info,omitempty"`
+	JobInfo     *JobInfo      `json:"job_info,omitempty"`
 }
 
 type JobInfo struct {
-	JobID    string `json:"job_id"`
-	JobSize  int    `json:"job_size"`
+	JobID      string `json:"job_id"`
+	JobSize    int    `json:"job_size"`
 	IsComplete bool   `json:"is_complete"`
 }
 
@@ -91,14 +91,14 @@ type BinaryMessageBody struct {
 }
 
 type Batch struct {
-	ID      string     `json:"ID"`
+	ID    string     `json:"ID"`
 	JobID string     `json:"JobID"`
-	Files   []DataFile `json:"Files"`
+	Files []DataFile `json:"Files"`
 }
 
 // BinaryBatch for handling binary files
 type BinaryBatch struct {
-	ID      string           `json:"ID"`
+	ID    string           `json:"ID"`
 	JobID string           `json:"JobID"`
-	Files   []BinaryDataFile `json:"Files"`
+	Files []BinaryDataFile `json:"Files"`
 }

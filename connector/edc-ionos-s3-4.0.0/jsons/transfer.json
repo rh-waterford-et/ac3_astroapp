@@ -11,7 +11,7 @@
     "transferType": "IonosS3-PUSH",
     "dataDestination": {
         "type": "IonosS3",
-        "bucketName": "test-consumer",
+        "bucketName": "test-provider",
         "keyName": "asset"
     }
 }

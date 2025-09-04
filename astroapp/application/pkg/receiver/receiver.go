@@ -205,14 +205,14 @@ func (r *Receiver) validateHeaders(d amqp.Delivery) (string, string, string, str
 	batchID, ok := d.Headers["batch_id"].(string)
 	if !ok {
 		log.Printf("│ ERROR: 'batch_id' header missing or invalid")
-		r.requeueWithLog(d, "unknown-event")
+		r.requeueWithLog(d, "unknown-batch")
 		return "", "", "", "", false
 	}
 
 	jobID, ok := d.Headers["job_id"].(string)
 	if !ok {
-		log.Printf("│ ERROR: 'batch_id' header missing or invalid")
-		r.requeueWithLog(d, "unknown-batch")
+		log.Printf("│ ERROR: 'job_id' header missing or invalid")
+		r.requeueWithLog(d, "unknown-job")
 		return "", "", "", "", false
 	}
 

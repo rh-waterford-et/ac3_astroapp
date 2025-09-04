@@ -15,8 +15,8 @@ import (
 
 // BinaryProducer handles binary files for PPXF
 type BinaryProducer struct {
-	JobSize        int
-	BinaryJob      []api.BinaryDataFile
+	JobSize          int
+	BinaryJob        []api.BinaryDataFile
 	BinaryBatchQueue chan api.BinaryBatch
 	FileSource       FileSource
 	Utils            common.UtilsInterface
@@ -26,8 +26,8 @@ type BinaryProducer struct {
 
 func NewBinaryProducer(jobSize int, fileSource FileSource, batchQueue chan api.BinaryBatch, utils common.UtilsInterface, side string, batchID string) *BinaryProducer {
 	return &BinaryProducer{
-		JobSize:        jobSize,
-		BinaryJob:      make([]api.BinaryDataFile, 0, jobSize),
+		JobSize:          jobSize,
+		BinaryJob:        make([]api.BinaryDataFile, 0, jobSize),
 		BinaryBatchQueue: batchQueue,
 		FileSource:       fileSource,
 		Utils:            utils,
@@ -70,9 +70,9 @@ func (bp *BinaryProducer) SendBinaryJob(appName string) {
 
 		jobID := bp.Utils.GenerateUUID()
 		batch := api.BinaryBatch{
-			ID:      bp.BatchID,
+			ID:    bp.BatchID,
 			JobID: jobID,
-			Files:   bp.BinaryJob,
+			Files: bp.BinaryJob,
 		}
 		bp.BinaryBatchQueue <- batch
 

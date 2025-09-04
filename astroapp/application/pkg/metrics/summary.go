@@ -7,12 +7,14 @@ import (
 )
 
 type BatchSummary struct {
-	BatchID                string    `json:"batch_id"`
-	JobCount               int       `json:"job_count"`
-	FirstJobQueueStartTime time.Time `json:"first_job_queue_start_time"`
-	LastJobExitQueueTime  time.Time `json:"last_job_exit_queue_time"`
-	LastJobEndTime         time.Time `json:"last_job_end_time"`
-	TotalBatchDuration time.Duration `json:"total_batch_duration_s"`
+	BatchID                string        `json:"batch_id"`
+	JobCount               int           `json:"job_count"`
+	FirstJobQueueStartTime time.Time     `json:"first_job_queue_start_time"`
+	LastJobExitQueueTime   time.Time     `json:"last_job_exit_queue_time"`
+	LastJobEndTime         time.Time     `json:"last_job_end_time"`
+	TotalBatchDuration     time.Duration `json:"total_batch_duration_s"`
+
+	CompleteJobCount       int       `json:"complete_job_count"`
 }
 
 func (ms *MetricsStore) GetBatchSummaryKey(batchID string) string {
@@ -23,12 +25,14 @@ func (ms *MetricsStore) StoreBatchSummary(ctx context.Context, summary *BatchSum
 	key := fmt.Sprintf("%s:summary:%s", ms.keyPrefix, summary.BatchID)
 
 	values := map[string]interface{}{
-		"batch_id":               summary.BatchID,
-		"job_count":              summary.JobCount,
+		"batch_id":                   summary.BatchID,
+		"job_count":                  summary.JobCount,
 		"first_job_queue_start_time": summary.FirstJobQueueStartTime.Format(time.RFC3339Nano),
-		"last_job_exit_queue_time":  summary.LastJobExitQueueTime.Format(time.RFC3339Nano),
-		"last_job_end_time":      summary.LastJobEndTime.Format(time.RFC3339Nano),
-		"total_batch_duration_s": summary.TotalBatchDuration.Seconds(),
+		"last_job_exit_queue_time":   summary.LastJobExitQueueTime.Format(time.RFC3339Nano),
+		"last_job_end_time":          summary.LastJobEndTime.Format(time.RFC3339Nano),
+		"total_batch_duration_s":     summary.TotalBatchDuration.Seconds(),
+		
+		"complete_job_count":         summary.CompleteJobCount,
 	}
 
 	err := ms.redis.HSet(ctx, key, values)

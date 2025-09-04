@@ -19,6 +19,8 @@ type MetricRecord struct {
 	QueueDuration      float64 `json:"queue_duration"`      // Duration of job in queue
 	ProcessingDuration float64 `json:"processing_duration"` // Duration of job processing
 	TotalDuration      float64 `json:"total_duration"`      // Total duration of job processing
+
+	IsComplete bool `json:"is_complete"` // Whether the job has been processed
 }
 
 type MetricsStore struct {
@@ -54,18 +56,20 @@ func (ms *MetricsStore) getBatchPattern(batchID string) string {
 
 func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) error {
 	ms.calculateDurations(metric)
-	key := ms.GetJobKey(metric.JobID, metric.JobID)
+	key := ms.GetJobKey(metric.BatchID, metric.JobID)
 
 	values := map[string]interface{}{
-		"batch_id":                 metric.BatchID,
-		"job_id":                 metric.JobID,
-		"queue_start_time":       metric.QueueStartTime.Format(time.RFC3339Nano),
-		"queue_receive_time":     metric.QueueReceiveTime.Format(time.RFC3339Nano),
-		"job_processed_end_time": metric.JobEndTime.Format(time.RFC3339Nano),
+		"batch_id":           metric.BatchID,
+		"job_id":             metric.JobID,
+		"queue_start_time":   metric.QueueStartTime.Format(time.RFC3339Nano),
+		"queue_receive_time": metric.QueueReceiveTime.Format(time.RFC3339Nano),
+		"job_end_time":       metric.JobEndTime.Format(time.RFC3339Nano),
 
 		"queue_duration":      metric.QueueDuration,
 		"processing_duration": metric.ProcessingDuration,
 		"total_duration":      metric.TotalDuration,
+
+		"is_complete": metric.IsComplete,
 	}
 
 	err := ms.redis.HSet(ctx, key, values)
@@ -84,6 +88,8 @@ func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) 
 }
 
 func (ms *MetricsStore) calculateDurations(metric *MetricRecord) {
+	metric.IsComplete = false
+
 	// Queue duration
 	if !metric.QueueStartTime.IsZero() && !metric.QueueReceiveTime.IsZero() {
 		metric.QueueDuration = metric.QueueReceiveTime.Sub(metric.QueueStartTime).Seconds()
@@ -97,6 +103,7 @@ func (ms *MetricsStore) calculateDurations(metric *MetricRecord) {
 	// Total duration
 	if !metric.QueueStartTime.IsZero() && !metric.JobEndTime.IsZero() {
 		metric.TotalDuration = metric.JobEndTime.Sub(metric.QueueStartTime).Seconds()
+		metric.IsComplete = true
 	}
 }
 
@@ -117,7 +124,7 @@ func (ms *MetricsStore) parseMetric(data map[string]string) (*MetricRecord, erro
 	var result MetricRecord
 	var err error
 
-	result.JobID = data["job_id"]
+	result.BatchID = data["batch_id"]
 	result.JobID = data["job_id"]
 
 	if data["queue_start_time"] != "" {
@@ -252,8 +259,9 @@ func (ms *MetricsStore) RecordMetricsJob(ctx context.Context, metrics []*MetricR
 	pipe := ms.redis.Pipeline()
 
 	for _, metric := range metrics {
-		key := ms.GetJobKey(metric.JobID, metric.JobID)
+		key := ms.GetJobKey(metric.BatchID, metric.JobID)
 		values := map[string]interface{}{
+			"batch_id":           metric.BatchID,
 			"job_id":             metric.JobID,
 			"queue_start_time":   metric.QueueStartTime.Format(time.RFC3339Nano),
 			"queue_receive_time": metric.QueueReceiveTime.Format(time.RFC3339Nano),
@@ -270,13 +278,19 @@ func (ms *MetricsStore) RecordMetricsJob(ctx context.Context, metrics []*MetricR
 	return err
 }
 
-func (ms *MetricsStore) CleanupJobes(ctx context.Context, batchID string, timeParam string) error {
+func (ms *MetricsStore) CleanupJobes(ctx context.Context, batchID string, timeParam string, cleanupMode string) error {
 
-	if err := ms.ExportBatchJobesToS3(ctx, batchID, timeParam); err != nil {
-		log.Printf("WARNING: failed to export metrics for batch %s before cleanup: %v", batchID, err)
+	// Export all data before clearing
+	/*   if err := ms.ExportBatchJobesToS3(ctx, batchID, timeParam, false); err != nil {
+	     log.Printf("WARNING: failed to export ALL metrics for batch %s: %v", batchID, err)
+	 } */
+
+	// Export only completed work
+	if err := ms.ExportBatchJobesToS3(ctx, batchID, timeParam, true); err != nil {
+		log.Printf("WARNING: failed to export COMPLETE metrics for batch %s: %v", batchID, err)
 	}
 
-	log.Printf("DEBUG: Starting CleanupJobes timeParam: %s", timeParam)
+	log.Printf("DEBUG: Starting CleanupJobes with mode: %s", cleanupMode)
 
 	pattern := ms.getBatchPattern(batchID)
 	keys, err := ms.redis.Keys(ctx, pattern)
@@ -284,13 +298,38 @@ func (ms *MetricsStore) CleanupJobes(ctx context.Context, batchID string, timePa
 		return fmt.Errorf("failed to get job keys: %w", err)
 	}
 
+	var keysToDelete []string
+
 	for _, key := range keys {
-		if !strings.Contains(key, ":summary:") {
-			if err := ms.redis.Del(ctx, key); err != nil {
-				log.Printf("failed to delete key %s: %v", key, err)
+		if strings.Contains(key, ":summary:") {
+			continue
+		}
+
+		// Check cleanup mode
+		if cleanupMode == "complete_only" {
+			// Get work data for checking completeness
+			data, err := ms.redis.HGetAll(ctx, key)
+			if err != nil {
+				continue
+			}
+
+			metric, err := ms.parseMetric(data)
+			if err != nil || !metric.IsComplete {
+				continue // Skip incomplete jobs
 			}
 		}
+
+		keysToDelete = append(keysToDelete, key)
 	}
+
+	// Delete filtered keys
+	for _, key := range keysToDelete {
+		if err := ms.redis.Del(ctx, key); err != nil {
+			log.Printf("failed to delete key %s: %v", key, err)
+		}
+	}
+
+	log.Printf("Cleaned up %d jobes from batch %s (mode: %s)", len(keysToDelete), batchID, cleanupMode)
 
 	return nil
 }

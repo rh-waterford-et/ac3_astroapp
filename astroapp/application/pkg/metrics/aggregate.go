@@ -56,9 +56,10 @@ func (ms *MetricsStore) AggregateBatchMetrics(ctx context.Context, batchID strin
 	}
 
 	summary := &BatchSummary{
-		BatchID:    batchID,
+		BatchID:  batchID,
 		JobCount: len(jobes),
 	}
+	completeCount := 0
 
 	// Initialize with first job values
 	summary.FirstJobQueueStartTime = jobes[0].QueueStartTime
@@ -71,12 +72,16 @@ func (ms *MetricsStore) AggregateBatchMetrics(ctx context.Context, batchID strin
 	)
 
 	for _, job := range jobes {
+		if job.IsComplete {
+            completeCount++
+        }
+
 		// Update first and last times
 		if job.QueueStartTime.Before(summary.FirstJobQueueStartTime) {
 			summary.FirstJobQueueStartTime = job.QueueStartTime
 		}
 
-		if job.QueueReceiveTime.Before(summary.LastJobExitQueueTime) {
+		if job.QueueReceiveTime.After(summary.LastJobExitQueueTime) {
 			summary.LastJobExitQueueTime = job.QueueReceiveTime
 		}
 
@@ -94,6 +99,7 @@ func (ms *MetricsStore) AggregateBatchMetrics(ctx context.Context, batchID strin
 	}
 
 	summary.TotalBatchDuration = summary.LastJobEndTime.Sub(summary.FirstJobQueueStartTime)
+	summary.CompleteJobCount = completeCount
 
 	return summary, nil
 }
@@ -108,7 +114,7 @@ func (ms *MetricsStore) AggregateAndStoreBatchSummary(ctx context.Context, batch
 		return nil, err
 	}
 
-	if err := ms.CleanupJobes(ctx, batchID, timeParam); err != nil {
+	if err := ms.CleanupJobes(ctx, batchID, timeParam, "complete_only"); err != nil {
 		log.Printf("failed to cleanup jobes for batch %s: %v", batchID, err)
 	}
 
@@ -130,10 +136,11 @@ func (as *AggregationService) AggregateAllBatchs(ctx context.Context, timeParam 
 			log.Printf("Failed to aggregate batch %s: %v", batchID, err)
 			continue
 		}
-		log.Printf("Aggregated job %s: jobs=%d, duration=%v",
-			batchID,
-			summary.JobCount,
-			summary.TotalBatchDuration.Round(time.Second))
+		log.Printf("Aggregated batch %s: jobs=%d (complete=%d), duration=%v",
+		batchID,
+		summary.JobCount,
+		summary.CompleteJobCount, 
+		summary.TotalBatchDuration.Round(time.Second))
 		/* log.Printf("Aggregated job %s: jobs=%d, duration=%v, queue_time=avg:%v, processing_time=avg:%v",
 		batchID,
 		summary.JobCount,
@@ -149,7 +156,7 @@ func (as *AggregationService) AggregateAllBatchs(ctx context.Context, timeParam 
 }
 
 // ExportBatchJobesToS3 writes a consolidated text file with all job metrics for an batch
-func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string, timeParam string) error {
+func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string, timeParam string, onlyComplete bool) error {
 	// Gather job records
 	jobes, err := ms.GetBatchJobes(ctx, batchID)
 	if err != nil {
@@ -159,19 +166,31 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 		return nil
 	}
 
+	var filteredJobes []*MetricRecord
+    for _, job := range jobes {
+        if !onlyComplete || job.IsComplete {
+            filteredJobes = append(filteredJobes, job)
+        }
+    }
+	if len(filteredJobes) == 0 {
+        log.Printf("No %s jobes found for batch %s", map[bool]string{true: "complete", false: ""}[onlyComplete], batchID)
+        return nil
+    }
+
 	// Sort by QueueStartTime for stable output
-	sort.Slice(jobes, func(i, j int) bool {
-		return jobes[i].QueueStartTime.Before(jobes[j].QueueStartTime)
-	})
+	sort.Slice(filteredJobes, func(i, j int) bool {
+        return filteredJobes[i].QueueStartTime.Before(filteredJobes[j].QueueStartTime)
+    })
 
 	// Build text content
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("METRICS: %s\n", batchID))
-	for idx, rec := range jobes {
+	b.WriteString(fmt.Sprintf("METRICS: %s (%s jobes)\n", batchID, map[bool]string{true: "COMPLETE", false: "ALL"}[onlyComplete]))
+    for idx, rec := range filteredJobes {
 		b.WriteString("----------------------------------------\n")
 		b.WriteString(fmt.Sprintf("Job %d\n", idx+1))
 		b.WriteString(fmt.Sprintf("Batch ID: %s\n", rec.BatchID))
 		b.WriteString(fmt.Sprintf("Job ID: %s\n", rec.JobID))
+		b.WriteString(fmt.Sprintf("Status: %s\n", map[bool]string{true: "COMPLETE", false: "INCOMPLETE"}[rec.IsComplete]))
 		if !rec.QueueStartTime.IsZero() {
 			b.WriteString(fmt.Sprintf("queue_start_time: %s\n", rec.QueueStartTime.Format(time.RFC3339Nano)))
 		}
@@ -182,7 +201,7 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 			b.WriteString(fmt.Sprintf("queue_duration: %f\n", rec.QueueDuration))
 		}
 		if !rec.JobEndTime.IsZero() {
-			b.WriteString(fmt.Sprintf("job_processed_end_time: %s\n", rec.JobEndTime.Format(time.RFC3339Nano)))
+			b.WriteString(fmt.Sprintf("job_end_time: %s\n", rec.JobEndTime.Format(time.RFC3339Nano)))
 		}
 		if rec.ProcessingDuration != 0 {
 			b.WriteString(fmt.Sprintf("processing_duration: %f\n", rec.ProcessingDuration))
@@ -190,7 +209,7 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 		if rec.TotalDuration != 0 {
 			b.WriteString(fmt.Sprintf("total_duration: %f\n", rec.TotalDuration))
 		}
-		
+
 	}
 
 	content := []byte(b.String())
@@ -211,6 +230,9 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 	if err := ms.redis.Set(ctx, key, string(content), ms.ttl); err != nil {
 		return fmt.Errorf("failed to stage export content: %w", err)
 	}
-	log.Printf("Staged metrics export for batch %s at redis key %s (to be written to bucket path %s/%s)", batchID, key, metricsPrefix, fileName)
+
+	log.Printf("Successfully exported %s metrics for batch %s (%d jobes)",
+	map[bool]string{true: "complete", false: "all"}[onlyComplete], batchID, len(filteredJobes))
+	
 	return nil
 }

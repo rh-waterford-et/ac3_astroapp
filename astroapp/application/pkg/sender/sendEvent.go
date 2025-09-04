@@ -79,19 +79,24 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string,
 		s.Utils.FailOnError("Failed to publish message: %v", err)
 	}
 
+	if side == "producer" {
 	// Record queue start time for each job (individual job tracking)
 	if s.RedisClient != nil {
 		metricsStore := metrics.NewMetricsStore(s.RedisClient, 168*time.Hour)
 
+		// Create a separate context with longer timeout for metrics operations
+		metricsCtx, metricsCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer metricsCancel()
+
 		// Record queue start time for this specific job
-		err = metricsStore.UpdateMetricField(ctx, batch.ID, "queue_start_time", batch.JobID, time.Now())
+		err = metricsStore.UpdateMetricField(metricsCtx, batch.ID, "queue_start_time", batch.JobID, time.Now())
 		if err != nil {
 			log.Printf("Failed to record queue start time: %v", err)
 		}
 	} else {
 		log.Printf("No Redis client found")
 	}
-
+	}
 	log.Printf("DEBUG: Published message to queue %s", queueName)
 	log.Printf(" [x] Sent job with %d files for app %s\n", len(batch.Files), appName)
 	log.Printf("     Files: %s\n", strings.Join(filenames, ", "))

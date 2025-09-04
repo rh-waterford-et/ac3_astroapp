@@ -34,7 +34,7 @@ func (s *Starlight) UpdateInFile(job []api.DataFile) (string, string) {
 	templateInFilePath := os.Getenv("TEMPLATE_IN_FILE_PATH")
 	inFileOutputPath := os.Getenv("IN_FILE_OUTPUT_PATH")
 	// #nosec G404
-	newInFileName := fmt.Sprintf("grid_example_%d.in", rand.Intn(100))
+	newInFileName := fmt.Sprintf("grid_example_%d.in", rand.Intn(1000))
 
 	// Check if the template .in file exists
 	if exists, _ := s.Utils.Exists(templateInFilePath); !exists {
@@ -58,7 +58,6 @@ func (s *Starlight) UpdateInFile(job []api.DataFile) (string, string) {
 			// Replace the input file name in the .in file
 			res := strings.Split(scanner.Text(), "  ")
 			for j := 0; j < len(job); j++ {
-
 
 				// Use only the filename (basename) without directory structure
 				filename := filepath.Base(job[j].Name)
