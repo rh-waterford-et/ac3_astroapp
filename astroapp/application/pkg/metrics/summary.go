@@ -14,7 +14,10 @@ type BatchSummary struct {
 	LastJobEndTime         time.Time     `json:"last_job_end_time"`
 	TotalBatchDuration     time.Duration `json:"total_batch_duration_s"`
 
-	CompleteJobCount       int       `json:"complete_job_count"`
+	CompleteJobCount int `json:"complete_job_count"`
+
+	AvgJobQueueTime           time.Duration `json:"avg_job_queue_time"`        
+	AvgJobProcessingTime      time.Duration `json:"avg_job_processing_time"`   
 }
 
 func (ms *MetricsStore) GetBatchSummaryKey(batchID string) string {
@@ -31,8 +34,11 @@ func (ms *MetricsStore) StoreBatchSummary(ctx context.Context, summary *BatchSum
 		"last_job_exit_queue_time":   summary.LastJobExitQueueTime.Format(time.RFC3339Nano),
 		"last_job_end_time":          summary.LastJobEndTime.Format(time.RFC3339Nano),
 		"total_batch_duration_s":     summary.TotalBatchDuration.Seconds(),
-		
-		"complete_job_count":         summary.CompleteJobCount,
+
+		"complete_job_count": summary.CompleteJobCount,
+
+		"avg_job_queue_time_s":           summary.AvgJobQueueTime.Seconds(),
+		"avg_job_processing_time_s":      summary.AvgJobProcessingTime.Seconds(),
 	}
 
 	err := ms.redis.HSet(ctx, key, values)
@@ -100,6 +106,8 @@ func (ms *MetricsStore) GetBatchSummary(ctx context.Context, batchID string) (*B
 	}
 
 	summary.TotalBatchDuration = parseSeconds("total_batch_duration_s")
+	summary.AvgJobQueueTime = parseSeconds("avg_job_queue_time_s")
+	summary.AvgJobProcessingTime = parseSeconds("avg_job_processing_time_s")
 
 	return summary, nil
 }

@@ -21,6 +21,9 @@ type MetricRecord struct {
 	TotalDuration      float64 `json:"total_duration"`      // Total duration of job processing
 
 	IsComplete bool `json:"is_complete"` // Whether the job has been processed
+
+	AvgJobQueueTime      float64 `json:"avg_job_queue_time"`      // Average queue time for the job
+	AvgJobProcessingTime float64 `json:"avg_job_processing_time"` // Average processing time for the job
 }
 
 type MetricsStore struct {
@@ -70,6 +73,9 @@ func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) 
 		"total_duration":      metric.TotalDuration,
 
 		"is_complete": metric.IsComplete,
+
+		"avg_job_queue_time":      metric.AvgJobQueueTime,
+		"avg_job_processing_time": metric.AvgJobProcessingTime,
 	}
 
 	err := ms.redis.HSet(ctx, key, values)
@@ -160,6 +166,18 @@ func (ms *MetricsStore) parseMetric(data map[string]string) (*MetricRecord, erro
 	if data["total_duration"] != "" {
 		if _, err := fmt.Sscanf(data["total_duration"], "%f", &result.TotalDuration); err != nil {
 			log.Printf("WARNING: failed to parse total_duration: %v", err)
+		}
+	}
+
+	if data["avg_job_queue_time"] != "" {
+		if _, err := fmt.Sscanf(data["avg_job_queue_time"], "%f", &result.AvgJobQueueTime); err != nil {
+			log.Printf("WARNING: failed to parse avg_job_queue_time: %v", err)
+		}
+	}
+
+	if data["avg_job_processing_time"] != "" {
+		if _, err := fmt.Sscanf(data["avg_job_processing_time"], "%f", &result.AvgJobProcessingTime); err != nil {
+			log.Printf("WARNING: failed to parse avg_job_processing_time: %v", err)
 		}
 	}
 

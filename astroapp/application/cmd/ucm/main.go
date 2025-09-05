@@ -174,7 +174,7 @@ func LaunchProducer(side string) error {
 
 			// Run the watcher for this specific job
 			go func() {
-				appRunner.RunForJob(appType, jobName, side, utils, queue, redis)
+				appRunner.RunProducer(appType, jobName, side, utils, queue, redis)
 				log.Printf("Completed processing for job: %s", jobName)
 			}()
 

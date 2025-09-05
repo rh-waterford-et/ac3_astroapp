@@ -101,6 +101,11 @@ func (ms *MetricsStore) AggregateBatchMetrics(ctx context.Context, batchID strin
 	summary.TotalBatchDuration = summary.LastJobEndTime.Sub(summary.FirstJobQueueStartTime)
 	summary.CompleteJobCount = completeCount
 
+	if completeCount > 0 {
+		summary.AvgJobQueueTime = totalQueueTime / time.Duration(completeCount)
+		summary.AvgJobProcessingTime = totalProcessingTime / time.Duration(completeCount)
+	}
+
 	return summary, nil
 }
 
@@ -136,17 +141,13 @@ func (as *AggregationService) AggregateAllBatchs(ctx context.Context, timeParam 
 			log.Printf("Failed to aggregate batch %s: %v", batchID, err)
 			continue
 		}
-		log.Printf("Aggregated batch %s: jobs=%d (complete=%d), duration=%v",
-		batchID,
+		log.Printf("Aggregated batch %s: jobs=%d (complete=%d), duration=%v, queue_time=avg:%v, processing_time=avg:%v",
+			batchID,
 		summary.JobCount,
 		summary.CompleteJobCount, 
-		summary.TotalBatchDuration.Round(time.Second))
-		/* log.Printf("Aggregated job %s: jobs=%d, duration=%v, queue_time=avg:%v, processing_time=avg:%v",
-		batchID,
-		summary.JobCount,
 		summary.TotalBatchDuration.Round(time.Second),
-		summary.AvgQueueTime.Round(time.Second),
-		summary.AvgProcessingTime.Round(time.Second)) */
+		summary.AvgJobQueueTime.Round(time.Millisecond),
+		summary.AvgJobProcessingTime.Round(time.Millisecond))
 
 		successCount++
 	}
@@ -208,6 +209,12 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 		}
 		if rec.TotalDuration != 0 {
 			b.WriteString(fmt.Sprintf("total_duration: %f\n", rec.TotalDuration))
+		}
+		if rec.AvgJobQueueTime != 0 {
+			b.WriteString(fmt.Sprintf("avg_job_queue_time: %f\n", rec.AvgJobQueueTime))
+		}
+		if rec.AvgJobProcessingTime != 0 {
+			b.WriteString(fmt.Sprintf("avg_job_processing_time: %f\n", rec.AvgJobProcessingTime))
 		}
 
 	}

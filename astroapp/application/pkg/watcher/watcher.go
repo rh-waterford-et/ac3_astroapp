@@ -30,7 +30,7 @@ func NewWatcher() *Watcher {
 	return &Watcher{}
 }
 
-func (w *Watcher) RunForJob(appName string, jobName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
+func (w *Watcher) RunProducer(appName string, jobName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
 
 	inputDirEnv := "EXPLORED_" + appName
 	outputDirEnv := "OUTPUT_" + appName
@@ -194,11 +194,11 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 		if err != nil {
 			fmt.Printf("Error reading directory: %v\n", err)
 		} else {
-			log.Printf("DEBUG: Found %d files in %s", len(files), jobInfoDir)
+			//log.Printf("DEBUG: Found %d files in %s", len(files), jobInfoDir)
 			for _, file := range files {
-				log.Printf("DEBUG: Processing file: %s", file.Name())
+				//log.Printf("DEBUG: Processing file: %s", file.Name())
 				filePath := filepath.Join(jobInfoDir, file.Name())
-				log.Printf("DEBUG: File path: %s", filePath)
+				//log.Printf("DEBUG: File path: %s", filePath)
 				if err := w.processJobFile(filePath, side, utils, queue, redisClient); err != nil {
 					log.Printf("Error processing job file %s: %v\n", filePath, err)
 					continue
@@ -289,7 +289,7 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 		}
 
 	}
-	log.Printf("DEBUG: Successfully processed job file: %s", filePath)
+	//log.Printf("DEBUG: Successfully processed job file: %s", filePath)
 	return nil
 }
 
