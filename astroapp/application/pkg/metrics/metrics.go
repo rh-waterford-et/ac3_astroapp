@@ -22,8 +22,8 @@ type MetricRecord struct {
 
 	IsComplete bool `json:"is_complete"` // Whether the job has been processed
 
-	AvgJobQueueTime      float64 `json:"avg_job_queue_time"`      // Average queue time for the job
-	AvgJobProcessingTime float64 `json:"avg_job_processing_time"` // Average processing time for the job
+	JobSizeMB float64 `json:"job_size_mb"` // Size of job in MB
+
 }
 
 type MetricsStore struct {
@@ -74,8 +74,7 @@ func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) 
 
 		"is_complete": metric.IsComplete,
 
-		"avg_job_queue_time":      metric.AvgJobQueueTime,
-		"avg_job_processing_time": metric.AvgJobProcessingTime,
+		"job_size_mb": metric.JobSizeMB,
 	}
 
 	err := ms.redis.HSet(ctx, key, values)
@@ -169,17 +168,12 @@ func (ms *MetricsStore) parseMetric(data map[string]string) (*MetricRecord, erro
 		}
 	}
 
-	if data["avg_job_queue_time"] != "" {
-		if _, err := fmt.Sscanf(data["avg_job_queue_time"], "%f", &result.AvgJobQueueTime); err != nil {
-			log.Printf("WARNING: failed to parse avg_job_queue_time: %v", err)
+	if data["job_size_mb"] != "" {
+		if _, err := fmt.Sscanf(data["job_size_mb"], "%f", &result.JobSizeMB); err != nil {
+			log.Printf("WARNING: failed to parse job_size_mb: %v", err)
 		}
 	}
 
-	if data["avg_job_processing_time"] != "" {
-		if _, err := fmt.Sscanf(data["avg_job_processing_time"], "%f", &result.AvgJobProcessingTime); err != nil {
-			log.Printf("WARNING: failed to parse avg_job_processing_time: %v", err)
-		}
-	}
 
 	// If durations were not saved, recalculate them
 	if result.QueueDuration == 0 || result.ProcessingDuration == 0 || result.TotalDuration == 0 {
