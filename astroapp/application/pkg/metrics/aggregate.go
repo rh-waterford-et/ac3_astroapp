@@ -73,8 +73,8 @@ func (ms *MetricsStore) AggregateBatchMetrics(ctx context.Context, batchID strin
 
 	for _, job := range jobes {
 		if job.IsComplete {
-            completeCount++
-        }
+			completeCount++
+		}
 
 		// Update first and last times
 		if job.QueueStartTime.Before(summary.FirstJobQueueStartTime) {
@@ -143,11 +143,11 @@ func (as *AggregationService) AggregateAllBatchs(ctx context.Context, timeParam 
 		}
 		log.Printf("Aggregated batch %s: jobs=%d (complete=%d), duration=%v, queue_time=avg:%v, processing_time=avg:%v",
 			batchID,
-		summary.JobCount,
-		summary.CompleteJobCount, 
-		summary.TotalBatchDuration.Round(time.Second),
-		summary.AvgJobQueueTime.Round(time.Millisecond),
-		summary.AvgJobProcessingTime.Round(time.Millisecond))
+			summary.JobCount,
+			summary.CompleteJobCount,
+			summary.TotalBatchDuration.Round(time.Second),
+			summary.AvgJobQueueTime.Round(time.Millisecond),
+			summary.AvgJobProcessingTime.Round(time.Millisecond))
 
 		successCount++
 	}
@@ -168,25 +168,44 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 	}
 
 	var filteredJobes []*MetricRecord
-    for _, job := range jobes {
-        if !onlyComplete || job.IsComplete {
-            filteredJobes = append(filteredJobes, job)
-        }
-    }
+	var totalQueueTime, totalProcessingTime, totalJobSize float64
+	completeCount := 0
+
+	for _, job := range jobes {
+		if !onlyComplete || job.IsComplete {
+			filteredJobes = append(filteredJobes, job)
+			if job.IsComplete {
+				totalQueueTime += job.QueueDuration
+				totalProcessingTime += job.ProcessingDuration
+				totalJobSize += job.JobSizeMB
+				completeCount++
+			}
+		}
+	}
+
 	if len(filteredJobes) == 0 {
-        log.Printf("No %s jobes found for batch %s", map[bool]string{true: "complete", false: ""}[onlyComplete], batchID)
-        return nil
-    }
+		log.Printf("No %s jobes found for batch %s", map[bool]string{true: "complete", false: ""}[onlyComplete], batchID)
+		return nil
+	}
+
+	// Calculate averages
+	var avgQueueTime, avgProcessingTime, avgJobSize float64
+	if completeCount > 0 {
+		avgQueueTime = totalQueueTime / float64(completeCount)
+		avgProcessingTime = totalProcessingTime / float64(completeCount)
+		avgJobSize = totalJobSize / float64(completeCount)
+	}
 
 	// Sort by QueueStartTime for stable output
 	sort.Slice(filteredJobes, func(i, j int) bool {
-        return filteredJobes[i].QueueStartTime.Before(filteredJobes[j].QueueStartTime)
-    })
+		return filteredJobes[i].QueueStartTime.Before(filteredJobes[j].QueueStartTime)
+	})
 
 	// Build text content
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("METRICS: %s (%s jobes)\n", batchID, map[bool]string{true: "COMPLETE", false: "ALL"}[onlyComplete]))
-    for idx, rec := range filteredJobes {
+
+	for idx, rec := range filteredJobes {
 		b.WriteString("----------------------------------------\n")
 		b.WriteString(fmt.Sprintf("Job %d\n", idx+1))
 		b.WriteString(fmt.Sprintf("Batch ID: %s\n", rec.BatchID))
@@ -210,15 +229,20 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 		if rec.TotalDuration != 0 {
 			b.WriteString(fmt.Sprintf("total_duration: %f\n", rec.TotalDuration))
 		}
-		if rec.AvgJobQueueTime != 0 {
-			b.WriteString(fmt.Sprintf("avg_job_queue_time: %f\n", rec.AvgJobQueueTime))
-		}
-		if rec.AvgJobProcessingTime != 0 {
-			b.WriteString(fmt.Sprintf("avg_job_processing_time: %f\n", rec.AvgJobProcessingTime))
-		}
-
 	}
 
+	// Add summary statistics at the end
+	b.WriteString("----------------------------------------\n")
+	b.WriteString("SUMMARY STATISTICS (COMPLETE jobs only):\n")
+	b.WriteString("----------------------------------------\n")
+	b.WriteString(fmt.Sprintf("Total complete jobs: %d\n", completeCount))
+	b.WriteString(fmt.Sprintf("Average queue time: %.6f seconds\n", avgQueueTime))
+	b.WriteString(fmt.Sprintf("Average processing time: %.6f seconds\n", avgProcessingTime))
+	b.WriteString(fmt.Sprintf("Total queue time: %.6f seconds\n", totalQueueTime))
+	b.WriteString(fmt.Sprintf("Total processing time: %.6f seconds\n", totalProcessingTime))
+	b.WriteString(fmt.Sprintf("Total time: %.6f seconds\n", totalQueueTime+totalProcessingTime))
+	b.WriteString(fmt.Sprintf("Average job size: %.6f MB\n", avgJobSize))
+	b.WriteString(fmt.Sprintf("Total job size: %.6f MB\n", totalJobSize))
 	content := []byte(b.String())
 
 	// Resolve output path inside bucket: metrics/METRICS_<batchID>.txt
@@ -239,7 +263,7 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 	}
 
 	log.Printf("Successfully exported %s metrics for batch %s (%d jobes)",
-	map[bool]string{true: "complete", false: "all"}[onlyComplete], batchID, len(filteredJobes))
-	
+		map[bool]string{true: "complete", false: "all"}[onlyComplete], batchID, len(filteredJobes))
+
 	return nil
 }
