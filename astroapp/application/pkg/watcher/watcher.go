@@ -250,6 +250,7 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 	if err := os.MkdirAll(processedDir, 0755); err != nil {
 		return fmt.Errorf("failed to create processed directory: %w", err)
 	}
+
 	job := make([]api.DataFile, 0, len(fileList))
 	for len(fileList) > 0 {
 		remaining := []string{}
@@ -258,11 +259,19 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 			fileName = strings.TrimSpace(fileName)
 			sourcePath := filepath.Join(inputDir, fileName)
 			if _, err := os.Stat(sourcePath); err == nil {
-				content, err := os.ReadFile(sourcePath)
-				if err != nil {
-					return fmt.Errorf("failed to read file %s: %w", fileName, err)
-				}
-				job = append(job, api.DataFile{Name: fileName, Content: string(content)})
+				time.Sleep(2 * time.Second)
+					content, err := os.ReadFile(sourcePath)
+					if err != nil {
+						return fmt.Errorf("failed to read file %s: %w", fileName, err)
+					}
+					job = append(job, api.DataFile{Name: fileName, Content: string(content)})
+
+					destPath := filepath.Join(processedDir, fileName)
+					if err := os.Rename(sourcePath, destPath); err != nil {
+						return fmt.Errorf("failed to move file %s: %w", fileName, err)
+					}
+				
+
 			} else {
 				remaining = append(remaining, fileName)
 			}
@@ -279,14 +288,6 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 		// Initialize sender
 		sender := sender.NewRabbitMQSender(queue, utils, redisClient)
 		sender.SendBatch(batch, appName, side, queue)
-		// Only move files after successful sending
-		for _, file := range job {
-			sourcePath := filepath.Join(inputDir, file.Name)
-			destPath := filepath.Join(processedDir, file.Name)
-			if err := os.Rename(sourcePath, destPath); err != nil {
-				return fmt.Errorf("failed to move file %s: %w", file.Name, err)
-			}
-		}
 
 	}
 	//log.Printf("DEBUG: Successfully processed job file: %s", filePath)

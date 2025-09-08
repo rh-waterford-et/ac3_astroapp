@@ -288,11 +288,18 @@ func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, batchI
 	r.updateProgress(appName, jobID, api.StageProcessing, 20.0)
 
 	// Validate batch metadata
-	jobSize, _, ok := r.validateJobMetadata(d, jobID)
+	jobSize, filenames, ok := r.validateJobMetadata(d, jobID)
 	if !ok {
 		return
 	}
+	
+	jobSizeMB := r.calculateJobSizeMB(d.Body, filenames)
+	
+	// Record job size in metrics 
 
+	if side == "processor" && jobSizeMB > 0 && r.RedisClient != nil {
+		r.recordJobSize(batchID, jobID, jobSizeMB)
+	}
 	// Process message body
 	msgBody, ok := r.processMessageBody(d, jobID, jobSize)
 	if !ok {
@@ -787,6 +794,10 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 		r.requeueWithLog(d, jobID)
 		return
 	}
+	jobSizeMB := r.calculateBinaryJobSizeMB(d.Body, filenames)
+	if batchID, ok := d.Headers["batch_id"].(string); ok && jobSizeMB > 0 && r.RedisClient != nil && side == "processor" {
+		r.recordJobSize(batchID, jobID, jobSizeMB)
+	}
 
 	log.Printf("│ Processing binary batch of %d files:", batchSize)
 	for i, filename := range filenames {
@@ -937,6 +948,64 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 	processDuration := time.Since(processStart)
 	log.Printf("\n■■■ BINARY BATCH END [%s] ■■■ Duration: %v\n", jobID, processDuration)
 	d.Ack(false)
+}
+// calculateJobSizeMB calculates the total size of all files in MB
+func (r *Receiver) calculateJobSizeMB(messageBody []byte, filenames []string) float64 {
+	var msgBody api.MessageBody
+	err := json.Unmarshal(messageBody, &msgBody)
+	if err != nil {
+		log.Printf("│ ERROR: Failed to parse message body for size calculation: %v", err)
+		return 0
+	}
+
+	totalSize, totalfiles := 0, 0
+	for _, file := range msgBody.Files {
+		if strings.Contains(file.Name, ".in") { continue }
+		totalSize += len(file.Content)
+		totalfiles++
+	}
+
+	// Convert bytes to MB
+	sizeMB := float64(totalSize) / (1024 * 1024)
+	log.Printf("│ DEBUG: Calculated job size: %.2f MB (%d bytes across %d files)", 
+		sizeMB, totalSize, totalfiles)
+	
+	return sizeMB
+}
+
+// calculateBinaryJobSizeMB calculates the total size of binary files in MB
+func (r *Receiver) calculateBinaryJobSizeMB(messageBody []byte, filenames []string) float64 {
+	var binaryMsgBody api.BinaryMessageBody
+	err := json.Unmarshal(messageBody, &binaryMsgBody)
+	if err != nil {
+		log.Printf("│ ERROR: Failed to parse binary message body for size calculation: %v", err)
+		return 0
+	}
+
+	totalSize := 0
+	for _, file := range binaryMsgBody.Files {
+		totalSize += len(file.Content)
+	}
+
+	// Convert bytes to MB
+	sizeMB := float64(totalSize) / (1024 * 1024)
+	log.Printf("│ DEBUG: Calculated binary job size: %.2f MB (%d bytes across %d files)", 
+		sizeMB, totalSize, len(binaryMsgBody.Files))
+	
+	return sizeMB
+}
+
+// recordJobSize records the job size in metrics
+func (r *Receiver) recordJobSize(batchID, jobID string, sizeMB float64) {
+	ctx := context.Background()
+	metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
+	
+	err := metricsStore.UpdateMetricField(ctx, batchID, "job_size_mb", jobID, sizeMB)
+	if err != nil {
+		log.Printf("│ ✗ Failed to record job size: %v", err)
+	} else {
+		log.Printf("│ ✓ Recorded job size: %.2f MB for batch %s, job %s", sizeMB, batchID, jobID)
+	}
 }
 
 // ensureQueueConnection validates the queue connection and attempts reconnection if needed

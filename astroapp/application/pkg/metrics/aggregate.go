@@ -240,6 +240,7 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 	b.WriteString(fmt.Sprintf("Average processing time: %.6f seconds\n", avgProcessingTime))
 	b.WriteString(fmt.Sprintf("Total queue time: %.6f seconds\n", totalQueueTime))
 	b.WriteString(fmt.Sprintf("Total processing time: %.6f seconds\n", totalProcessingTime))
+	b.WriteString(fmt.Sprintf("Total time: %.6f seconds\n", totalQueueTime+totalProcessingTime))
 	b.WriteString(fmt.Sprintf("Average job size: %.6f MB\n", avgJobSize))
 	b.WriteString(fmt.Sprintf("Total job size: %.6f MB\n", totalJobSize))
 	content := []byte(b.String())
@@ -254,7 +255,7 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 	}
 
 	log.Printf("Successfully exported metrics for batch %s to s3://%s/%s/%s",
-	batchID, s3Bucket.GetBucketName(), metricsPrefix, fileName)
+		batchID, s3Bucket.GetBucketName(), metricsPrefix, fileName)
 
 	key := filepath.Join(ms.keyPrefix, "export", fmt.Sprintf("%s:%s", batchID, fileName))
 	if err := ms.redis.Set(ctx, key, string(content), ms.ttl); err != nil {

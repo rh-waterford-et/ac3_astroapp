@@ -210,9 +210,8 @@ func (ms *MetricsStore) GetBatchJobes(ctx context.Context, batchID string) ([]*M
 	return jobes, nil
 }
 
-func (ms *MetricsStore) UpdateMetricField(ctx context.Context, batchID, field, jobID string, value time.Time) error {
+func (ms *MetricsStore) UpdateMetricField(ctx context.Context, batchID, field, jobID string, value interface{}) error {
 	key := ms.GetJobKey(batchID, jobID)
-	log.Printf("DEBUG: UpdateMetricField - key: %s, field: %s, value: %s", key, field, value.Format(time.RFC3339Nano))
 
 	// Always set basic fields
 	err := ms.redis.HSet(ctx, key, "batch_id", batchID, "job_id", jobID)
@@ -220,41 +219,63 @@ func (ms *MetricsStore) UpdateMetricField(ctx context.Context, batchID, field, j
 		return fmt.Errorf("failed to set basic fields: %w", err)
 	}
 
-	// Read current value to enforce monotonic policy
-	currentMap, err := ms.redis.HGetAll(ctx, key)
-	if err != nil {
-		return fmt.Errorf("failed to read current metric fields: %w", err)
-	}
-	currentRaw := currentMap[field]
-	if currentRaw != "" {
-		if t, parseErr := time.Parse(time.RFC3339Nano, currentRaw); parseErr == nil {
-			switch field {
-			case "queue_start_time", "queue_receive_time":
-				// Keep earliest timestamp
-				if !value.Before(t) {
-					// Existing value is earlier or equal; keep it
-					if ms.ttl > 0 {
-						_ = ms.redis.Expire(ctx, key, ms.ttl)
+	// Handle different value types
+	switch v := value.(type) {
+	case time.Time:
+		log.Printf("DEBUG: UpdateMetricField - key: %s, field: %s, value: %s", key, field, v.Format(time.RFC3339Nano))
+		
+		// Read current value to enforce monotonic policy for time fields
+		currentMap, err := ms.redis.HGetAll(ctx, key)
+		if err != nil {
+			return fmt.Errorf("failed to read current metric fields: %w", err)
+		}
+		currentRaw := currentMap[field]
+		if currentRaw != "" {
+			if t, parseErr := time.Parse(time.RFC3339Nano, currentRaw); parseErr == nil {
+				switch field {
+				case "queue_start_time", "queue_receive_time":
+					// Keep earliest timestamp
+					if !v.Before(t) {
+						// Existing value is earlier or equal; keep it
+						if ms.ttl > 0 {
+							_ = ms.redis.Expire(ctx, key, ms.ttl)
+						}
+						return nil
 					}
-					return nil
-				}
-			case "job_end_time":
-				// Keep latest timestamp
-				if !value.After(t) {
-					// Existing value is later or equal; keep it
-					if ms.ttl > 0 {
-						_ = ms.redis.Expire(ctx, key, ms.ttl)
+				case "job_end_time":
+					// Keep latest timestamp
+					if !v.After(t) {
+						// Existing value is later or equal; keep it
+						if ms.ttl > 0 {
+							_ = ms.redis.Expire(ctx, key, ms.ttl)
+						}
+						return nil
 					}
-					return nil
 				}
 			}
 		}
-	}
 
-	// Set the specified field with the new value (passed policy checks)
-	err = ms.redis.HSet(ctx, key, field, value.Format(time.RFC3339Nano))
-	if err != nil {
-		return fmt.Errorf("failed to update metric field: %w", err)
+		// Set the time field
+		err = ms.redis.HSet(ctx, key, field, v.Format(time.RFC3339Nano))
+		if err != nil {
+			return fmt.Errorf("failed to update time field: %w", err)
+		}
+
+	case float64:
+		log.Printf("DEBUG: UpdateMetricField - key: %s, field: %s, value: %.2f", key, field, v)
+		
+		// For job_size_mb field, just set the value directly
+		if field == "job_size_mb" {
+			err = ms.redis.HSet(ctx, key, field, v)
+			if err != nil {
+				return fmt.Errorf("failed to update size field: %w", err)
+			}
+		} else {
+			return fmt.Errorf("unsupported field type for float64 value: %s", field)
+		}
+
+	default:
+		return fmt.Errorf("unsupported value type: %T", value)
 	}
 
 	if ms.ttl > 0 {
