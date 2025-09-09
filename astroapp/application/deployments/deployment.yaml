@@ -194,4 +194,20 @@ spec:
           value: ""
         - name: METRICS
           value: "metrics/"
-
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+        name: aggregator
+        workingDir: /processing_data/
+        volumeMounts:
+        - mountPath: /processing_data/
+          name: ucm-pv-storage
+        securityContext:
+          privileged: true
+        command: ["/uid_entrpoint.sh"]
+        args: ["/usr/bin/ucm", "aggregator"]
+        env:
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          value: ""

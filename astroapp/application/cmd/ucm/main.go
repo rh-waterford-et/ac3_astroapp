@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/metrics"
@@ -33,6 +35,9 @@ const usage = `
 
 	# start HTTP server for file uploads
 	ucm server
+
+	# execute aggregator
+	ucm aggregator
 `
 
 func main() {
@@ -63,6 +68,8 @@ func main() {
 		}
 	case "server":
 		LaunchServer()
+	case "aggregator":
+		LaunchAggregator()
 	default:
 		fmt.Println(usage)
 		os.Exit(1)
@@ -221,4 +228,28 @@ func LaunchProducer(side string) error {
 	}
 
 	return nil
+}
+
+func LaunchAggregator() {
+	log.Printf("------------------ Starting Aggregator() ---------------------")
+	redisClient, err := metrics.NewRedisConnection()
+	if err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	metricsStore := metrics.NewMetricsStore(redisClient, 168*time.Hour)
+	aggregationService := metrics.NewAggregationService(metricsStore, 5*time.Minute)
+
+	// Start aggregation service in background (only on processor side to avoid duplication)
+	if aggregationService != nil {
+		ctx := context.Background()
+		go func() {
+			time.Sleep(30 * time.Second)
+			// Run aggregation every 5 minutes
+			aggregationService.Run(ctx)
+		}()
+		log.Printf("🔄 Started batch metrics aggregation service (5-minute intervals)")
+		for {
+			time.Sleep(1 * time.Hour)
+		}
+	}
 }

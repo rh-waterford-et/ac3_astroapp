@@ -106,7 +106,7 @@ func (w *Watcher) RunProducer(appName string, jobName string, side string, utils
 
 	if shouldProcess {
 		log.Printf("Processing %s files...\n", appName)
-
+	
 		// Check if this app needs binary processing (PPXF)
 		if api.IsAppBinary(appName) {
 			log.Printf("Using binary processing for %s (prbatchs .fits corruption)", appName)

@@ -211,6 +211,10 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 		b.WriteString(fmt.Sprintf("Batch ID: %s\n", rec.BatchID))
 		b.WriteString(fmt.Sprintf("Job ID: %s\n", rec.JobID))
 		b.WriteString(fmt.Sprintf("Status: %s\n", map[bool]string{true: "COMPLETE", false: "INCOMPLETE"}[rec.IsComplete]))
+		if rec.JobQueueAheadLength != 0 {
+			b.WriteString(fmt.Sprintf("\njob_queue_ahead_length: %d\n", rec.JobQueueAheadLength))
+		}
+	
 		if !rec.QueueStartTime.IsZero() {
 			b.WriteString(fmt.Sprintf("queue_start_time: %s\n", rec.QueueStartTime.Format(time.RFC3339Nano)))
 		}

@@ -30,23 +30,18 @@ type ReceiverInterface interface {
 }
 
 type Receiver struct {
-	Queue              queue.QueueInterface
-	Utils              common.UtilsInterface
-	Bucket             s3bucket.S3BucketInterface
-	RedisClient        *metrics.RedisClient
-	AggregationService *metrics.AggregationService
+	Queue       queue.QueueInterface
+	Utils       common.UtilsInterface
+	Bucket      s3bucket.S3BucketInterface
+	RedisClient *metrics.RedisClient
 }
 
 func NewReceiver(queue queue.QueueInterface, utils common.UtilsInterface, bucket s3bucket.S3BucketInterface, redisClient *metrics.RedisClient) *Receiver {
-	metricsStore := metrics.NewMetricsStore(redisClient, 168*time.Hour)
-	aggregationService := metrics.NewAggregationService(metricsStore, 5*time.Minute)
-
 	return &Receiver{
-		Queue:              queue,
-		Utils:              utils,
-		Bucket:             bucket,
-		RedisClient:        redisClient,
-		AggregationService: aggregationService,
+		Queue:       queue,
+		Utils:       utils,
+		Bucket:      bucket,
+		RedisClient: redisClient,
 	}
 }
 
@@ -57,19 +52,6 @@ func (r *Receiver) Start(side string) {
 	if side == "processor" {
 		r.clearProcessList()
 	}
-
-	// Start aggregation service in background (only on processor side to avoid duplication)
-	if side == "producer" && r.AggregationService != nil {
-		ctx := context.Background()
-		go func() {
-			// Wait a bit before starting aggregation to let the system initialize
-			time.Sleep(30 * time.Second)
-			// Run aggregation every 5 minutes
-			r.AggregationService.Run(ctx)
-		}()
-		log.Printf("🔄 Started batch metrics aggregation service (5-minute intervals)")
-	}
-
 	var queueName string
 	if side == "producer" {
 		queueName = "processor_to_producer_queue"
@@ -292,10 +274,10 @@ func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, batchI
 	if !ok {
 		return
 	}
-	
+
 	jobSizeMB := r.calculateJobSizeMB(d.Body, filenames)
-	
-	// Record job size in metrics 
+
+	// Record job size in metrics
 
 	if side == "processor" && jobSizeMB > 0 && r.RedisClient != nil {
 		r.recordJobSize(batchID, jobID, jobSizeMB)
@@ -949,6 +931,7 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 	log.Printf("\n■■■ BINARY BATCH END [%s] ■■■ Duration: %v\n", jobID, processDuration)
 	d.Ack(false)
 }
+
 // calculateJobSizeMB calculates the total size of all files in MB
 func (r *Receiver) calculateJobSizeMB(messageBody []byte, filenames []string) float64 {
 	var msgBody api.MessageBody
@@ -960,16 +943,18 @@ func (r *Receiver) calculateJobSizeMB(messageBody []byte, filenames []string) fl
 
 	totalSize, totalfiles := 0, 0
 	for _, file := range msgBody.Files {
-		if strings.Contains(file.Name, ".in") { continue }
+		if strings.Contains(file.Name, ".in") {
+			continue
+		}
 		totalSize += len(file.Content)
 		totalfiles++
 	}
 
 	// Convert bytes to MB
 	sizeMB := float64(totalSize) / (1024 * 1024)
-	log.Printf("│ DEBUG: Calculated job size: %.2f MB (%d bytes across %d files)", 
+	log.Printf("│ DEBUG: Calculated job size: %.2f MB (%d bytes across %d files)",
 		sizeMB, totalSize, totalfiles)
-	
+
 	return sizeMB
 }
 
@@ -989,9 +974,9 @@ func (r *Receiver) calculateBinaryJobSizeMB(messageBody []byte, filenames []stri
 
 	// Convert bytes to MB
 	sizeMB := float64(totalSize) / (1024 * 1024)
-	log.Printf("│ DEBUG: Calculated binary job size: %.2f MB (%d bytes across %d files)", 
+	log.Printf("│ DEBUG: Calculated binary job size: %.2f MB (%d bytes across %d files)",
 		sizeMB, totalSize, len(binaryMsgBody.Files))
-	
+
 	return sizeMB
 }
 
@@ -999,7 +984,7 @@ func (r *Receiver) calculateBinaryJobSizeMB(messageBody []byte, filenames []stri
 func (r *Receiver) recordJobSize(batchID, jobID string, sizeMB float64) {
 	ctx := context.Background()
 	metricsStore := metrics.NewMetricsStore(r.RedisClient, 168*time.Hour)
-	
+
 	err := metricsStore.UpdateMetricField(ctx, batchID, "job_size_mb", jobID, sizeMB)
 	if err != nil {
 		log.Printf("│ ✗ Failed to record job size: %v", err)

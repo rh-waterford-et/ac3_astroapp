@@ -66,7 +66,7 @@ func (s *S3FileSource) ListFilesForJob(jobName string) ([]string, error) {
 			jobFiles = append(jobFiles, jobName+"/"+file)
 		}
 	}
-	log.Printf("Found %d files in job directory %s", len(jobFiles), jobName)
+	log.Printf("Found %d files in batch %s", len(jobFiles), jobName)
 	return jobFiles, nil
 }
 

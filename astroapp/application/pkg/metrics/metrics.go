@@ -24,6 +24,8 @@ type MetricRecord struct {
 
 	JobSizeMB float64 `json:"job_size_mb"` // Size of job in MB
 
+	JobQueueAheadLength int     `json:"job_queue_ahead_length"`
+
 }
 
 type MetricsStore struct {
@@ -75,6 +77,8 @@ func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) 
 		"is_complete": metric.IsComplete,
 
 		"job_size_mb": metric.JobSizeMB,
+
+		"job_queue_ahead_length": metric.JobQueueAheadLength,
 	}
 
 	err := ms.redis.HSet(ctx, key, values)
@@ -174,6 +178,11 @@ func (ms *MetricsStore) parseMetric(data map[string]string) (*MetricRecord, erro
 		}
 	}
 
+	if data["job_queue_ahead_length"] != "" {
+		if _, err := fmt.Sscanf(data["job_queue_ahead_length"], "%d", &result.JobQueueAheadLength); err != nil {
+			log.Printf("WARNING: failed to parse job_queue_ahead_length: %v", err)
+		}
+	}
 
 	// If durations were not saved, recalculate them
 	if result.QueueDuration == 0 || result.ProcessingDuration == 0 || result.TotalDuration == 0 {
@@ -274,6 +283,19 @@ func (ms *MetricsStore) UpdateMetricField(ctx context.Context, batchID, field, j
 			return fmt.Errorf("unsupported field type for float64 value: %s", field)
 		}
 
+	case int:
+		log.Printf("DEBUG: UpdateMetricField - key: %s, field: %s, value: %d", key, field, v)
+		
+		// For job_queue_ahead_length field, set the integer value
+		if field == "job_queue_ahead_length" {
+			err = ms.redis.HSet(ctx, key, field, v)
+			if err != nil {
+				return fmt.Errorf("failed to update queue ahead length field: %w", err)
+			}
+		} else {
+			return fmt.Errorf("unsupported field type for int value: %s", field)
+		}
+
 	default:
 		return fmt.Errorf("unsupported value type: %T", value)
 	}
@@ -287,7 +309,6 @@ func (ms *MetricsStore) UpdateMetricField(ctx context.Context, batchID, field, j
 
 	return nil
 }
-
 func (ms *MetricsStore) RecordMetricsJob(ctx context.Context, metrics []*MetricRecord) error {
 	pipe := ms.redis.Pipeline()
 
