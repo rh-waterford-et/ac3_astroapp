@@ -7,17 +7,18 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+
 // clearProcessList removes all entries from the process list file on startup
 // This only runs once per deployment using a lock file mechanism
-func (r *Receiver) clearProcessList() {
-	processListPath := os.Getenv("PROCESS_LIST")
+func (r *Receiver) clearProcessList(processListPath string) {
 	if processListPath == "" {
 		log.Printf("│ ⚠ PROCESS_LIST environment variable not set, skipping cleanup")
 		return
 	}
 
 	// Use a lock file to ensure cleanup only happens once per deployment
-	lockFilePath := "/processing_data/starlight/runtime/.cleanup_done"
+	lockFilePath := os.Getenv("PROCESS_LIST_STARLIGHT_PATH") + "/.cleanup_done"
 
 	// Check if cleanup has already been done
 	if _, err := os.Stat(lockFilePath); err == nil {
@@ -101,4 +102,50 @@ func (r *Receiver) createBatchInfoFile(appName, batchID, jobID, filenamesHeader 
 
 	log.Printf("│ ✓ Created batch info file: %s", filePath)
 	return nil
+}
+
+func (r *Receiver) checkProcessLists() (bool, error) {
+
+	
+	processLists := []string{os.Getenv("PROCESS_LIST_STARLIGHT"), os.Getenv("PROCESS_LIST_PPXF")}
+	
+	allEmpty := true
+	for _, processList := range processLists {
+		
+		entries, err := r.GetProcessListEntries(processList)
+		if err != nil {
+			return false, err
+		}
+		
+		if len(entries) > 0 {
+			log.Printf("Process list %s has %d entries", processList, len(entries))
+            allEmpty = false
+        }
+    }
+    return allEmpty, nil
+
+}
+func (r *Receiver) GetProcessListEntries(path string) ([]string, error) {
+	if path == "" {
+		return []string{}, nil
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+
+	lines := strings.Split(string(content), "\n")
+	var entries []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			entries = append(entries, trimmed)
+		}
+	}
+
+	return entries, nil
 }

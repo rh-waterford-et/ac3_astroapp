@@ -178,8 +178,10 @@ spec:
           value: "test-provider"
         - name: IN_FILE_PATH
           value: "/processing_data/starlight/runtime/infiles"
-        - name: PROCESS_LIST
+        - name: PROCESS_LIST_STARLIGHT
           value: "/processing_data/starlight/runtime/processlist.txt" 
+        - name: PROCESS_LIST_PPXF
+          value: "/processing_data/ppxf/runtime/processlist.txt"
         - name: OUTPUT_BUCKET_STARLIGHT
           value: "starlight/output"
         - name: OUTPUT_BUCKET_PPXF
@@ -193,7 +195,7 @@ spec:
         - name: REDIS_PASSWORD
           value: ""
         - name: METRICS
-          value: "metrics/"
+          value: "metrics"
       - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: aggregator
         workingDir: /processing_data/
@@ -211,3 +213,13 @@ spec:
           value: "6379"
         - name: REDIS_PASSWORD
           value: ""
+        - name: AWS_ACCESS_KEY_ID
+          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
+        - name: S3_ENDPOINT
+          value: "https://s3.eu-central-1.ionoscloud.com"
+        - name: S3_REGION
+          value: "de"
+        - name: S3_BUCKET_NAME
+          value: "test-provider"

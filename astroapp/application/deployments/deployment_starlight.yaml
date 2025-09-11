@@ -65,17 +65,23 @@ spec:
           value: "test-provider"
         - name: IN_FILE_OUTPUT_PATH
           value: "/processing_data/starlight/runtime/infiles"
-        - name: PROCESS_LIST
-          value: "/processing_data/starlight/runtime/processlist.txt" 
+        - name: PROCESS_LIST_STARLIGHT
+          value: "/processing_data/starlight/runtime/processlist.txt"
+        - name: PROCESS_LIST_STARLIGHT_PATH
+          value: "/processing_data/starlight/runtime" 
+        - name: PROCESS_LIST_PPXF
+          value: "/processing_data/ppxf/runtime/processlist.txt"
+        - name: PROCESS_LIST_PPXF_PATH
+          value: "/processing_data/ppxf/runtime"
         - name: INPUT_DIR_STARLIGHT
           value: "/processing_data/starlight/data/input"
         - name: EXPLORED_DIR_STARLIGHT
           value: "/processing_data/starlight/data/output"
         - name: PROCESSED_STARLIGHT
           value: "/processing_data/starlight/data/processed"
-        - name: EXPLORED_DIR_PPXF
+        - name: INPUT_DIR_PPXF
           value: "/processing_data/ppxf/data/input"
-        - name: OUTPUT_DIR_PPXF
+        - name: EXPLORED_DIR_PPXF
           value: "/processing_data/ppxf/data/output"
         - name: PROCESSED_PPXF
           value: "/processing_data/ppxf/data/processed"
