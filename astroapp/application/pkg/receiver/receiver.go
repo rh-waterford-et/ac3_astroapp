@@ -84,7 +84,7 @@ func (r *Receiver) ProcessMessages(queueName string, side string) {
 		}
 
 		if !status {
-			log.Println("Process lists are not empty, waiting...")
+			//log.Println("Process lists are not empty, waiting...")
 			return
 		}
 	}
@@ -118,16 +118,26 @@ func (r *Receiver) ProcessMessages(queueName string, side string) {
 		}
 	}()
 
-	for {
-		select {
-		case d, ok := <-msgs:
-			if !ok {
-				return
-			}
-			r.ProcessMessage(d, side)
-		case <-time.After(5 * time.Second):
+	// Process only ONE message at a time
+	select {
+	case d, ok := <-msgs:
+		if !ok {
 			return
 		}
+		r.ProcessMessage(d, side)
+
+		// After processing one message, check if process lists are now non-empty
+		// This prevents processing additional messages when the process list fills up
+		if side == "processor" {
+			status, err := r.checkProcessLists()
+			if err != nil {
+				log.Printf("Error checking process lists after message processing: %v", err)
+			} else if !status {
+				log.Println("Process lists are now non-empty, stopping message processing")
+			}
+		}
+	case <-time.After(5 * time.Second):
+		return
 	}
 }
 

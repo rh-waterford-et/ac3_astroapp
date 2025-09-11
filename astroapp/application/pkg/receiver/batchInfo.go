@@ -118,7 +118,7 @@ func (r *Receiver) checkProcessLists() (bool, error) {
 		}
 		
 		if len(entries) > 0 {
-			log.Printf("Process list %s has %d entries", processList, len(entries))
+			//log.Printf("Process list %s has %d entries", processList, len(entries))
             allEmpty = false
         }
     }

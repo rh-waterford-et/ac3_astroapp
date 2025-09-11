@@ -213,6 +213,8 @@ spec:
           value: "6379"
         - name: REDIS_PASSWORD
           value: ""
+        - name: METRICS
+          value: "metrics/"
         - name: AWS_ACCESS_KEY_ID
           value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
         - name: AWS_SECRET_ACCESS_KEY
@@ -223,3 +225,4 @@ spec:
           value: "de"
         - name: S3_BUCKET_NAME
           value: "test-provider"
+          
