@@ -146,17 +146,8 @@ func (s *Starlight) RemoveInFileFromJob(job []api.DataFile) []api.DataFile {
 }
 
 func (s *Starlight) UpdateToProcessList(inFileName string, fileContent []byte) {
-	PROCESS_LIST := os.Getenv("PROCESS_LIST")
+	PROCESS_LIST := os.Getenv("PROCESS_LIST_STARLIGHT")
 	InFilePath := os.Getenv("IN_FILE_OUTPUT_PATH")
-
-	// Create process list file if it doesn't exist, but don't add empty content
-	if _, err := os.Stat(PROCESS_LIST); os.IsNotExist(err) {
-		if err := s.Utils.TouchFile(PROCESS_LIST); err != nil {
-			log.Printf("│ ✗ Error creating process list: %w", err)
-			return
-		}
-		log.Printf("│ ✓ Creating process list")
-	}
 
 	specialFilePath := filepath.Join(InFilePath, inFileName)
 
@@ -191,4 +182,5 @@ func (s *Starlight) UpdateToProcessList(inFileName string, fileContent []byte) {
 	} else {
 		log.Printf("│ ✓ Added %s to process list", inFileName)
 	}
+	
 }

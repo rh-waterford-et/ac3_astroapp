@@ -93,7 +93,7 @@ func (p *PPXF) GetOutputFiles(inputFileName string) ([]string, error) {
 
 // AddToProcessList adds a file to the pPXF processing list
 func (p *PPXF) AddToProcessList(fileName string) {
-	processListPath := os.Getenv("PPXF_PROCESS_LIST")
+	processListPath := os.Getenv("PROCESS_LIST_PPXF")
 	if processListPath == "" {
 		processListPath = "/processing_data/ppxf/runtime/processlist.txt"
 	}

@@ -38,7 +38,7 @@ func (u *Utils) Exists(path string) (bool, error) {
 
 func (u *Utils) FailOnError(msg string, err error) {
 	if err != nil {
-		log.Panicf("%s: %w", msg, err)
+		log.Panicf("%s: %v", msg, err)
 	}
 }
 
@@ -59,7 +59,7 @@ func (u *Utils) EnsureDirectoriesExist() error {
 		os.Getenv("EXPLORED_DIR_STARLIGHT"),
 		os.Getenv("INPUT_DIR_STARLIGHT"),
 		os.Getenv("EXPLORED_DIR_PPXF"),
-		os.Getenv("OUTPUT_DIR_PPXF"),
+		os.Getenv("INPUT_DIR_PPXF"),
 		os.Getenv("EXPLORED_DIR_STECKMAP"),
 		os.Getenv("OUTPUT_DIR_STECKMAP"),
 		os.Getenv("IN_FILE_OUTPUT_PATH"),
@@ -67,6 +67,8 @@ func (u *Utils) EnsureDirectoriesExist() error {
 		os.Getenv("PROCESSED_STARLIGHT"),
 		os.Getenv("PROCESSED_PPXF"),
 		os.Getenv("BATCH_INFO_DIR"),
+		os.Getenv("PROCESS_LIST_STARLIGHT_PATH"),
+		os.Getenv("PROCESS_LIST_PPXF_PATH"),
 	}
 
 	for _, dir := range requiredDirs {
@@ -79,6 +81,19 @@ func (u *Utils) EnsureDirectoriesExist() error {
 		}
 		log.Printf("Verified directory: %s", dir)
 	}
+
+	processList := []string{os.Getenv("PROCESS_LIST_STARLIGHT"), os.Getenv("PROCESS_LIST_PPXF")}
+	for _, processList := range processList {
+		// Create process list file if it doesn't exist
+		if _, err := os.Stat(processList); os.IsNotExist(err) {
+			if err := u.TouchFile(processList); err != nil {
+				log.Printf("│ ✗ Error creating process list: %v", err)
+			} else {
+				log.Printf("│ ✓ Creating process list: %s", processList)
+			}
+		}
+	}
+
 	return nil
 }
 
