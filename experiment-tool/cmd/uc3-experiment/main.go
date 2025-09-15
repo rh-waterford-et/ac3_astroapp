@@ -63,6 +63,7 @@ func main() {
 	rootCmd.AddCommand(commands.NewScaleCmd(cfg))
 	rootCmd.AddCommand(commands.NewDatasetCmd(cfg))
 	rootCmd.AddCommand(commands.NewStartCmd(cfg))
+	rootCmd.AddCommand(commands.NewMetricsCmd())
 
 	// Execute
 	if err := rootCmd.Execute(); err != nil {
