@@ -1,0 +1,36 @@
+# Quick Test Scenario - For Development and Testing
+name: "quick-test-experiment"
+duration: "5m"
+description: "Quick test scenario for development and validation"
+
+scaling:
+  min_processors: 1
+  max_processors: 3
+  scale_steps: [1, 2, 3]
+  stabilize_time: "30s"
+  scale_up_interval: "1m"
+  scale_down_interval: "45s"
+
+workload:
+  dataset: "NGC7025"
+  processor_type: "starlight"
+  batch_size: 5
+  submission_rate: "15s"
+  job_size_variation: "small"
+  pauses_between_jobs: false
+
+metrics:
+  collection_interval: "10s"
+  export_format: "csv"
+  output_directory: "./test-data"
+  include_job_level: true
+  include_summary: true
+
+infrastructure:
+  namespace: "ac3-astroapp"
+  deployment_name: "ucm-starlight-processor"
+  uc3_api_base_url: "http://localhost:8080"
+  trigger_url: "http://localhost:8081"
+  redis_host: "localhost"
+  redis_port: 6379
+  rabbitmq_exporter_url: "http://localhost:9419/metrics" 
