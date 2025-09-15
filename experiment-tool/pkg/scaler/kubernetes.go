@@ -8,8 +8,8 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	v1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -17,9 +17,8 @@ import (
 
 // KubernetesScaler implements the Scaler interface using Kubernetes client-go
 type KubernetesScaler struct {
-	client     kubernetes.Interface
-	config     ScalerConfig
-	restConfig *rest.Config
+	client kubernetes.Interface
+	config ScalerConfig
 }
 
 // NewKubernetesScaler creates a new Kubernetes scaler instance
@@ -42,10 +41,14 @@ func NewKubernetesScaler(config ScalerConfig) (*KubernetesScaler, error) {
 	}
 
 	return &KubernetesScaler{
-		client:     clientset,
-		config:     config,
-		restConfig: restConfig,
+		client: clientset,
+		config: config,
 	}, nil
+}
+
+// deploymentClient returns a deployment client for the configured namespace
+func (k *KubernetesScaler) deploymentClient() v1.DeploymentInterface {
+	return k.client.AppsV1().Deployments(k.config.Namespace)
 }
 
 // Scale sets the number of replicas for the target deployment
@@ -54,7 +57,7 @@ func (k *KubernetesScaler) Scale(ctx context.Context, replicas int32) error {
 		return &ValidationError{Field: "replicas", Message: "cannot be negative"}
 	}
 
-	deploymentsClient := k.client.AppsV1().Deployments(k.config.Namespace)
+	deploymentsClient := k.deploymentClient()
 
 	// Get current deployment
 	deployment, err := deploymentsClient.Get(ctx, k.config.DeploymentName, metav1.GetOptions{})
@@ -77,7 +80,7 @@ func (k *KubernetesScaler) Scale(ctx context.Context, replicas int32) error {
 
 // GetCurrentScale returns the current number of replicas
 func (k *KubernetesScaler) GetCurrentScale(ctx context.Context) (int32, error) {
-	deploymentsClient := k.client.AppsV1().Deployments(k.config.Namespace)
+	deploymentsClient := k.deploymentClient()
 
 	deployment, err := deploymentsClient.Get(ctx, k.config.DeploymentName, metav1.GetOptions{})
 	if err != nil {
@@ -91,28 +94,9 @@ func (k *KubernetesScaler) GetCurrentScale(ctx context.Context) (int32, error) {
 	return *deployment.Spec.Replicas, nil
 }
 
-// WaitForScale waits until the deployment reaches the desired replica count
-func (k *KubernetesScaler) WaitForScale(ctx context.Context, replicas int32, timeout time.Duration) error {
-	deploymentsClient := k.client.AppsV1().Deployments(k.config.Namespace)
-
-	// Create a context with timeout
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	return wait.PollUntilContextTimeout(timeoutCtx, 2*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
-		deployment, err := deploymentsClient.Get(ctx, k.config.DeploymentName, metav1.GetOptions{})
-		if err != nil {
-			return false, err
-		}
-
-		// Check if desired replicas match ready replicas
-		return deployment.Status.ReadyReplicas == replicas, nil
-	})
-}
-
 // GetDeploymentInfo returns deployment metadata for validation
 func (k *KubernetesScaler) GetDeploymentInfo(ctx context.Context) (*DeploymentInfo, error) {
-	deploymentsClient := k.client.AppsV1().Deployments(k.config.Namespace)
+	deploymentsClient := k.deploymentClient()
 
 	deployment, err := deploymentsClient.Get(ctx, k.config.DeploymentName, metav1.GetOptions{})
 	if err != nil {

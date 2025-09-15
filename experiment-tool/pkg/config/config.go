@@ -201,23 +201,3 @@ func validateConfig(config *ExperimentConfig) error {
 
 	return nil
 }
-
-// GetString is a convenience method for getting string values
-func GetString(key string) string {
-	return viper.GetString(key)
-}
-
-// GetInt is a convenience method for getting int values
-func GetInt(key string) int {
-	return viper.GetInt(key)
-}
-
-// GetBool is a convenience method for getting bool values
-func GetBool(key string) bool {
-	return viper.GetBool(key)
-}
-
-// GetDuration is a convenience method for getting duration values
-func GetDuration(key string) time.Duration {
-	return viper.GetDuration(key)
-}

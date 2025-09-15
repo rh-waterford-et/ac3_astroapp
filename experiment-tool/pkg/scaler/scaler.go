@@ -13,9 +13,6 @@ type Scaler interface {
 	// GetCurrentScale returns the current number of replicas
 	GetCurrentScale(ctx context.Context) (int32, error)
 
-	// WaitForScale waits until the deployment reaches the desired replica count
-	WaitForScale(ctx context.Context, replicas int32, timeout time.Duration) error
-
 	// GetDeploymentInfo returns deployment metadata for validation
 	GetDeploymentInfo(ctx context.Context) (*DeploymentInfo, error)
 }
