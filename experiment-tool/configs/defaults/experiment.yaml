@@ -36,8 +36,8 @@ metrics:
 infrastructure:
   # Kubernetes configuration
   kube_config: ""                  # Path to kubeconfig file (empty = in-cluster)
-  namespace: "ac3-astroapp"
-  deployment_name: "ucm-starlight-processor"
+  namespace: "uc3-applications"
+  deployment_name: "starlight"
 
   # UC3 API endpoints
   uc3_api_base_url: "http://localhost:8080"

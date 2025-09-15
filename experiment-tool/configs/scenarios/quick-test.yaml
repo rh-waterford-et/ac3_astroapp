@@ -27,8 +27,8 @@ metrics:
   include_summary: true
 
 infrastructure:
-  namespace: "ac3-astroapp"
-  deployment_name: "ucm-starlight-processor"
+  namespace: "uc3-applications"
+  deployment_name: "starlight"
   uc3_api_base_url: "http://localhost:8080"
   trigger_url: "http://localhost:8081"
   redis_host: "localhost"
