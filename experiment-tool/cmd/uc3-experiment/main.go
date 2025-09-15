@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/uc3/experiment-tool/pkg/config"
+	"github.com/uc3/experiment-tool/pkg/dataset"
 	"github.com/uc3/experiment-tool/pkg/scaler"
 )
 
@@ -98,6 +99,41 @@ var scaleTestCmd = &cobra.Command{
 	},
 }
 
+var datasetCmd = &cobra.Command{
+	Use:   "dataset",
+	Short: "Dataset management commands",
+	Long: `Manage local datasets and S3 uploads for experiments.
+	
+These commands help you prepare local astronomical datasets
+for processing by the UC3 system.`,
+}
+
+var datasetScanCmd = &cobra.Command{
+	Use:   "scan [path]",
+	Short: "Scan local directory for dataset files",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		datasetScan(args[0])
+	},
+}
+
+var datasetTestCmd = &cobra.Command{
+	Use:   "test-s3",
+	Short: "Test S3 connection with UC3 credentials",
+	Run: func(cmd *cobra.Command, args []string) {
+		datasetTestS3()
+	},
+}
+
+var datasetUploadCmd = &cobra.Command{
+	Use:   "upload [path]",
+	Short: "Upload local dataset to S3 (test only)",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		datasetUpload(args[0])
+	},
+}
+
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start an autoscaling experiment",
@@ -121,9 +157,10 @@ func init() {
 	startCmd.Flags().DurationP("duration", "d", 0, "experiment duration (e.g., 30m, 1h)")
 	startCmd.Flags().IntP("min-processors", "", 0, "minimum number of processors")
 	startCmd.Flags().IntP("max-processors", "", 0, "maximum number of processors")
-	startCmd.Flags().StringP("dataset", "", "", "dataset to process")
+	startCmd.Flags().StringP("dataset-path", "", "", "local path to dataset directory")
 	startCmd.Flags().StringP("processor-type", "", "", "processor type (starlight or ppxf)")
 	startCmd.Flags().StringP("output-dir", "o", "", "output directory for experiment data")
+	startCmd.Flags().BoolP("upload-dataset", "", true, "upload dataset to S3 before experiment")
 
 	// Scale command flags (defined after scaleSetCmd is created)
 	// These will be added in the init function after scaleSetCmd is defined
@@ -145,10 +182,15 @@ func init() {
 	scaleCmd.AddCommand(scaleInfoCmd)
 	scaleCmd.AddCommand(scaleTestCmd)
 
+	datasetCmd.AddCommand(datasetScanCmd)
+	datasetCmd.AddCommand(datasetTestCmd)
+	datasetCmd.AddCommand(datasetUploadCmd)
+
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(scaleCmd)
+	rootCmd.AddCommand(datasetCmd)
 	rootCmd.AddCommand(startCmd)
 }
 
@@ -361,6 +403,112 @@ func scaleTest() {
 
 	fmt.Printf("\nReady to perform scaling operations!\n")
 	fmt.Printf("   Try: ./uc3-experiment scale set 2\n")
+}
+
+func datasetScan(localPath string) {
+	fmt.Printf("Scanning local dataset: %s\n", localPath)
+
+	// Create dataset manager
+	dm, err := dataset.NewDatasetManager("test-scan", cfg.Workload.ProcessorType)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating dataset manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Scan local dataset
+	localDataset, err := dm.ScanLocalDataset(localPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error scanning dataset: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("\nDataset scan results:\n")
+	fmt.Printf("  Path: %s\n", localDataset.Path)
+	fmt.Printf("  Dataset name: %s\n", localDataset.DatasetName)
+	fmt.Printf("  Files found: %d\n", len(localDataset.Files))
+	fmt.Printf("  Total size: %.2f MB\n", float64(localDataset.TotalSize)/(1024*1024))
+
+	if len(localDataset.Files) > 0 {
+		fmt.Printf("\nFirst 5 files:\n")
+		for i, file := range localDataset.Files {
+			if i >= 5 {
+				fmt.Printf("  ... and %d more files\n", len(localDataset.Files)-5)
+				break
+			}
+			fmt.Printf("  %s\n", file)
+		}
+	}
+}
+
+func datasetTestS3() {
+	fmt.Printf("Testing S3 connection with UC3 credentials...\n")
+
+	// Create dataset manager
+	dm, err := dataset.NewDatasetManager("connection-test", cfg.Workload.ProcessorType)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating dataset manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Test S3 connection
+	err = dm.TestS3Connection()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "S3 connection failed: %v\n", err)
+		fmt.Printf("\nTo fix this issue:\n")
+		fmt.Printf("  • Ensure UC3 S3 environment variables are set:\n")
+		fmt.Printf("    - AWS_ACCESS_KEY_ID\n")
+		fmt.Printf("    - AWS_SECRET_ACCESS_KEY\n")
+		fmt.Printf("    - S3_ENDPOINT\n")
+		fmt.Printf("    - S3_REGION\n")
+		fmt.Printf("    - S3_BUCKET_NAME\n")
+		os.Exit(1)
+	}
+}
+
+func datasetUpload(localPath string) {
+	fmt.Printf("Uploading dataset: %s\n", localPath)
+
+	// Create temporary dataset manager for scanning
+	tempDM, err := dataset.NewDatasetManager("temp", cfg.Workload.ProcessorType)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating dataset manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Scan local dataset to extract dataset name
+	localDataset, err := tempDM.ScanLocalDataset(localPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error scanning dataset: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(localDataset.Files) == 0 {
+		fmt.Printf("No files found for processor type '%s' in %s\n", cfg.Workload.ProcessorType, localPath)
+		return
+	}
+
+	// Use extracted dataset name or fallback
+	datasetName := localDataset.DatasetName
+	if datasetName == "" {
+		datasetName = "unknown-dataset"
+	}
+
+	fmt.Printf("Dataset identified as: %s\n", datasetName)
+	fmt.Printf("Found %d files, proceeding with upload...\n", len(localDataset.Files))
+
+	// Create final dataset manager with correct dataset name
+	dm, err := dataset.NewDatasetManager(datasetName, cfg.Workload.ProcessorType)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating dataset manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Upload to S3
+	err = dm.UploadDataset(localDataset)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Upload failed: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func startExperiment() {
