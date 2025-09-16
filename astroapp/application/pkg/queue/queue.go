@@ -20,6 +20,7 @@ type QueueInterface interface {
 	CancelConsumer(consumerTag string) error
 	InspectQueue(name string) (amqp.Queue, error)
 	SetQoS(prefetchCount int) error
+	GetOne(queueName string) (amqp.Delivery, bool, error)
 }
 
 type Queues struct {
@@ -148,4 +149,11 @@ func (q *Queues) SetQoS(prefetchCount int) error {
 		return fmt.Errorf("%w", err)
 	}
 	return nil
+}
+func (q *Queues) GetOne(queueName string) (amqp.Delivery, bool, error) {
+	msg, ok, err := q.ch.Get(
+		queueName,
+		false, // autoAck = false
+	)
+	return msg, ok, err
 }

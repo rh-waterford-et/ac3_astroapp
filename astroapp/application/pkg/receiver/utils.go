@@ -175,7 +175,7 @@ func (r *Receiver) validateHeaders(d amqp.Delivery) (string, string, string, str
 		return "", "", "", "", false
 	}
 
-	batchN := fmt.Sprintf("%s", appName)
+	batchN := fmt.Sprintf("%s-%d", appName, d.DeliveryTag)
 	return appName, batchID, jobID, batchN, true
 }
 

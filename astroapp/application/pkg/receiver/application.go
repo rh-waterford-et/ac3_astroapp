@@ -16,6 +16,7 @@ func (r *Receiver) handleApplicationProcessing(side, appName, jobID string, succ
 
 	if successCount == int(batchSize) && appName == "STARLIGHT" && side == "processor" {
 		starlight.UpdateToProcessList(inFileName, []byte(inFileContent))
+		r.ProcessingMessage = false
 		log.Printf("│ ✓ Added .in file from input side to processlist: %s", inFileName)
 		r.updateProgress("STARLIGHT", jobID, api.StageAnalysis, 70.0)
 
