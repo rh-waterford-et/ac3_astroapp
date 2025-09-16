@@ -26,7 +26,7 @@ type Receiver struct {
 	Utils       common.UtilsInterface
 	Bucket      s3bucket.S3BucketInterface
 	RedisClient *metrics.RedisClient
-	processing  bool
+	ProcessingMessage  bool
 }
 
 func NewReceiver(queue queue.QueueInterface, utils common.UtilsInterface, bucket s3bucket.S3BucketInterface, redisClient *metrics.RedisClient) *Receiver {
@@ -35,7 +35,7 @@ func NewReceiver(queue queue.QueueInterface, utils common.UtilsInterface, bucket
 		Utils:       utils,
 		Bucket:      bucket,
 		RedisClient: redisClient,
-		processing:  true,
+		ProcessingMessage:  false,
 	}
 }
 
@@ -77,6 +77,10 @@ func (r *Receiver) Start(side string) {
 func (r *Receiver) ProcessMessages(queueName string, side string) {
 
 	if side == "processor" {
+		//log.Printf("ProcessingMessage: %t", r.ProcessingMessage)
+		if r.ProcessingMessage {
+			return
+		}
 		status, err := r.checkProcessLists()
 		if err != nil {
 			log.Printf("Error checking process lists: %v", err)
@@ -84,7 +88,6 @@ func (r *Receiver) ProcessMessages(queueName string, side string) {
 		}
 
 		if !status {
-			//log.Println("Process lists are not empty, waiting...")
 			return
 		}
 	}
@@ -105,40 +108,17 @@ func (r *Receiver) ProcessMessages(queueName string, side string) {
 
 	log.Printf("PROCESSING QUEUE: %s (%d messages)", queueName, queueInfo.Messages)
 
-	consumerTag := fmt.Sprintf("consumer-%s-%d", queueName, time.Now().UnixNano())
-	msgs, err := r.Queue.Consume(queueName, consumerTag)
+
+	d, ok, err := r.Queue.GetOne(queueName) 
 	if err != nil {
-		log.Printf("CONSUME ERROR: Failed to register consumer for queue %s: %v", queueName, err)
+		log.Printf("GET ERROR: %v", err)
 		return
 	}
-
-	defer func() {
-		if err := r.Queue.CancelConsumer(consumerTag); err != nil {
-			log.Printf("WARNING: Failed to cancel consumer %s: %v", consumerTag, err)
-		}
-	}()
-
-	// Process only ONE message at a time
-	select {
-	case d, ok := <-msgs:
-		if !ok {
-			return
-		}
-		r.ProcessMessage(d, side)
-
-		// After processing one message, check if process lists are now non-empty
-		// This prevents processing additional messages when the process list fills up
-		if side == "processor" {
-			status, err := r.checkProcessLists()
-			if err != nil {
-				log.Printf("Error checking process lists after message processing: %v", err)
-			} else if !status {
-				log.Println("Process lists are now non-empty, stopping message processing")
-			}
-		}
-	case <-time.After(5 * time.Second):
-		return
+	if !ok {
+		return 
 	}
+	r.ProcessingMessage = true
+	r.ProcessMessage(d, side)
 }
 
 func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
