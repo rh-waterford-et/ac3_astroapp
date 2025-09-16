@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/uc3/experiment-tool/pkg/config"
 	"github.com/uc3/experiment-tool/pkg/dataset"
+	"github.com/uc3/experiment-tool/pkg/orchestrator"
 	"github.com/uc3/experiment-tool/pkg/scaler"
 )
 
@@ -52,50 +53,23 @@ collecting performance metrics for training data generation.`,
 
 func startExperiment(cfg *config.ExperimentConfig) {
 	fmt.Printf("Starting UC3 Autoscaling Experiment: %s\n", cfg.Name)
-	fmt.Printf("Duration: %s\n", cfg.Duration)
-	fmt.Printf("Processor Range: %d-%d\n", cfg.Scaling.MinProcessors, cfg.Scaling.MaxProcessors)
-	fmt.Printf("Dataset: %s\n", cfg.Workload.Dataset)
-	fmt.Printf("Output Directory: %s\n", cfg.Metrics.OutputDirectory)
-	fmt.Printf("Processor Type: %s\n", cfg.Workload.ProcessorType)
 
-	// Step 1: Upload dataset if path provided
-	datasetPath := viper.GetString("dataset-path")
-	uploadDataset := viper.GetBool("upload-dataset")
-
-	var datasetName string
-	if datasetPath != "" && uploadDataset {
-		fmt.Printf("\nStep 1: Uploading dataset from %s\n", datasetPath)
-		datasetName = runDatasetUpload(cfg, datasetPath)
-	} else {
-		// Use dataset from config if no path provided
-		datasetName = cfg.Workload.Dataset
-		if datasetName == "" {
-			fmt.Fprintf(os.Stderr, "Error: No dataset specified. Use --dataset-path or set workload.dataset in config\n")
-			os.Exit(1)
-		}
-		fmt.Printf("\nStep 1: Using existing dataset: %s\n", datasetName)
-	}
-
-	// Step 2: Set initial processor count
-	fmt.Printf("\nStep 2: Setting initial processor count to %d\n", cfg.Scaling.MinProcessors)
-	err := setProcessorCount(cfg, cfg.Scaling.MinProcessors)
+	// Create experiment controller
+	controller, err := orchestrator.NewExperimentController(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to set processor count: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to create experiment controller: %v\n", err)
+		os.Exit(1)
+	}
+	defer controller.Close()
+
+	// Run the complete experiment
+	err = controller.RunExperiment()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Experiment failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Step 3: Trigger processing
-	fmt.Printf("\nStep 3: Triggering UC3 processing for dataset: %s\n", datasetName)
-	err = triggerProcessing(cfg, datasetName, cfg.Workload.ProcessorType)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to trigger processing: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Printf("  Processing triggered successfully\n")
-
-	fmt.Printf("\nExperiment started successfully!\n")
-	fmt.Printf("Metrics collection and scaling logic will be implemented in the next phase.\n")
-	fmt.Printf("Monitor processing progress in the UC3 dashboard or logs.\n")
+	fmt.Printf("Experiment completed successfully!\n")
 }
 
 // runDatasetUpload handles dataset upload and returns the dataset name
