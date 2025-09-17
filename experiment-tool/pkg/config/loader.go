@@ -29,8 +29,14 @@ func LoadConfig(configFile string) (*ExperimentConfig, error) {
 
 	// Read config file
 	if err := viper.ReadInConfig(); err != nil {
-		// Config file not required, continue with defaults and env vars
-		fmt.Printf("Warning: Config file not found, using defaults: %v\n", err)
+		// Only show warning if no specific config file was provided
+		if configFile == "" {
+			fmt.Printf("Warning: Config file not found, using defaults: %v\n", err)
+		}
+		// If a specific config file was provided but not found, that's an error
+		if configFile != "" {
+			return nil, fmt.Errorf("specified config file not found: %s (%v)", configFile, err)
+		}
 	}
 
 	// Unmarshal into struct

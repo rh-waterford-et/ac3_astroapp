@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: experiment-tool-admin
+subjects:
+- kind: ServiceAccount
+  name: starlight-sa
+  namespace: uc3-applications
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io 

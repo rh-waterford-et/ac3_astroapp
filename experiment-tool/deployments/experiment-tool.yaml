@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: experiment-tool
+  namespace: uc3-applications
+  labels:
+    app: experiment-tool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: experiment-tool
+  template:
+    metadata:
+      labels:
+        app: experiment-tool
+    spec:
+      serviceAccountName: starlight-sa
+      containers:
+      - name: experiment-tool
+        image: quay.io/bcapper30/uc3-experiment-tool:latest
+        securityContext:
+          privileged: true
+        imagePullPolicy: Always
+        workingDir: /app
+        command: ["sleep"]
+        args: ["infinity"]
+        env:
+        # S3 Configuration (same as UC3 backend)
+        - name: AWS_ACCESS_KEY_ID
+          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
+        - name: S3_ENDPOINT
+          value: "https://s3.eu-central-1.ionoscloud.com"
+        - name: S3_REGION
+          value: "de"
+        - name: S3_BUCKET_NAME
+          value: "test-consumer"
+        # Redis configuration (same as UC3 backend)
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          value: ""
+        # Essential experiment tool overrides
+        - name: UC3_EXP_INFRASTRUCTURE_REDIS_HOST
+          value: "redis"
+        - name: UC3_EXP_INFRASTRUCTURE_UC3_API_BASE_URL
+          value: "http://uc3-backend-service:8080"
+        - name: UC3_EXP_INFRASTRUCTURE_TRIGGER_URL
+          value: "http://uc3-backend-service:8081"
+        - name: UC3_EXP_INFRASTRUCTURE_NAMESPACE
+          value: "uc3-applications"
+        - name: UC3_EXP_INFRASTRUCTURE_DEPLOYMENT_NAME
+          value: "starlight"
+        - name: UC3_EXP_METRICS_OUTPUT_DIRECTORY
+          value: "/app/experiment-data"
+        volumeMounts:
+        - name: experiment-data
+          mountPath: /app/experiment-data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: experiment-data
+        emptyDir: {}
+      restartPolicy: Always 

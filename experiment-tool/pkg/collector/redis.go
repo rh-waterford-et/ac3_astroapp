@@ -245,7 +245,7 @@ func (rc *RedisCollector) ExportJobMetricsCSV(ctx context.Context, batchID strin
 		}
 	}
 
-	log.Printf("✅ Exported %d job records to %s", len(jobMetrics), outputPath)
+	log.Printf("Exported %d job records to %s", len(jobMetrics), outputPath)
 	return nil
 }
 
@@ -344,13 +344,13 @@ func (rc *RedisCollector) ExportTrainingDataPoint(ctx context.Context, batchID s
 		return fmt.Errorf("failed to write training data record: %w", err)
 	}
 
-	log.Printf("✅ Exported training data point: processors=%d, batch=%s to %s", processorCount, batchID, outputPath)
+	log.Printf("Exported training data point: processors=%d, batch=%s to %s", processorCount, batchID, outputPath)
 	return nil
 }
 
 // WaitForBatchCompletion waits for a batch to complete processing with timeout
 func (rc *RedisCollector) WaitForBatchCompletion(ctx context.Context, batchID string, timeout time.Duration) error {
-	log.Printf("⏳ Waiting for batch completion: %s (timeout: %v)", batchID, timeout)
+	log.Printf("Waiting for batch completion: %s (timeout: %v)", batchID, timeout)
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -367,28 +367,28 @@ func (rc *RedisCollector) WaitForBatchCompletion(ctx context.Context, batchID st
 			// Check if batch summary exists and all jobs are complete
 			summary, err := rc.metricsStore.GetBatchSummary(ctx, batchID)
 			if err != nil {
-				log.Printf("⏳ Batch %s not yet aggregated, continuing to wait...", batchID)
+				log.Printf("Batch %s not yet aggregated, continuing to wait...", batchID)
 				continue
 			}
 
 			if summary == nil {
-				log.Printf("⏳ Batch %s summary not found, continuing to wait...", batchID)
+				log.Printf("Batch %s summary not found, continuing to wait...", batchID)
 				continue
 			}
 
 			// Check if ALL jobs in the batch are complete
 			if summary.CompleteJobCount > 0 && summary.CompleteJobCount == summary.JobCount {
-				log.Printf("✅ Batch %s fully completed: %d/%d jobs finished",
+				log.Printf("Batch %s fully completed: %d/%d jobs finished",
 					batchID, summary.CompleteJobCount, summary.JobCount)
 
 				// Wait additional buffer time for aggregation to stabilize
-				log.Printf("⏳ Waiting buffer period (2 minutes) for metrics to stabilize...")
+				log.Printf("Waiting buffer period (2 minutes) for metrics to stabilize...")
 				time.Sleep(2 * time.Minute)
 
 				return nil
 			}
 
-			log.Printf("⏳ Batch %s still processing: %d/%d jobs complete",
+			log.Printf("Batch %s still processing: %d/%d jobs complete",
 				batchID, summary.CompleteJobCount, summary.JobCount)
 		}
 	}

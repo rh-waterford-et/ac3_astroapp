@@ -172,9 +172,15 @@ func (dm *DatasetManager) GetS3Prefix() string {
 	return fmt.Sprintf("%s/input/%s", dm.processorType, dm.experimentID)
 }
 
+// GetS3PrefixForDataset returns the S3 path using the actual dataset name
+func (dm *DatasetManager) GetS3PrefixForDataset(datasetName string) string {
+	return fmt.Sprintf("%s/input/%s", dm.processorType, datasetName)
+}
+
 // UploadDataset uploads a local dataset to S3 using UC3 standard structure
 func (dm *DatasetManager) UploadDataset(localDataset *LocalDataset) error {
-	s3Prefix := dm.GetS3Prefix()
+	// Use the actual dataset name for S3 path, not the experiment ID
+	s3Prefix := dm.GetS3PrefixForDataset(localDataset.DatasetName)
 
 	fmt.Printf("Uploading %d files to S3 path: %s\n", len(localDataset.Files), s3Prefix)
 
@@ -212,7 +218,7 @@ func (dm *DatasetManager) TestS3Connection() error {
 
 	fmt.Printf("✓ S3 connection successful\n")
 	fmt.Printf("  Bucket: %s\n", bucketName)
-	fmt.Printf("  Upload path: %s\n", dm.GetS3Prefix())
+	fmt.Printf("  Upload path template: %s/input/<dataset-name>\n", dm.processorType)
 
 	return nil
 }

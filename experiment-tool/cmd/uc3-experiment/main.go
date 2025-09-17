@@ -50,22 +50,14 @@ func init() {
 }
 
 func main() {
-	// Load config
-	var err error
-	cfg, err = config.LoadConfig(cfgFile)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Add commands that depend on config
-	rootCmd.AddCommand(commands.NewConfigCmd(cfg))
-	rootCmd.AddCommand(commands.NewScaleCmd(cfg))
-	rootCmd.AddCommand(commands.NewDatasetCmd(cfg))
-	rootCmd.AddCommand(commands.NewStartCmd(cfg))
+	// Add commands that load config dynamically when needed
+	rootCmd.AddCommand(commands.NewConfigCmd(nil))
+	rootCmd.AddCommand(commands.NewScaleCmd(nil))
+	rootCmd.AddCommand(commands.NewDatasetCmd(nil))
+	rootCmd.AddCommand(commands.NewStartCmdWithConfigLoader(&cfgFile))
 	rootCmd.AddCommand(commands.NewMetricsCmd())
 
-	// Execute
+	// Execute command
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

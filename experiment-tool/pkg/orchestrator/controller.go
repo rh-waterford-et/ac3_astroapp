@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -88,11 +89,32 @@ func (e *ExperimentController) RunExperiment() error {
 
 // uploadDataset uploads the local dataset to S3
 func (e *ExperimentController) uploadDataset() (string, error) {
-	log.Printf("Uploading dataset from: %s", e.config.Workload.Dataset)
+	// For containerized deployment, check if we have datasets in the container
+	datasetPath := e.config.Workload.Dataset
+
+	// If running in container and dataset path doesn't exist, try default container paths
+	if _, err := os.Stat(datasetPath); os.IsNotExist(err) {
+		// Try container dataset paths
+		containerPaths := []string{
+			"/app/datasets/NGC7025_short",
+			"/app/datasets/NGC7025_full",
+			"/app/datasets/" + datasetPath, // In case it's just the name
+		}
+
+		for _, path := range containerPaths {
+			if _, err := os.Stat(path); err == nil {
+				log.Printf("Found dataset in container at: %s", path)
+				datasetPath = path
+				break
+			}
+		}
+	}
+
+	log.Printf("Uploading dataset from: %s", datasetPath)
 
 	// Create dataset manager
 	datasetManager, err := dataset.NewDatasetManager(
-		e.config.Name, // experiment ID
+		"experiment", // Use generic identifier since we'll use actual dataset name for S3 path
 		e.config.Workload.ProcessorType,
 	)
 	if err != nil {
@@ -100,7 +122,7 @@ func (e *ExperimentController) uploadDataset() (string, error) {
 	}
 
 	// Scan local dataset
-	localDataset, err := datasetManager.ScanLocalDataset(e.config.Workload.Dataset)
+	localDataset, err := datasetManager.ScanLocalDataset(datasetPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to scan local dataset: %w", err)
 	}
