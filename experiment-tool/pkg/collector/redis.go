@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/metrics"
@@ -187,16 +188,16 @@ func (rc *RedisCollector) GetBatchSummary(ctx context.Context, batchID string, p
 	}, nil
 }
 
-// ExportJobMetricsCSV exports individual job metrics to CSV in the requested format
-func (rc *RedisCollector) ExportJobMetricsCSV(ctx context.Context, batchID string, outputPath string) error {
-	// Get all job metrics for the batch
-	jobMetrics, err := rc.GetJobMetrics(ctx, batchID)
+// ExportJobMetricsCSV exports batch summary data to CSV for a dataset (all related batches)
+func (rc *RedisCollector) ExportJobMetricsCSV(ctx context.Context, datasetName string, outputPath string) error {
+	// Get all batch summaries for the dataset
+	summaries, err := rc.findBatchSummariesForDataset(ctx, datasetName)
 	if err != nil {
-		return fmt.Errorf("failed to get job metrics: %w", err)
+		return fmt.Errorf("failed to get batch summaries for dataset: %w", err)
 	}
 
-	if len(jobMetrics) == 0 {
-		return fmt.Errorf("no job metrics found for batch %s", batchID)
+	if len(summaries) == 0 {
+		return fmt.Errorf("no batch summaries found for dataset %s", datasetName)
 	}
 
 	// Ensure output directory exists
@@ -214,85 +215,80 @@ func (rc *RedisCollector) ExportJobMetricsCSV(ctx context.Context, batchID strin
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	// Write header
+	// Write header for batch summary data
 	header := []string{
-		"job_id",
-		"queue_start_time",
-		"queue_receive_time",
-		"job_queue_time",
-		"job_end_time",
-		"job_processing_time",
-		"total_duration",
+		"batch_id",
+		"job_count",
+		"complete_job_count",
+		"first_job_queue_start_time",
+		"last_job_end_time",
+		"total_batch_duration_seconds",
+		"avg_queue_time_seconds",
+		"avg_processing_time_seconds",
 	}
 	if err := writer.Write(header); err != nil {
 		return fmt.Errorf("failed to write header: %w", err)
 	}
 
-	// Write job records
-	for _, job := range jobMetrics {
+	// Write batch summary records
+	for batchID, summary := range summaries {
 		record := []string{
-			job.JobID,
-			job.QueueStartTime.Format(time.RFC3339Nano),
-			job.QueueReceiveTime.Format(time.RFC3339Nano),
-			fmt.Sprintf("%.6f", job.QueueDuration),
-			job.JobEndTime.Format(time.RFC3339Nano),
-			fmt.Sprintf("%.6f", job.ProcessingDuration),
-			fmt.Sprintf("%.6f", job.TotalDuration),
+			batchID,
+			fmt.Sprintf("%d", summary.JobCount),
+			fmt.Sprintf("%d", summary.CompleteJobCount),
+			summary.FirstJobQueueStartTime.Format(time.RFC3339Nano),
+			summary.LastJobEndTime.Format(time.RFC3339Nano),
+			fmt.Sprintf("%.6f", summary.TotalBatchDuration.Seconds()),
+			fmt.Sprintf("%.6f", summary.AvgJobQueueTime.Seconds()),
+			fmt.Sprintf("%.6f", summary.AvgJobProcessingTime.Seconds()),
 		}
 
 		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write job record: %w", err)
+			return fmt.Errorf("failed to write batch summary record: %w", err)
 		}
 	}
 
-	log.Printf("Exported %d job records to %s", len(jobMetrics), outputPath)
+	log.Printf("Exported %d batch summaries for dataset %s to %s", len(summaries), datasetName, outputPath)
 	return nil
 }
 
-// ExportTrainingDataPoint exports a single training data point to CSV (appends to existing file)
-func (rc *RedisCollector) ExportTrainingDataPoint(ctx context.Context, batchID string, processorCount int, outputPath string) error {
-	// Get batch summary from UC3's aggregation
-	ucSummary, err := rc.metricsStore.AggregateBatchMetrics(ctx, batchID)
+// ExportTrainingDataPoint exports a single training data point to CSV for a dataset (appends to existing file)
+func (rc *RedisCollector) ExportTrainingDataPoint(ctx context.Context, datasetName string, processorCount int, outputPath string) error {
+	// Get batch summaries for the dataset to calculate aggregated statistics
+	summaries, err := rc.findBatchSummariesForDataset(ctx, datasetName)
 	if err != nil {
-		return fmt.Errorf("failed to aggregate batch metrics: %w", err)
+		return fmt.Errorf("failed to get batch summaries for dataset: %w", err)
 	}
 
-	// Get individual job metrics to calculate average job size
-	jobMetrics, err := rc.GetJobMetrics(ctx, batchID)
-	if err != nil {
-		return fmt.Errorf("failed to get job metrics: %w", err)
+	if len(summaries) == 0 {
+		return fmt.Errorf("no batch summaries found for dataset %s", datasetName)
 	}
 
-	if len(jobMetrics) == 0 {
-		return fmt.Errorf("no job metrics found for batch %s", batchID)
-	}
+	// Calculate aggregated metrics from all batch summaries
+	totalJobs := 0
+	totalCompleteJobs := 0
+	totalQueueTime := 0.0
+	totalProcessingTime := 0.0
+	validBatches := 0
 
-	// Calculate average job size and queue length
-	totalSizeMB := 0.0
-	totalQueueAhead := 0
-	validSizeCount := 0
-	validQueueCount := 0
-
-	for _, job := range jobMetrics {
-		if job.JobSizeMB > 0 {
-			totalSizeMB += job.JobSizeMB
-			validSizeCount++
-		}
-		if job.QueueAheadLength >= 0 {
-			totalQueueAhead += job.QueueAheadLength
-			validQueueCount++
+	for _, summary := range summaries {
+		if summary.CompleteJobCount > 0 {
+			totalJobs += summary.JobCount
+			totalCompleteJobs += summary.CompleteJobCount
+			// Weight the averages by the number of complete jobs in each batch
+			totalQueueTime += summary.AvgJobQueueTime.Seconds() * float64(summary.CompleteJobCount)
+			totalProcessingTime += summary.AvgJobProcessingTime.Seconds() * float64(summary.CompleteJobCount)
+			validBatches++
 		}
 	}
 
-	avgJobSizeMB := 0.0
-	if validSizeCount > 0 {
-		avgJobSizeMB = totalSizeMB / float64(validSizeCount)
+	if validBatches == 0 || totalCompleteJobs == 0 {
+		return fmt.Errorf("no completed jobs found in summaries for dataset %s", datasetName)
 	}
 
-	avgQueueAhead := 0
-	if validQueueCount > 0 {
-		avgQueueAhead = totalQueueAhead / validQueueCount
-	}
+	// Calculate weighted averages
+	avgQueueTime := totalQueueTime / float64(totalCompleteJobs)
+	avgProcessingTime := totalProcessingTime / float64(totalCompleteJobs)
 
 	// Ensure output directory exists
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
@@ -315,42 +311,43 @@ func (rc *RedisCollector) ExportTrainingDataPoint(ctx context.Context, batchID s
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	// Write header if file is new
+	// Write header if file is new (only metrics available in summaries)
 	if !fileExists {
 		header := []string{
 			"num_processors",
-			"avg_job_size_mb",
-			"job_queue_length_ahead",
 			"avg_queue_job_time",
 			"avg_processed_time",
 			"avg_job_total_time",
+			"total_jobs",
+			"complete_jobs",
 		}
 		if err := writer.Write(header); err != nil {
 			return fmt.Errorf("failed to write header: %w", err)
 		}
 	}
 
-	// Write training data point
+	// Write training data point (only available metrics)
 	record := []string{
 		fmt.Sprintf("%d", processorCount),
-		fmt.Sprintf("%.2f", avgJobSizeMB),
-		fmt.Sprintf("%d", avgQueueAhead),
-		fmt.Sprintf("%.6f", ucSummary.AvgJobQueueTime.Seconds()),
-		fmt.Sprintf("%.6f", ucSummary.AvgJobProcessingTime.Seconds()),
-		fmt.Sprintf("%.6f", (ucSummary.AvgJobQueueTime + ucSummary.AvgJobProcessingTime).Seconds()),
+		fmt.Sprintf("%.6f", avgQueueTime),
+		fmt.Sprintf("%.6f", avgProcessingTime),
+		fmt.Sprintf("%.6f", avgQueueTime+avgProcessingTime),
+		fmt.Sprintf("%d", totalJobs),
+		fmt.Sprintf("%d", totalCompleteJobs),
 	}
 
 	if err := writer.Write(record); err != nil {
 		return fmt.Errorf("failed to write training data record: %w", err)
 	}
 
-	log.Printf("Exported training data point: processors=%d, batch=%s to %s", processorCount, batchID, outputPath)
+	log.Printf("Exported training data point: processors=%d, dataset=%s (%d batches, %d jobs) to %s",
+		processorCount, datasetName, len(summaries), totalCompleteJobs, outputPath)
 	return nil
 }
 
-// WaitForBatchCompletion waits for a batch to complete processing with timeout
-func (rc *RedisCollector) WaitForBatchCompletion(ctx context.Context, batchID string, timeout time.Duration) error {
-	log.Printf("Waiting for batch completion: %s (timeout: %v)", batchID, timeout)
+// WaitForBatchCompletion waits for a dataset's processing to complete by monitoring UC3's aggregated summaries
+func (rc *RedisCollector) WaitForBatchCompletion(ctx context.Context, datasetName string, timeout time.Duration) error {
+	log.Printf("Waiting for dataset completion using aggregated summaries: %s (timeout: %v)", datasetName, timeout)
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -358,40 +355,140 @@ func (rc *RedisCollector) WaitForBatchCompletion(ctx context.Context, batchID st
 	ticker := time.NewTicker(30 * time.Second) // Check every 30 seconds
 	defer ticker.Stop()
 
+	var lastJobCount int
+	var lastCompleteCount int
+	progressStaleCount := 0
+	completionStableCount := 0
+	maxStaleCount := 10   // If no progress for 5 minutes (10 * 30s), consider it stuck
+	minStableCount := 3   // Need 3 consecutive stable completion checks (1.5 minutes)
+	minExpectedJobs := 10 // Minimum expected jobs for dataset validation (adjust based on dataset)
+
 	for {
 		select {
 		case <-timeoutCtx.Done():
-			return fmt.Errorf("timeout waiting for batch %s to complete", batchID)
+			return fmt.Errorf("timeout waiting for dataset %s to complete", datasetName)
 
 		case <-ticker.C:
-			// Check if batch summary exists and all jobs are complete
-			summary, err := rc.metricsStore.GetBatchSummary(ctx, batchID)
+			// Find all batch summaries for this dataset (ignore timestamps since UC3 reuses batch IDs)
+			summaries, err := rc.findBatchSummariesForDataset(ctx, datasetName)
 			if err != nil {
-				log.Printf("Batch %s not yet aggregated, continuing to wait...", batchID)
+				log.Printf("Error finding batch summaries: %v", err)
 				continue
 			}
 
-			if summary == nil {
-				log.Printf("Batch %s summary not found, continuing to wait...", batchID)
+			if len(summaries) == 0 {
+				log.Printf("No batch summaries found for dataset %s (waiting for aggregation...)", datasetName)
 				continue
 			}
 
-			// Check if ALL jobs in the batch are complete
-			if summary.CompleteJobCount > 0 && summary.CompleteJobCount == summary.JobCount {
-				log.Printf("Batch %s fully completed: %d/%d jobs finished",
-					batchID, summary.CompleteJobCount, summary.JobCount)
+			log.Printf("Found %d batch summaries matching dataset %s", len(summaries), datasetName)
 
-				// Wait additional buffer time for aggregation to stabilize
-				log.Printf("Waiting buffer period (2 minutes) for metrics to stabilize...")
-				time.Sleep(2 * time.Minute)
+			// Check completion status across all batches
+			totalJobs := 0
+			completedJobs := 0
+			allComplete := true
 
-				return nil
+			for batchID, summary := range summaries {
+				log.Printf("Batch %s: %d/%d jobs complete", batchID, summary.CompleteJobCount, summary.JobCount)
+				totalJobs += summary.JobCount
+				completedJobs += summary.CompleteJobCount
+
+				if summary.CompleteJobCount < summary.JobCount {
+					allComplete = false
+				}
 			}
 
-			log.Printf("Batch %s still processing: %d/%d jobs complete",
-				batchID, summary.CompleteJobCount, summary.JobCount)
+			log.Printf("Dataset %s overall: %d/%d jobs complete across %d batches",
+				datasetName, completedJobs, totalJobs, len(summaries))
+
+			// Track progress to detect stalled processing
+			if totalJobs == lastJobCount && completedJobs == lastCompleteCount {
+				progressStaleCount++
+				if progressStaleCount >= maxStaleCount {
+					log.Printf("Warning: No progress detected for %d cycles, but continuing to wait...", progressStaleCount)
+				}
+			} else {
+				progressStaleCount = 0 // Reset counter on progress
+				lastJobCount = totalJobs
+				lastCompleteCount = completedJobs
+				completionStableCount = 0 // Reset completion stability on progress
+			}
+
+			// Check for completion with stability requirement and job count validation
+			if allComplete && totalJobs > 0 {
+				// Validate job count is reasonable for dataset
+				if totalJobs < minExpectedJobs {
+					log.Printf("WARNING: Only %d jobs found for dataset %s - expected at least %d. UC3 may have data corruption.",
+						totalJobs, datasetName, minExpectedJobs)
+					log.Printf("This suggests UC3's aggregation service is mixing old/new data. Continuing to wait for more jobs...")
+					completionStableCount = 0 // Reset stability
+					continue
+				}
+
+				completionStableCount++
+				log.Printf("Dataset %s appears complete (%d/%d jobs) - stability check %d/%d",
+					datasetName, completedJobs, totalJobs, completionStableCount, minStableCount)
+
+				if completionStableCount >= minStableCount {
+					log.Printf("Dataset %s processing completed: %d jobs finished across %d batches (stable for %d checks)",
+						datasetName, completedJobs, len(summaries), completionStableCount)
+
+					// Brief buffer time for any final aggregation updates
+					log.Printf("Waiting buffer period (30 seconds) for final aggregation updates...")
+					time.Sleep(30 * time.Second)
+
+					return nil
+				}
+			} else {
+				completionStableCount = 0 // Reset if not complete
+				// If we have jobs but not complete, continue waiting
+				if totalJobs > 0 {
+					log.Printf("Dataset %s processing in progress: %d/%d jobs complete", datasetName, completedJobs, totalJobs)
+				}
+			}
 		}
 	}
+}
+
+// findBatchSummariesForDataset finds all batch summaries that belong to a specific dataset
+func (rc *RedisCollector) findBatchSummariesForDataset(ctx context.Context, datasetName string) (map[string]*metrics.BatchSummary, error) {
+	// Get all summary keys from Redis using the pattern: metrics:summary:*
+	pattern := "metrics:summary:*"
+	keys, err := rc.metricsStore.RedisClient().Keys(ctx, pattern)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get summary keys: %w", err)
+	}
+
+	summaries := make(map[string]*metrics.BatchSummary)
+	matchingBatches := 0
+
+	for _, key := range keys {
+		// Extract batch ID from key: metrics:summary:{batchID}
+		parts := strings.Split(key, ":")
+		if len(parts) < 3 {
+			continue
+		}
+		batchID := parts[2]
+
+		// Filter batches that contain our dataset name
+		if strings.Contains(batchID, datasetName) {
+			matchingBatches++
+			summary, err := rc.metricsStore.GetBatchSummary(ctx, batchID)
+			if err != nil {
+				log.Printf("Warning: failed to get summary for batch %s: %v", batchID, err)
+				continue
+			}
+			if summary != nil {
+				summaries[batchID] = summary
+			}
+		}
+	}
+
+	if matchingBatches > 0 {
+		log.Printf("Found %d batch summaries matching dataset %s", len(summaries), datasetName)
+	}
+
+	return summaries, nil
 }
 
 // Close closes the Redis connection

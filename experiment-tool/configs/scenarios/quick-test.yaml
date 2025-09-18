@@ -1,12 +1,11 @@
-# Quick Test Scenario - For Development and Testing
-name: "quick-test-experiment"
-duration: "5m"
-description: "Quick test scenario for development and validation"
+# Quick Test Scenario - Minimal configuration for testing
+name: "quick-test"
+description: "Quick test with minimal processor scaling for development"
 
 scaling:
   min_processors: 1
   max_processors: 1
-  scale_steps: [1, 2, 3]
+  scale_steps: [1]
   stabilize_time: "30s"
   scale_up_interval: "1m"
   scale_down_interval: "45s"

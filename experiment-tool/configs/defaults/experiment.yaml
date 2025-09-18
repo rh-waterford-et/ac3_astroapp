@@ -3,7 +3,6 @@
 
 # Experiment metadata
 name: "uc3-autoscaling-experiment"
-duration: "30m"
 description: "UC3 autoscaling training data generation experiment"
 
 # Processor scaling configuration

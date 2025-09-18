@@ -5,9 +5,8 @@ import "time"
 // ExperimentConfig holds all configuration for autoscaling experiments
 type ExperimentConfig struct {
 	// Experiment Parameters
-	Name        string        `mapstructure:"name"`
-	Duration    time.Duration `mapstructure:"duration"`
-	Description string        `mapstructure:"description"`
+	Name        string `mapstructure:"name"`
+	Description string `mapstructure:"description"`
 
 	// Scaling Configuration
 	Scaling ScalingConfig `mapstructure:"scaling"`

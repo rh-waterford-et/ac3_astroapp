@@ -30,7 +30,6 @@ collecting performance metrics for training data generation.`,
 
 	// Start command flags
 	startCmd.Flags().StringP("name", "n", "", "experiment name")
-	startCmd.Flags().DurationP("duration", "d", 0, "experiment duration (e.g., 30m, 1h)")
 	startCmd.Flags().IntP("min-processors", "", 0, "minimum number of processors")
 	startCmd.Flags().IntP("max-processors", "", 0, "maximum number of processors")
 	startCmd.Flags().StringP("dataset-path", "", "", "local path to dataset directory")
@@ -40,7 +39,6 @@ collecting performance metrics for training data generation.`,
 
 	// Bind flags to viper
 	viper.BindPFlag("name", startCmd.Flags().Lookup("name"))
-	viper.BindPFlag("duration", startCmd.Flags().Lookup("duration"))
 	viper.BindPFlag("scaling.min_processors", startCmd.Flags().Lookup("min-processors"))
 	viper.BindPFlag("scaling.max_processors", startCmd.Flags().Lookup("max-processors"))
 	viper.BindPFlag("workload.dataset", startCmd.Flags().Lookup("dataset-path"))
@@ -95,7 +93,6 @@ collecting performance metrics for training data generation.`,
 
 	// Start command flags
 	startCmd.Flags().StringP("name", "n", "", "experiment name")
-	startCmd.Flags().DurationP("duration", "d", 0, "experiment duration (e.g., 30m, 1h)")
 	startCmd.Flags().IntP("min-processors", "", 0, "minimum number of processors")
 	startCmd.Flags().IntP("max-processors", "", 0, "maximum number of processors")
 	startCmd.Flags().StringP("dataset-path", "", "", "local path to dataset directory")
@@ -105,7 +102,6 @@ collecting performance metrics for training data generation.`,
 
 	// Bind flags to viper
 	viper.BindPFlag("name", startCmd.Flags().Lookup("name"))
-	viper.BindPFlag("duration", startCmd.Flags().Lookup("duration"))
 	viper.BindPFlag("scaling.min_processors", startCmd.Flags().Lookup("min-processors"))
 	viper.BindPFlag("scaling.max_processors", startCmd.Flags().Lookup("max-processors"))
 	viper.BindPFlag("workload.dataset", startCmd.Flags().Lookup("dataset-path"))

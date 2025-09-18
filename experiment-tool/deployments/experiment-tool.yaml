@@ -62,10 +62,10 @@ spec:
           mountPath: /app/experiment-data
         resources:
           requests:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "250m"
           limits:
-            memory: "512Mi"
+            memory: "1024Mi"
             cpu: "500m"
       volumes:
       - name: experiment-data

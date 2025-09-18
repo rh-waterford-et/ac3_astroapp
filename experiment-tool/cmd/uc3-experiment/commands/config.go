@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/uc3/experiment-tool/pkg/config"
 )
 
@@ -18,16 +19,40 @@ func NewConfigCmd(cfg *config.ExperimentConfig) *cobra.Command {
 	configShowCmd := &cobra.Command{
 		Use:   "show",
 		Short: "Show current configuration",
-		Run: func(cmd *cobra.Command, args []string) {
-			showConfig(cfg)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Load config from file
+			configFile := viper.GetString("config")
+			if configFile == "" {
+				configFile = "./configs/defaults/experiment.yaml"
+			}
+
+			loadedCfg, err := config.LoadConfig(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to load configuration: %w", err)
+			}
+
+			showConfig(loadedCfg)
+			return nil
 		},
 	}
 
 	configValidateCmd := &cobra.Command{
 		Use:   "validate",
 		Short: "Validate configuration file",
-		Run: func(cmd *cobra.Command, args []string) {
-			validateConfig(cfg)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Load config from file
+			configFile := viper.GetString("config")
+			if configFile == "" {
+				configFile = "./configs/defaults/experiment.yaml"
+			}
+
+			loadedCfg, err := config.LoadConfig(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to load configuration: %w", err)
+			}
+
+			validateConfig(loadedCfg)
+			return nil
 		},
 	}
 
@@ -43,7 +68,6 @@ func showConfig(cfg *config.ExperimentConfig) {
 
 	fmt.Printf("Experiment Details:\n")
 	fmt.Printf("  Name: %s\n", cfg.Name)
-	fmt.Printf("  Duration: %s\n", cfg.Duration)
 	fmt.Printf("  Description: %s\n", cfg.Description)
 
 	fmt.Printf("\nScaling Configuration:\n")
@@ -77,13 +101,6 @@ func validateConfig(cfg *config.ExperimentConfig) {
 		valid = false
 	} else {
 		fmt.Printf("✅ Experiment name: %s\n", cfg.Name)
-	}
-
-	if cfg.Duration <= 0 {
-		fmt.Printf("❌ Invalid duration: %s\n", cfg.Duration)
-		valid = false
-	} else {
-		fmt.Printf("✅ Duration: %s\n", cfg.Duration)
 	}
 
 	// Validate scaling configuration

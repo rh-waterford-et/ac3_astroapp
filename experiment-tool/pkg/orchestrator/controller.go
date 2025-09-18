@@ -60,8 +60,10 @@ func NewExperimentController(cfg *config.ExperimentConfig) (*ExperimentControlle
 // RunExperiment executes the complete autoscaling experiment
 func (e *ExperimentController) RunExperiment() error {
 	log.Printf("Starting UC3 Autoscaling Experiment: %s", e.config.Name)
-	log.Printf("Duration: %s", e.config.Duration)
-	log.Printf("Processor Range: %d-%d", e.config.Scaling.MinProcessors, e.config.Scaling.MaxProcessors)
+	log.Printf("Description: %s", e.config.Description)
+	log.Printf("Dataset: %s", e.config.Workload.Dataset)
+	log.Printf("Processor Type: %s", e.config.Workload.ProcessorType)
+	log.Printf("Scale Steps: %v", e.config.Scaling.ScaleSteps)
 	log.Printf("Output Directory: %s", e.outputDir)
 
 	// Step 1: Upload dataset to S3
@@ -159,14 +161,14 @@ func (e *ExperimentController) runSingleCycle(datasetName string, processorCount
 		return fmt.Errorf("failed to trigger processing: %w", err)
 	}
 
-	// Step 4: Wait for completion (we'll need to detect batch ID somehow)
-	batchID, err := e.waitForProcessingCompletion(ctx, datasetName)
+	// Step 4: Wait for completion
+	datasetNameForExport, err := e.waitForProcessingCompletion(ctx, datasetName)
 	if err != nil {
 		return fmt.Errorf("failed waiting for completion: %w", err)
 	}
 
 	// Step 5: Collect and export data
-	err = e.collectAndExportData(ctx, processorCount, batchID)
+	err = e.collectAndExportData(ctx, processorCount, datasetNameForExport)
 	if err != nil {
 		return fmt.Errorf("failed to collect data: %w", err)
 	}
@@ -174,38 +176,35 @@ func (e *ExperimentController) runSingleCycle(datasetName string, processorCount
 	return nil
 }
 
-// waitForProcessingCompletion waits for processing to complete and returns batch ID
+// waitForProcessingCompletion waits for processing to complete and returns dataset name for metrics collection
 func (e *ExperimentController) waitForProcessingCompletion(ctx context.Context, datasetName string) (string, error) {
-	// The batch ID is the dataset name (confirmed from UC3 code analysis)
-	batchID := datasetName
-
-	log.Printf("Waiting for batch completion: %s", batchID)
+	log.Printf("Waiting for dataset processing completion: %s", datasetName)
 
 	// Use a reasonable timeout for processing (e.g., 2 hours)
 	timeout := 2 * time.Hour
-	err := e.collector.WaitForBatchCompletion(ctx, batchID, timeout)
+	err := e.collector.WaitForBatchCompletion(ctx, datasetName, timeout)
 	if err != nil {
-		return "", fmt.Errorf("batch %s failed to complete: %w", batchID, err)
+		return "", fmt.Errorf("dataset %s failed to complete: %w", datasetName, err)
 	}
 
-	log.Printf("Batch %s completed successfully", batchID)
-	return batchID, nil
+	log.Printf("Dataset %s completed successfully", datasetName)
+	return datasetName, nil
 }
 
 // collectAndExportData collects metrics and exports to CSV files
-func (e *ExperimentController) collectAndExportData(ctx context.Context, processorCount int, batchID string) error {
-	log.Printf("Collecting and exporting data for batch: %s", batchID)
+func (e *ExperimentController) collectAndExportData(ctx context.Context, processorCount int, datasetName string) error {
+	log.Printf("Collecting and exporting data for dataset: %s", datasetName)
 
 	// Export individual job metrics
 	jobMetricsPath := filepath.Join(e.outputDir, fmt.Sprintf("job_records_%d_processors.csv", processorCount))
-	err := e.collector.ExportJobMetricsCSV(ctx, batchID, jobMetricsPath)
+	err := e.collector.ExportJobMetricsCSV(ctx, datasetName, jobMetricsPath)
 	if err != nil {
 		return fmt.Errorf("failed to export job metrics: %w", err)
 	}
 
 	// Export training data point
 	trainingDataPath := filepath.Join(e.outputDir, "training_data.csv")
-	err = e.collector.ExportTrainingDataPoint(ctx, batchID, processorCount, trainingDataPath)
+	err = e.collector.ExportTrainingDataPoint(ctx, datasetName, processorCount, trainingDataPath)
 	if err != nil {
 		return fmt.Errorf("failed to export training data: %w", err)
 	}
