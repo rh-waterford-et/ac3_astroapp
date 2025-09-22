@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: starlight
+  name: ucm-processor-deployment
   namespace: uc3-applications
   labels:
-    app: starlight
+    app: ucm-processor
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: starlight
+      app: ucm-processor
   template:
     metadata:
       labels:
-        app: starlight
+        app: ucm-processor
     spec:
       securityContext:
         runAsUser: 0
