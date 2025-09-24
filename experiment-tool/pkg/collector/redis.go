@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 )
 
 // RedisCollector handles metrics collection from UC3's Redis instance
+// Note: Completion detection has been moved to S3Monitor for reliability.
+// This collector now focuses solely on metrics collection and CSV export.
 type RedisCollector struct {
 	redisClient  *metrics.RedisClient
 	metricsStore *metrics.MetricsStore
@@ -345,111 +348,6 @@ func (rc *RedisCollector) ExportTrainingDataPoint(ctx context.Context, datasetNa
 	return nil
 }
 
-// WaitForBatchCompletion waits for a dataset's processing to complete by monitoring UC3's aggregated summaries
-func (rc *RedisCollector) WaitForBatchCompletion(ctx context.Context, datasetName string, timeout time.Duration) error {
-	log.Printf("Waiting for dataset completion using aggregated summaries: %s (timeout: %v)", datasetName, timeout)
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(30 * time.Second) // Check every 30 seconds
-	defer ticker.Stop()
-
-	var lastJobCount int
-	var lastCompleteCount int
-	progressStaleCount := 0
-	completionStableCount := 0
-	maxStaleCount := 10   // If no progress for 5 minutes (10 * 30s), consider it stuck
-	minStableCount := 3   // Need 3 consecutive stable completion checks (1.5 minutes)
-	minExpectedJobs := 10 // Minimum expected jobs for dataset validation (adjust based on dataset)
-
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			return fmt.Errorf("timeout waiting for dataset %s to complete", datasetName)
-
-		case <-ticker.C:
-			// Find all batch summaries for this dataset (ignore timestamps since UC3 reuses batch IDs)
-			summaries, err := rc.findBatchSummariesForDataset(ctx, datasetName)
-			if err != nil {
-				log.Printf("Error finding batch summaries: %v", err)
-				continue
-			}
-
-			if len(summaries) == 0 {
-				log.Printf("No batch summaries found for dataset %s (waiting for aggregation...)", datasetName)
-				continue
-			}
-
-			log.Printf("Found %d batch summaries matching dataset %s", len(summaries), datasetName)
-
-			// Check completion status across all batches
-			totalJobs := 0
-			completedJobs := 0
-			allComplete := true
-
-			for batchID, summary := range summaries {
-				log.Printf("Batch %s: %d/%d jobs complete", batchID, summary.CompleteJobCount, summary.JobCount)
-				totalJobs += summary.JobCount
-				completedJobs += summary.CompleteJobCount
-
-				if summary.CompleteJobCount < summary.JobCount {
-					allComplete = false
-				}
-			}
-
-			log.Printf("Dataset %s overall: %d/%d jobs complete across %d batches",
-				datasetName, completedJobs, totalJobs, len(summaries))
-
-			// Track progress to detect stalled processing
-			if totalJobs == lastJobCount && completedJobs == lastCompleteCount {
-				progressStaleCount++
-				if progressStaleCount >= maxStaleCount {
-					log.Printf("Warning: No progress detected for %d cycles, but continuing to wait...", progressStaleCount)
-				}
-			} else {
-				progressStaleCount = 0 // Reset counter on progress
-				lastJobCount = totalJobs
-				lastCompleteCount = completedJobs
-				completionStableCount = 0 // Reset completion stability on progress
-			}
-
-			// Check for completion with stability requirement and job count validation
-			if allComplete && totalJobs > 0 {
-				// Validate job count is reasonable for dataset
-				if totalJobs < minExpectedJobs {
-					log.Printf("WARNING: Only %d jobs found for dataset %s - expected at least %d. UC3 may have data corruption.",
-						totalJobs, datasetName, minExpectedJobs)
-					log.Printf("This suggests UC3's aggregation service is mixing old/new data. Continuing to wait for more jobs...")
-					completionStableCount = 0 // Reset stability
-					continue
-				}
-
-				completionStableCount++
-				log.Printf("Dataset %s appears complete (%d/%d jobs) - stability check %d/%d",
-					datasetName, completedJobs, totalJobs, completionStableCount, minStableCount)
-
-				if completionStableCount >= minStableCount {
-					log.Printf("Dataset %s processing completed: %d jobs finished across %d batches (stable for %d checks)",
-						datasetName, completedJobs, len(summaries), completionStableCount)
-
-					// Brief buffer time for any final aggregation updates
-					log.Printf("Waiting buffer period (30 seconds) for final aggregation updates...")
-					time.Sleep(30 * time.Second)
-
-					return nil
-				}
-			} else {
-				completionStableCount = 0 // Reset if not complete
-				// If we have jobs but not complete, continue waiting
-				if totalJobs > 0 {
-					log.Printf("Dataset %s processing in progress: %d/%d jobs complete", datasetName, completedJobs, totalJobs)
-				}
-			}
-		}
-	}
-}
-
 // findBatchSummariesForDataset finds all batch summaries that belong to a specific dataset
 func (rc *RedisCollector) findBatchSummariesForDataset(ctx context.Context, datasetName string) (map[string]*metrics.BatchSummary, error) {
 	// Get all summary keys from Redis using the pattern: metrics:summary:*
@@ -473,6 +371,7 @@ func (rc *RedisCollector) findBatchSummariesForDataset(ctx context.Context, data
 		// Filter batches that contain our dataset name
 		if strings.Contains(batchID, datasetName) {
 			matchingBatches++
+			// Use UC3's method directly (we're no longer relying on complete_job_count)
 			summary, err := rc.metricsStore.GetBatchSummary(ctx, batchID)
 			if err != nil {
 				log.Printf("Warning: failed to get summary for batch %s: %v", batchID, err)
@@ -489,6 +388,171 @@ func (rc *RedisCollector) findBatchSummariesForDataset(ctx context.Context, data
 	}
 
 	return summaries, nil
+}
+
+// GetBatchSummariesForDataset is a public wrapper for findBatchSummariesForDataset
+func (rc *RedisCollector) GetBatchSummariesForDataset(ctx context.Context, datasetName string) (map[string]*metrics.BatchSummary, error) {
+	return rc.findBatchSummariesForDataset(ctx, datasetName)
+}
+
+// GetJobRecordsForDataset gets all individual job records for a dataset from export keys
+func (rc *RedisCollector) GetJobRecordsForDataset(ctx context.Context, datasetName string) ([]*metrics.MetricRecord, error) {
+	// Get all export keys for this dataset using the pattern: metrics/export/{datasetName}:*
+	pattern := fmt.Sprintf("metrics/export/%s:*", datasetName)
+	keys, err := rc.metricsStore.RedisClient().Keys(ctx, pattern)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get export keys: %w", err)
+	}
+
+	var allJobRecords []*metrics.MetricRecord
+
+	for _, key := range keys {
+		// Get the exported metrics data
+		data, err := rc.metricsStore.RedisClient().Get(ctx, key)
+		if err != nil {
+			log.Printf("Warning: failed to get export data for key %s: %v", key, err)
+			continue
+		}
+
+		// Parse the individual job records from the export text
+		jobRecords := rc.parseExportedJobRecords(data, datasetName)
+		allJobRecords = append(allJobRecords, jobRecords...)
+	}
+
+	log.Printf("Found %d job records for dataset %s from %d export keys", len(allJobRecords), datasetName, len(keys))
+	return allJobRecords, nil
+}
+
+// parseExportedJobRecords parses the exported metrics text to extract individual job records
+func (rc *RedisCollector) parseExportedJobRecords(exportData, datasetName string) []*metrics.MetricRecord {
+	var jobRecords []*metrics.MetricRecord
+
+	lines := strings.Split(exportData, "\n")
+	var currentJob *metrics.MetricRecord
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Start of a new job
+		if strings.HasPrefix(line, "Job ") {
+			if currentJob != nil {
+				// Save previous job if it's complete
+				if currentJob.IsComplete {
+					jobRecords = append(jobRecords, currentJob)
+				}
+			}
+			currentJob = &metrics.MetricRecord{
+				BatchID: datasetName,
+			}
+		}
+
+		if currentJob == nil {
+			continue
+		}
+
+		// Parse job fields
+		if strings.HasPrefix(line, "Job ID: ") {
+			currentJob.JobID = strings.TrimPrefix(line, "Job ID: ")
+		} else if strings.HasPrefix(line, "Status: ") {
+			status := strings.TrimPrefix(line, "Status: ")
+			currentJob.IsComplete = (status == "COMPLETE")
+		} else if strings.HasPrefix(line, "queue_start_time: ") {
+			timeStr := strings.TrimPrefix(line, "queue_start_time: ")
+			if t, err := time.Parse(time.RFC3339Nano, timeStr); err == nil {
+				currentJob.QueueStartTime = t
+			}
+		} else if strings.HasPrefix(line, "queue_receive_time: ") {
+			timeStr := strings.TrimPrefix(line, "queue_receive_time: ")
+			if t, err := time.Parse(time.RFC3339Nano, timeStr); err == nil {
+				currentJob.QueueReceiveTime = t
+			}
+		} else if strings.HasPrefix(line, "job_end_time: ") {
+			timeStr := strings.TrimPrefix(line, "job_end_time: ")
+			if t, err := time.Parse(time.RFC3339Nano, timeStr); err == nil {
+				currentJob.JobEndTime = t
+			}
+		} else if strings.HasPrefix(line, "queue_duration: ") {
+			durStr := strings.TrimPrefix(line, "queue_duration: ")
+			if f, err := strconv.ParseFloat(durStr, 64); err == nil {
+				currentJob.QueueDuration = f
+			}
+		} else if strings.HasPrefix(line, "processing_duration: ") {
+			durStr := strings.TrimPrefix(line, "processing_duration: ")
+			if f, err := strconv.ParseFloat(durStr, 64); err == nil {
+				currentJob.ProcessingDuration = f
+			}
+		} else if strings.HasPrefix(line, "total_duration: ") {
+			durStr := strings.TrimPrefix(line, "total_duration: ")
+			if f, err := strconv.ParseFloat(durStr, 64); err == nil {
+				currentJob.TotalDuration = f
+			}
+		}
+	}
+
+	// Don't forget the last job
+	if currentJob != nil && currentJob.IsComplete {
+		jobRecords = append(jobRecords, currentJob)
+	}
+
+	return jobRecords
+}
+
+// getJobRecord retrieves a single job record from Redis (now unused)
+func (rc *RedisCollector) getJobRecord(ctx context.Context, key string) (*metrics.MetricRecord, error) {
+	// This method is no longer used since we read from export keys
+	return nil, fmt.Errorf("individual job keys not available, use export keys instead")
+}
+
+// AppendJobRecordsToCSV appends new job records to an existing CSV file
+func (rc *RedisCollector) AppendJobRecordsToCSV(ctx context.Context, datasetName, csvPath string, seenJobIDs map[string]bool) (int, error) {
+	jobRecords, err := rc.GetJobRecordsForDataset(ctx, datasetName)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get job records: %w", err)
+	}
+
+	// Filter out jobs we've already seen
+	var newRecords []*metrics.MetricRecord
+	for _, record := range jobRecords {
+		if !seenJobIDs[record.JobID] {
+			newRecords = append(newRecords, record)
+			seenJobIDs[record.JobID] = true
+		}
+	}
+
+	if len(newRecords) == 0 {
+		return 0, nil // No new records
+	}
+
+	// Open file in append mode
+	file, err := os.OpenFile(csvPath, os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return 0, fmt.Errorf("failed to open CSV file: %w", err)
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Write new records
+	for _, record := range newRecords {
+		row := []string{
+			record.BatchID,
+			record.JobID,
+			record.QueueStartTime.Format(time.RFC3339Nano),
+			record.QueueReceiveTime.Format(time.RFC3339Nano),
+			record.JobEndTime.Format(time.RFC3339Nano),
+			fmt.Sprintf("%.6f", record.QueueDuration),
+			fmt.Sprintf("%.6f", record.ProcessingDuration),
+			fmt.Sprintf("%.6f", record.TotalDuration),
+		}
+
+		if err := writer.Write(row); err != nil {
+			return len(newRecords), fmt.Errorf("failed to write record: %w", err)
+		}
+	}
+
+	log.Printf("Appended %d new job records to %s", len(newRecords), csvPath)
+	return len(newRecords), nil
 }
 
 // Close closes the Redis connection

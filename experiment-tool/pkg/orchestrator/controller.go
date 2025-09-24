@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
 	"log"
 	"os"
@@ -20,6 +21,7 @@ type ExperimentController struct {
 	config    *config.ExperimentConfig
 	scaler    scaler.Scaler
 	collector *collector.RedisCollector
+	s3Monitor *collector.S3Monitor
 	apiClient *api.UC3Client
 	outputDir string
 }
@@ -45,6 +47,12 @@ func NewExperimentController(cfg *config.ExperimentConfig) (*ExperimentControlle
 		return nil, fmt.Errorf("failed to create Redis collector: %w", err)
 	}
 
+	// Create S3 monitor
+	s3Monitor, err := collector.NewS3Monitor()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create S3 monitor: %w", err)
+	}
+
 	// Create UC3 API client
 	apiClient := api.NewUC3Client(cfg.Infrastructure.UC3APIBaseURL)
 
@@ -52,6 +60,7 @@ func NewExperimentController(cfg *config.ExperimentConfig) (*ExperimentControlle
 		config:    cfg,
 		scaler:    k8sScaler,
 		collector: redisCollector,
+		s3Monitor: s3Monitor,
 		apiClient: apiClient,
 		outputDir: cfg.Metrics.OutputDirectory,
 	}, nil
@@ -67,7 +76,7 @@ func (e *ExperimentController) RunExperiment() error {
 	log.Printf("Output Directory: %s", e.outputDir)
 
 	// Step 1: Upload dataset to S3
-	datasetName, err := e.uploadDataset()
+	experimentRun, err := e.uploadDataset(e.config.Workload.Dataset)
 	if err != nil {
 		return fmt.Errorf("failed to upload dataset: %w", err)
 	}
@@ -76,7 +85,7 @@ func (e *ExperimentController) RunExperiment() error {
 	for i, processorCount := range e.config.Scaling.ScaleSteps {
 		log.Printf("Running cycle %d/%d: %d processors", i+1, len(e.config.Scaling.ScaleSteps), processorCount)
 
-		err := e.runSingleCycle(datasetName, processorCount)
+		err := e.runSingleCycle(experimentRun, processorCount)
 		if err != nil {
 			log.Printf("Failed cycle for %d processors: %v", processorCount, err)
 			continue // Skip failed cycles, continue with remaining
@@ -89,58 +98,69 @@ func (e *ExperimentController) RunExperiment() error {
 	return nil
 }
 
-// uploadDataset uploads the local dataset to S3
-func (e *ExperimentController) uploadDataset() (string, error) {
-	// For containerized deployment, check if we have datasets in the container
-	datasetPath := e.config.Workload.Dataset
+// uploadDataset uploads the dataset and returns experiment run information
+func (e *ExperimentController) uploadDataset(datasetPath string) (*collector.ExperimentRun, error) {
+	// Dynamic path resolution for containerized environments
+	if datasetPath != "" {
+		// Check if the provided path exists
+		if _, err := os.Stat(datasetPath); os.IsNotExist(err) {
+			// Try container dataset paths
+			containerPaths := []string{
+				"/app/datasets/NGC7025_short",
+				"/app/datasets/NGC7025_full",
+				"/app/datasets/" + datasetPath,
+			}
 
-	// If running in container and dataset path doesn't exist, try default container paths
-	if _, err := os.Stat(datasetPath); os.IsNotExist(err) {
-		// Try container dataset paths
-		containerPaths := []string{
-			"/app/datasets/NGC7025_short",
-			"/app/datasets/NGC7025_full",
-			"/app/datasets/" + datasetPath, // In case it's just the name
-		}
+			found := false
+			for _, containerPath := range containerPaths {
+				if _, err := os.Stat(containerPath); err == nil {
+					log.Printf("Using container dataset path: %s", containerPath)
+					datasetPath = containerPath
+					found = true
+					break
+				}
+			}
 
-		for _, path := range containerPaths {
-			if _, err := os.Stat(path); err == nil {
-				log.Printf("Found dataset in container at: %s", path)
-				datasetPath = path
-				break
+			if !found {
+				return nil, fmt.Errorf("dataset path not found: %s", datasetPath)
 			}
 		}
 	}
 
-	log.Printf("Uploading dataset from: %s", datasetPath)
-
-	// Create dataset manager
-	datasetManager, err := dataset.NewDatasetManager(
-		"experiment", // Use generic identifier since we'll use actual dataset name for S3 path
-		e.config.Workload.ProcessorType,
-	)
+	// Create dataset manager and upload
+	datasetManager, err := dataset.NewDatasetManager("experiment", e.config.Workload.ProcessorType)
 	if err != nil {
-		return "", fmt.Errorf("failed to create dataset manager: %w", err)
+		return nil, fmt.Errorf("failed to create dataset manager: %w", err)
 	}
 
-	// Scan local dataset
 	localDataset, err := datasetManager.ScanLocalDataset(datasetPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to scan local dataset: %w", err)
+		return nil, fmt.Errorf("failed to scan local dataset: %w", err)
 	}
 
-	// Upload to S3
+	log.Printf("Uploading dataset from: %s", datasetPath)
 	err = datasetManager.UploadDataset(localDataset)
 	if err != nil {
-		return "", fmt.Errorf("failed to upload dataset: %w", err)
+		return nil, fmt.Errorf("failed to upload dataset: %w", err)
 	}
 
 	log.Printf("Dataset uploaded successfully: %s", localDataset.DatasetName)
-	return localDataset.DatasetName, nil
+
+	// Create ExperimentRun with uploaded file count
+	experimentRun, err := collector.NewExperimentRun(
+		localDataset.DatasetName,
+		e.config.Workload.ProcessorType,
+		len(localDataset.Files), // Track uploaded file count
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create experiment run: %w", err)
+	}
+
+	return experimentRun, nil
 }
 
 // runSingleCycle executes one complete processor count cycle
-func (e *ExperimentController) runSingleCycle(datasetName string, processorCount int) error {
+func (e *ExperimentController) runSingleCycle(experimentRun *collector.ExperimentRun, processorCount int) error {
 	ctx := context.Background()
 
 	// Step 1: Scale to processor count
@@ -155,40 +175,174 @@ func (e *ExperimentController) runSingleCycle(datasetName string, processorCount
 	time.Sleep(e.config.Scaling.StabilizeTime)
 
 	// Step 3: Trigger UC3 processing
-	log.Printf("Triggering processing for dataset: %s", datasetName)
-	err = e.apiClient.TriggerProcessing(datasetName, e.config.Workload.ProcessorType)
+	log.Printf("Triggering processing for dataset: %s", experimentRun.DatasetName)
+	err = e.apiClient.TriggerProcessing(experimentRun.DatasetName, e.config.Workload.ProcessorType)
 	if err != nil {
 		return fmt.Errorf("failed to trigger processing: %w", err)
 	}
 
-	// Step 4: Wait for completion
-	datasetNameForExport, err := e.waitForProcessingCompletion(ctx, datasetName)
+	// Step 4: Wait for completion using S3 monitoring
+	err = e.waitForS3Completion(ctx, experimentRun)
 	if err != nil {
 		return fmt.Errorf("failed waiting for completion: %w", err)
 	}
 
 	// Step 5: Collect and export data
-	err = e.collectAndExportData(ctx, processorCount, datasetNameForExport)
+	err = e.collectAndExportData(ctx, processorCount, experimentRun.DatasetName)
 	if err != nil {
-		return fmt.Errorf("failed to collect data: %w", err)
+		return fmt.Errorf("failed to collect and export data: %w", err)
+	}
+
+	// Step 6: Clean up S3 output files
+	err = e.cleanupS3OutputFiles(ctx, experimentRun)
+	if err != nil {
+		log.Printf("Warning: failed to cleanup S3 output files: %v", err)
+		// Don't fail the experiment for cleanup issues
 	}
 
 	return nil
 }
 
-// waitForProcessingCompletion waits for processing to complete and returns dataset name for metrics collection
-func (e *ExperimentController) waitForProcessingCompletion(ctx context.Context, datasetName string) (string, error) {
-	log.Printf("Waiting for dataset processing completion: %s", datasetName)
+// waitForS3Completion waits for processing to complete using S3 output monitoring
+func (e *ExperimentController) waitForS3Completion(ctx context.Context, experimentRun *collector.ExperimentRun) error {
+	log.Printf("Waiting for dataset processing completion: %s", experimentRun.DatasetName)
 
-	// Use a reasonable timeout for processing (e.g., 2 hours)
-	timeout := 2 * time.Hour
-	err := e.collector.WaitForBatchCompletion(ctx, datasetName, timeout)
+	// Use S3Monitor for reliable completion detection
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Hour)
+	defer cancel()
+
+	err := e.s3Monitor.WaitForCompletion(timeoutCtx, experimentRun)
 	if err != nil {
-		return "", fmt.Errorf("dataset %s failed to complete: %w", datasetName, err)
+		return fmt.Errorf("dataset %s failed to complete: %w", experimentRun.DatasetName, err)
 	}
 
-	log.Printf("Dataset %s completed successfully", datasetName)
-	return datasetName, nil
+	log.Printf("Dataset %s processing completed (S3 files ready)", experimentRun.DatasetName)
+
+	// Now wait for metrics aggregation cycle
+	log.Printf("Waiting for metrics aggregation cycle...")
+	err = e.waitForMetricsAggregation(ctx, experimentRun)
+	if err != nil {
+		return fmt.Errorf("failed waiting for metrics aggregation: %w", err)
+	}
+
+	log.Printf("Dataset %s fully completed (metrics aggregated)", experimentRun.DatasetName)
+	return nil
+}
+
+// waitForMetricsAggregation waits for the next aggregation cycle after processing completes
+func (e *ExperimentController) waitForMetricsAggregation(ctx context.Context, experimentRun *collector.ExperimentRun) error {
+	// UC3 aggregation runs every 5 minutes
+	aggregationInterval := 5 * time.Minute
+	maxWaitTime := 6 * time.Minute // 5 min + 1 min buffer
+
+	log.Printf("Waiting for next aggregation cycle to capture all jobs...")
+	log.Printf("UC3 aggregates every %v, waiting up to %v", aggregationInterval, maxWaitTime)
+
+	// Create CSV file for job records at the start
+	jobRecordsPath := filepath.Join(e.outputDir, "job_records_detailed.csv")
+	err := e.createJobRecordsCSV(jobRecordsPath)
+	if err != nil {
+		return fmt.Errorf("failed to create job records CSV: %w", err)
+	}
+
+	// Track seen job IDs to avoid duplicates
+	seenJobIDs := make(map[string]bool)
+
+	// Record when we started waiting (after S3 completion)
+	waitStartTime := time.Now()
+
+	// We must wait at least 5 minutes to ensure the next aggregation cycle runs
+	minimumWaitTime := aggregationInterval
+
+	ticker := time.NewTicker(15 * time.Second) // Check more frequently for new jobs
+	defer ticker.Stop()
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, maxWaitTime)
+	defer cancel()
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			log.Printf("Timeout reached, proceeding with available job records")
+			return nil // Don't fail, just proceed with what we have
+		case <-ticker.C:
+			timeWaited := time.Since(waitStartTime)
+
+			// Dynamically collect new job records
+			newJobCount, err := e.collector.AppendJobRecordsToCSV(ctx, experimentRun.DatasetName, jobRecordsPath, seenJobIDs)
+			if err != nil {
+				log.Printf("Error collecting job records: %v", err)
+			} else if newJobCount > 0 {
+				log.Printf("Collected %d new job records (total seen: %d)", newJobCount, len(seenJobIDs))
+			}
+
+			// Check current summaries for job count reference
+			summaries, err := e.collector.GetBatchSummariesForDataset(ctx, experimentRun.DatasetName)
+			if err != nil {
+				log.Printf("Error checking summaries: %v", err)
+				continue
+			}
+
+			// Count current jobs
+			totalJobs := 0
+
+			for batchID, summary := range summaries {
+				totalJobs += summary.JobCount
+				log.Printf("Batch %s: %d jobs", batchID, summary.JobCount)
+			}
+
+			log.Printf("Current state: %d total jobs across %d summaries, %d individual records collected (waited %v/%v)",
+				totalJobs, len(summaries), len(seenJobIDs),
+				timeWaited.Round(time.Second), minimumWaitTime)
+
+			// Only exit if we've waited at least 5 minutes AND have job records
+			if timeWaited >= minimumWaitTime {
+				if len(seenJobIDs) > 0 {
+					log.Printf("Minimum wait time elapsed and job records collected! (%d individual jobs after %v)",
+						len(seenJobIDs), timeWaited.Round(time.Second))
+					return nil
+				} else {
+					log.Printf("Minimum wait time elapsed but no job records found - this may indicate an issue")
+					return nil
+				}
+			} else {
+				remainingWait := minimumWaitTime - timeWaited
+				log.Printf("Must wait at least %v more for next aggregation cycle...",
+					remainingWait.Round(time.Second))
+			}
+		}
+	}
+}
+
+// createJobRecordsCSV creates the CSV file with headers for individual job records
+func (e *ExperimentController) createJobRecordsCSV(csvPath string) error {
+	file, err := os.Create(csvPath)
+	if err != nil {
+		return fmt.Errorf("failed to create CSV file: %w", err)
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Write CSV headers
+	headers := []string{
+		"batch_id",
+		"job_id",
+		"queue_start_time",
+		"queue_receive_time",
+		"job_end_time",
+		"queue_duration_seconds",
+		"processing_duration_seconds",
+		"total_duration_seconds",
+	}
+
+	if err := writer.Write(headers); err != nil {
+		return fmt.Errorf("failed to write CSV headers: %w", err)
+	}
+
+	log.Printf("Created job records CSV: %s", csvPath)
+	return nil
 }
 
 // collectAndExportData collects metrics and exports to CSV files
@@ -210,6 +364,25 @@ func (e *ExperimentController) collectAndExportData(ctx context.Context, process
 	}
 
 	log.Printf("Data exported successfully for %d processors", processorCount)
+	return nil
+}
+
+// cleanupS3OutputFiles removes the output files from S3 after successful data collection
+func (e *ExperimentController) cleanupS3OutputFiles(ctx context.Context, experimentRun *collector.ExperimentRun) error {
+	log.Printf("Cleaning up S3 output files for dataset: %s", experimentRun.DatasetName)
+
+	// Delete the entire output directory for this dataset
+	// The path should match what UC3 actually uses: {processor}/output/{datasetName}/
+	outputPath := fmt.Sprintf("%s/output/%s/", experimentRun.ProcessorType, experimentRun.DatasetName)
+
+	log.Printf("Deleting S3 directory: %s", outputPath)
+
+	err := e.s3Monitor.GetS3Client().DeleteDirectory(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to delete output directory %s: %w", outputPath, err)
+	}
+
+	log.Printf("Successfully deleted S3 output files for dataset: %s", experimentRun.DatasetName)
 	return nil
 }
 

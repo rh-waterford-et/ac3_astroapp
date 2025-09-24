@@ -1,6 +1,9 @@
 package collector
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // LiveMetrics represents system state at a point in time
 type LiveMetrics struct {
@@ -49,4 +52,61 @@ type SystemSnapshot struct {
 	ProcessorCount int          `json:"processor_count"`
 	ActiveBatches  []string     `json:"active_batches"`
 	JobMetrics     []JobMetrics `json:"job_metrics"`
+}
+
+// ProcessorOutputPattern defines how each processor generates output files
+type ProcessorOutputPattern struct {
+	ProcessorType    string   `json:"processor_type"`
+	FilesPerInput    int      `json:"files_per_input"`    // STARLIGHT: 1, PPXF: 5
+	OutputPathFormat string   `json:"output_path_format"` // Path structure pattern
+	FilePatterns     []string `json:"file_patterns"`      // Expected file extensions
+}
+
+// ProcessorPatterns defines the output patterns for each supported processor
+var ProcessorPatterns = map[string]ProcessorOutputPattern{
+	"starlight": {
+		ProcessorType:    "starlight",
+		FilesPerInput:    1,
+		OutputPathFormat: "starlight/output/%s/", // /starlight/output/NGC7025/
+		FilePatterns:     []string{".txt", ".out"},
+	},
+	"ppxf": {
+		ProcessorType:    "ppxf",
+		FilesPerInput:    5,
+		OutputPathFormat: "ppxf/output/%s/", // /ppxf/output/NGC7025/*/
+		FilePatterns:     []string{".fits", ".txt", ".log", ".png", ".pdf"},
+	},
+}
+
+// ExperimentRun represents a single experiment execution with processor-specific configuration
+type ExperimentRun struct {
+	DatasetName         string    `json:"dataset_name"`
+	ProcessorType       string    `json:"processor_type"`
+	UploadedFileCount   int       `json:"uploaded_file_count"`
+	ExpectedOutputCount int       `json:"expected_output_count"` // Calculated: UploadedFileCount * FilesPerInput
+	StartTime           time.Time `json:"start_time"`
+
+	// S3 paths
+	InputPath      string                 `json:"input_path"`       // "starlight/input/NGC7025/"
+	OutputBasePath string                 `json:"output_base_path"` // "starlight/output/NGC7025/"
+	OutputPattern  ProcessorOutputPattern `json:"output_pattern"`
+}
+
+// NewExperimentRun creates a new experiment run with processor-specific configuration
+func NewExperimentRun(datasetName, processorType string, uploadedFileCount int) (*ExperimentRun, error) {
+	pattern, exists := ProcessorPatterns[processorType]
+	if !exists {
+		return nil, fmt.Errorf("unsupported processor type: %s", processorType)
+	}
+
+	return &ExperimentRun{
+		DatasetName:         datasetName,
+		ProcessorType:       processorType,
+		UploadedFileCount:   uploadedFileCount,
+		ExpectedOutputCount: uploadedFileCount * pattern.FilesPerInput,
+		StartTime:           time.Now(),
+		InputPath:           fmt.Sprintf("%s/input/%s/", processorType, datasetName),
+		OutputBasePath:      fmt.Sprintf(pattern.OutputPathFormat, datasetName),
+		OutputPattern:       pattern,
+	}, nil
 }
