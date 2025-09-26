@@ -115,17 +115,37 @@ collecting performance metrics for training data generation.`,
 func startExperimentWithConfig(cfg *config.ExperimentConfig) error {
 	fmt.Printf("Starting UC3 Autoscaling Experiment: %s\n", cfg.Name)
 
-	// Create experiment controller
-	controller, err := orchestrator.NewExperimentController(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to create experiment controller: %w", err)
-	}
-	defer controller.Close()
+	// Route to appropriate controller based on configuration
+	if cfg.Workload.IsMultiDataset() {
+		// Multi-dataset experiment
+		fmt.Printf("Running multi-dataset experiment with %d datasets\n", len(cfg.Workload.GetDatasets()))
 
-	// Run the complete experiment
-	err = controller.RunExperiment()
-	if err != nil {
-		return fmt.Errorf("experiment failed: %w", err)
+		controller, err := orchestrator.NewMultiDatasetController(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to create multi-dataset controller: %w", err)
+		}
+		defer controller.Close()
+
+		// Run the multi-dataset experiment
+		err = controller.Run()
+		if err != nil {
+			return fmt.Errorf("multi-dataset experiment failed: %w", err)
+		}
+	} else {
+		// Single dataset experiment (existing behavior)
+		fmt.Printf("Running single-dataset experiment\n")
+
+		controller, err := orchestrator.NewExperimentController(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to create experiment controller: %w", err)
+		}
+		defer controller.Close()
+
+		// Run the complete experiment
+		err = controller.RunExperiment()
+		if err != nil {
+			return fmt.Errorf("experiment failed: %w", err)
+		}
 	}
 
 	fmt.Printf("Experiment completed successfully!\n")

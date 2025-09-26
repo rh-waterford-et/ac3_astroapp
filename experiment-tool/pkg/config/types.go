@@ -31,14 +31,81 @@ type ScalingConfig struct {
 	ScaleDownInterval time.Duration `mapstructure:"scale_down_interval"`
 }
 
+// DatasetConfig defines a single dataset configuration
+type DatasetConfig struct {
+	Name          string `mapstructure:"name" yaml:"name"`
+	ProcessorType string `mapstructure:"processor_type" yaml:"processor_type"`
+}
+
 // WorkloadConfig defines job submission patterns
+// Supports both single dataset (backward compatible) and multi-dataset modes
 type WorkloadConfig struct {
-	Dataset           string        `mapstructure:"dataset"`
-	ProcessorType     string        `mapstructure:"processor_type"`
+	// Single Dataset Mode (backward compatible)
+	Dataset       string `mapstructure:"dataset"`
+	ProcessorType string `mapstructure:"processor_type"`
+
+	// Multi-Dataset Mode (new)
+	Datasets              []DatasetConfig `mapstructure:"datasets"`
+	DatasetStartInterval  time.Duration   `mapstructure:"dataset_start_interval"`
+	MaxConcurrentDatasets int             `mapstructure:"max_concurrent_datasets"`
+	FailureStrategy       string          `mapstructure:"failure_strategy"` // "continue" | "abort_all"
+
+	// Common fields
 	BatchSize         int           `mapstructure:"batch_size"`
 	SubmissionRate    time.Duration `mapstructure:"submission_rate"`
 	JobSizeVariation  string        `mapstructure:"job_size_variation"` // "small", "medium", "large", "mixed"
 	PausesBetweenJobs bool          `mapstructure:"pauses_between_jobs"`
+}
+
+// IsMultiDataset returns true if this is a multi-dataset configuration
+func (w *WorkloadConfig) IsMultiDataset() bool {
+	return len(w.Datasets) > 0
+}
+
+// GetDatasets returns the datasets to process, handling both single and multi-dataset modes
+func (w *WorkloadConfig) GetDatasets() []DatasetConfig {
+	if w.IsMultiDataset() {
+		return w.Datasets
+	}
+
+	// Backward compatibility: convert single dataset to multi-dataset format
+	if w.Dataset != "" {
+		return []DatasetConfig{
+			{
+				Name:          w.Dataset,
+				ProcessorType: w.ProcessorType,
+			},
+		}
+	}
+
+	return []DatasetConfig{}
+}
+
+// GetFailureStrategy returns the failure strategy with a sensible default
+func (w *WorkloadConfig) GetFailureStrategy() string {
+	if w.FailureStrategy == "" {
+		return "continue" // Default to continue on failure
+	}
+	return w.FailureStrategy
+}
+
+// GetMaxConcurrentDatasets returns the max concurrent datasets with a sensible default
+func (w *WorkloadConfig) GetMaxConcurrentDatasets() int {
+	if w.MaxConcurrentDatasets <= 0 {
+		if w.IsMultiDataset() {
+			return 3 // Default for multi-dataset mode
+		}
+		return 1 // Single dataset mode
+	}
+	return w.MaxConcurrentDatasets
+}
+
+// GetDatasetStartInterval returns the dataset start interval with a sensible default
+func (w *WorkloadConfig) GetDatasetStartInterval() time.Duration {
+	if w.DatasetStartInterval <= 0 {
+		return 1 * time.Minute // Default 1 minute between dataset starts
+	}
+	return w.DatasetStartInterval
 }
 
 // MetricsConfig defines data collection parameters

@@ -41,6 +41,19 @@ func (s *S3Monitor) GetS3Client() s3bucket.S3BucketInterface {
 
 // WaitForCompletion waits for processing to complete by monitoring S3 output files
 func (s *S3Monitor) WaitForCompletion(ctx context.Context, experiment *ExperimentRun) error {
+	return s.WaitForCompletionWithStatus(ctx, experiment, nil)
+}
+
+// WaitForCompletionWithStatus waits for processing to complete, but checks completion status first
+func (s *S3Monitor) WaitForCompletionWithStatus(ctx context.Context, experiment *ExperimentRun, datasetExec *DatasetExecution) error {
+	// If dataset is already completed, show completion message and return immediately
+	if datasetExec != nil && datasetExec.GetStatus() == StatusCompleted {
+		log.Printf("Dataset %s (%s): ✅ COMPLETED ✅",
+			experiment.DatasetName,
+			experiment.ProcessorType)
+		return nil
+	}
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -55,6 +68,14 @@ func (s *S3Monitor) WaitForCompletion(ctx context.Context, experiment *Experimen
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			// Check if dataset was marked completed during processing
+			if datasetExec != nil && datasetExec.GetStatus() == StatusCompleted {
+				log.Printf("Dataset %s (%s): ✅ COMPLETED ✅",
+					experiment.DatasetName,
+					experiment.ProcessorType)
+				return nil
+			}
+
 			outputCount, err := s.CountOutputFiles(ctx, experiment)
 			if err != nil {
 				log.Printf("Error counting output files: %v", err)

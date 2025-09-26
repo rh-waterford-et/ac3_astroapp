@@ -2,6 +2,8 @@ package collector
 
 import (
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -99,14 +101,207 @@ func NewExperimentRun(datasetName, processorType string, uploadedFileCount int) 
 		return nil, fmt.Errorf("unsupported processor type: %s", processorType)
 	}
 
+	expectedOutputCount := uploadedFileCount * pattern.FilesPerInput
+
 	return &ExperimentRun{
 		DatasetName:         datasetName,
 		ProcessorType:       processorType,
 		UploadedFileCount:   uploadedFileCount,
-		ExpectedOutputCount: uploadedFileCount * pattern.FilesPerInput,
+		ExpectedOutputCount: expectedOutputCount,
 		StartTime:           time.Now(),
-		InputPath:           fmt.Sprintf("%s/input/%s/", processorType, datasetName),
-		OutputBasePath:      fmt.Sprintf(pattern.OutputPathFormat, datasetName),
+		InputPath:           fmt.Sprintf("/app/datasets/%s", datasetName),
+		OutputBasePath:      fmt.Sprintf("%s/output/%s/", processorType, datasetName),
 		OutputPattern:       pattern,
 	}, nil
+}
+
+// DatasetStatus represents the current state of a dataset in a multi-dataset experiment
+type DatasetStatus string
+
+const (
+	StatusPending     DatasetStatus = "PENDING"
+	StatusUploading   DatasetStatus = "UPLOADING"
+	StatusProcessing  DatasetStatus = "PROCESSING"
+	StatusAggregating DatasetStatus = "AGGREGATING"
+	StatusCompleted   DatasetStatus = "COMPLETED"
+	StatusFailed      DatasetStatus = "FAILED"
+)
+
+// DatasetExecution tracks the execution state of a single dataset in a multi-dataset experiment
+type DatasetExecution struct {
+	Config         DatasetConfig
+	ExperimentRun  *ExperimentRun
+	Status         DatasetStatus
+	StartTime      time.Time
+	CompletionTime time.Time
+	Error          error
+	ProcessorCount int
+	Mutex          sync.RWMutex
+}
+
+// DatasetConfig represents configuration for a single dataset
+type DatasetConfig struct {
+	Name          string
+	ProcessorType string
+}
+
+// GetStatus returns the current status of the dataset execution (thread-safe)
+func (de *DatasetExecution) GetStatus() DatasetStatus {
+	de.Mutex.RLock()
+	defer de.Mutex.RUnlock()
+	return de.Status
+}
+
+// SetStatus updates the status of the dataset execution (thread-safe)
+func (de *DatasetExecution) SetStatus(status DatasetStatus) {
+	de.Mutex.Lock()
+	defer de.Mutex.Unlock()
+	de.Status = status
+	if status == StatusCompleted || status == StatusFailed {
+		de.CompletionTime = time.Now()
+	}
+}
+
+// SetError sets an error and marks the dataset as failed (thread-safe)
+func (de *DatasetExecution) SetError(err error) {
+	de.Mutex.Lock()
+	defer de.Mutex.Unlock()
+	de.Error = err
+	de.Status = StatusFailed
+	de.CompletionTime = time.Now()
+}
+
+// GetError returns the current error (thread-safe)
+func (de *DatasetExecution) GetError() error {
+	de.Mutex.RLock()
+	defer de.Mutex.RUnlock()
+	return de.Error
+}
+
+// Duration returns the total execution time for the dataset
+func (de *DatasetExecution) Duration() time.Duration {
+	de.Mutex.RLock()
+	defer de.Mutex.RUnlock()
+
+	if de.CompletionTime.IsZero() {
+		return time.Since(de.StartTime)
+	}
+	return de.CompletionTime.Sub(de.StartTime)
+}
+
+// MultiDatasetExperiment manages multiple concurrent dataset executions
+type MultiDatasetExperiment struct {
+	Datasets       map[string]*DatasetExecution
+	StartQueue     chan *DatasetExecution
+	ActiveCount    int32
+	CompletedCount int32
+	FailedCount    int32
+	Mutex          sync.RWMutex
+}
+
+// NewMultiDatasetExperiment creates a new multi-dataset experiment manager
+func NewMultiDatasetExperiment(datasetConfigs []DatasetConfig) *MultiDatasetExperiment {
+	datasets := make(map[string]*DatasetExecution)
+
+	for _, config := range datasetConfigs {
+		datasets[config.Name] = &DatasetExecution{
+			Config:    config,
+			Status:    StatusPending,
+			StartTime: time.Now(),
+		}
+	}
+
+	return &MultiDatasetExperiment{
+		Datasets:   datasets,
+		StartQueue: make(chan *DatasetExecution, len(datasetConfigs)),
+	}
+}
+
+// GetDataset returns a dataset execution by name (thread-safe)
+func (mde *MultiDatasetExperiment) GetDataset(name string) (*DatasetExecution, bool) {
+	mde.Mutex.RLock()
+	defer mde.Mutex.RUnlock()
+	dataset, exists := mde.Datasets[name]
+	return dataset, exists
+}
+
+// GetAllDatasets returns all dataset executions (thread-safe copy)
+func (mde *MultiDatasetExperiment) GetAllDatasets() map[string]*DatasetExecution {
+	mde.Mutex.RLock()
+	defer mde.Mutex.RUnlock()
+
+	result := make(map[string]*DatasetExecution)
+	for name, dataset := range mde.Datasets {
+		result[name] = dataset
+	}
+	return result
+}
+
+// GetActiveCount returns the number of currently active datasets
+func (mde *MultiDatasetExperiment) GetActiveCount() int32 {
+	return atomic.LoadInt32(&mde.ActiveCount)
+}
+
+// GetCompletedCount returns the number of completed datasets
+func (mde *MultiDatasetExperiment) GetCompletedCount() int32 {
+	return atomic.LoadInt32(&mde.CompletedCount)
+}
+
+// GetFailedCount returns the number of failed datasets
+func (mde *MultiDatasetExperiment) GetFailedCount() int32 {
+	return atomic.LoadInt32(&mde.FailedCount)
+}
+
+// IncrementActiveCount atomically increments the active dataset count
+func (mde *MultiDatasetExperiment) IncrementActiveCount() {
+	atomic.AddInt32(&mde.ActiveCount, 1)
+}
+
+// DecrementActiveCount atomically decrements the active dataset count
+func (mde *MultiDatasetExperiment) DecrementActiveCount() {
+	atomic.AddInt32(&mde.ActiveCount, -1)
+}
+
+// IncrementCompletedCount atomically increments the completed dataset count
+func (mde *MultiDatasetExperiment) IncrementCompletedCount() {
+	atomic.AddInt32(&mde.CompletedCount, 1)
+}
+
+// IncrementFailedCount atomically increments the failed dataset count
+func (mde *MultiDatasetExperiment) IncrementFailedCount() {
+	atomic.AddInt32(&mde.FailedCount, 1)
+}
+
+// GetStatusSummary returns a summary of dataset statuses
+func (mde *MultiDatasetExperiment) GetStatusSummary() map[DatasetStatus]int {
+	mde.Mutex.RLock()
+	defer mde.Mutex.RUnlock()
+
+	summary := make(map[DatasetStatus]int)
+	for _, dataset := range mde.Datasets {
+		status := dataset.GetStatus()
+		summary[status]++
+	}
+	return summary
+}
+
+// IsComplete returns true if all datasets have completed (successfully or failed)
+func (mde *MultiDatasetExperiment) IsComplete() bool {
+	mde.Mutex.RLock()
+	defer mde.Mutex.RUnlock()
+
+	for _, dataset := range mde.Datasets {
+		status := dataset.GetStatus()
+		if status != StatusCompleted && status != StatusFailed {
+			return false
+		}
+	}
+	return true
+}
+
+// GetTotalDatasetCount returns the total number of datasets in the experiment
+func (mde *MultiDatasetExperiment) GetTotalDatasetCount() int {
+	mde.Mutex.RLock()
+	defer mde.Mutex.RUnlock()
+	return len(mde.Datasets)
 }

@@ -1,6 +1,6 @@
-# Quick Test Scenario - Minimal configuration for testing
-name: "quick-test"
-description: "Quick test with minimal processor scaling for development"
+# Multi-Dataset Test Scenario - Example of concurrent dataset processing
+name: "multi-dataset-test"
+description: "Test concurrent processing of multiple datasets with staggered starts"
 
 scaling:
   min_processors: 1
@@ -11,8 +11,25 @@ scaling:
   scale_down_interval: "45s"
 
 workload:
-  dataset: "/app/datasets/NGC7000"
-  processor_type: "starlight"
+  # Multi-dataset configuration
+  datasets:
+    - name: "NGC7000"
+      processor_type: "starlight"
+    - name: "NGC7021"
+      processor_type: "starlight"
+    - name: "NGC7022"
+      processor_type: "starlight"
+    - name: "NGC7023"
+      processor_type: "starlight"
+    - name: "NGC7024"
+      processor_type: "starlight"
+  
+  # Multi-dataset timing and limits
+  dataset_start_interval: "1m"
+  max_concurrent_datasets: 5      
+  failure_strategy: "continue"     
+  
+  # Common workload settings
   batch_size: 5
   submission_rate: "15s"
   job_size_variation: "small"
