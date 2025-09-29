@@ -367,22 +367,35 @@ func (e *ExperimentController) collectAndExportData(ctx context.Context, process
 	return nil
 }
 
-// cleanupS3OutputFiles removes the output files from S3 after successful data collection
+// cleanupS3OutputFiles removes the input, processed, and output files from S3 after successful data collection
 func (e *ExperimentController) cleanupS3OutputFiles(ctx context.Context, experimentRun *collector.ExperimentRun) error {
-	log.Printf("Cleaning up S3 output files for dataset: %s", experimentRun.DatasetName)
+	log.Printf("Cleaning up S3 files (input, processed, output) for dataset: %s", experimentRun.DatasetName)
 
-	// Delete the entire output directory for this dataset
-	// The path should match what UC3 actually uses: {processor}/output/{datasetName}/
+	// Clean up input files for this specific dataset
+	inputPath := fmt.Sprintf("%s/input/%s/", experimentRun.ProcessorType, experimentRun.DatasetName)
+	log.Printf("Deleting S3 input directory: %s", inputPath)
+	err := e.s3Monitor.GetS3Client().DeleteDirectory(inputPath)
+	if err != nil {
+		log.Printf("Warning: failed to delete input directory %s: %v", inputPath, err)
+	}
+
+	// Clean up processed files for this specific dataset
+	processedPath := fmt.Sprintf("%s/processed/%s/", experimentRun.ProcessorType, experimentRun.DatasetName)
+	log.Printf("Deleting S3 processed directory: %s", processedPath)
+	err = e.s3Monitor.GetS3Client().DeleteDirectory(processedPath)
+	if err != nil {
+		log.Printf("Warning: failed to delete processed directory %s: %v", processedPath, err)
+	}
+
+	// Delete the output directory for this specific dataset
 	outputPath := fmt.Sprintf("%s/output/%s/", experimentRun.ProcessorType, experimentRun.DatasetName)
-
-	log.Printf("Deleting S3 directory: %s", outputPath)
-
-	err := e.s3Monitor.GetS3Client().DeleteDirectory(outputPath)
+	log.Printf("Deleting S3 output directory: %s", outputPath)
+	err = e.s3Monitor.GetS3Client().DeleteDirectory(outputPath)
 	if err != nil {
 		return fmt.Errorf("failed to delete output directory %s: %w", outputPath, err)
 	}
 
-	log.Printf("Successfully deleted S3 output files for dataset: %s", experimentRun.DatasetName)
+	log.Printf("Successfully deleted S3 files (input, processed, output) for dataset: %s", experimentRun.DatasetName)
 	return nil
 }
 

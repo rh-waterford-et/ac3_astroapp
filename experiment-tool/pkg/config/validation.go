@@ -37,9 +37,9 @@ func validateConfig(config *ExperimentConfig) error {
 		return fmt.Errorf("export_format must be 'csv' or 'json'")
 	}
 
-	// Validate timing parameters
-	if config.Scaling.StabilizeTime < 30*time.Second {
-		return fmt.Errorf("stabilize_time must be at least 30 seconds")
+	// Validate timing parameters - removed 30s minimum requirement
+	if config.Scaling.StabilizeTime < 0*time.Second {
+		return fmt.Errorf("stabilize_time cannot be negative")
 	}
 
 	return nil

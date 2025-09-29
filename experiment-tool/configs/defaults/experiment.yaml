@@ -10,7 +10,7 @@ scaling:
   min_processors: 1
   max_processors: 10
   scale_steps: [1, 2, 3, 5, 7, 10]  # Specific processor counts to test
-  stabilize_time: "2m"              # Time to wait after scaling before collecting metrics
+  stabilize_time: "0s"              # Time to wait after scaling before collecting metrics (removed delay)
   scale_up_interval: "5m"           # Time between scale-up operations
   scale_down_interval: "3m"         # Time between scale-down operations
 

@@ -106,16 +106,22 @@ func (mdc *MultiDatasetController) Run() error {
 	log.Printf("[EXPERIMENT] Starting multi-dataset experiment with %d datasets",
 		mdc.experiment.GetTotalDatasetCount())
 
-	// Step 1: Launch dataset processor
-	err := mdc.launchDatasets()
+	// Step 1: Upload all datasets simultaneously (new optimized approach)
+	err := mdc.uploadAllDatasets()
 	if err != nil {
-		return fmt.Errorf("failed to launch datasets: %w", err)
+		return fmt.Errorf("failed to upload datasets: %w", err)
 	}
 
-	// Step 2: Wait for all datasets to complete
+	// Step 2: Launch dataset processing with intervals
+	err = mdc.launchDatasetProcessing()
+	if err != nil {
+		return fmt.Errorf("failed to launch dataset processing: %w", err)
+	}
+
+	// Step 3: Wait for all datasets to complete
 	mdc.wg.Wait()
 
-	// Step 3: Generate final reports
+	// Step 4: Generate final reports
 	err = mdc.generateFinalReports()
 	if err != nil {
 		return fmt.Errorf("failed to generate final reports: %w", err)
@@ -125,20 +131,93 @@ func (mdc *MultiDatasetController) Run() error {
 	return nil
 }
 
-// launchDatasets starts datasets with staggered timing
-func (mdc *MultiDatasetController) launchDatasets() error {
+// uploadAllDatasets uploads all datasets to S3 simultaneously for faster preparation
+func (mdc *MultiDatasetController) uploadAllDatasets() error {
 	datasets := mdc.experiment.GetAllDatasets()
-	interval := mdc.config.Workload.GetDatasetStartInterval()
+	log.Printf("[EXPERIMENT] Uploading %d datasets simultaneously...", len(datasets))
 
-	log.Printf("[EXPERIMENT] Launching %d datasets with %v intervals (max %d concurrent)",
-		len(datasets), interval, cap(mdc.workerPool))
+	// Use a channel to collect upload results
+	type uploadResult struct {
+		datasetExec   *collector.DatasetExecution
+		experimentRun *collector.ExperimentRun
+		err           error
+	}
+
+	resultChan := make(chan uploadResult, len(datasets))
+
+	// Start all uploads simultaneously
+	for _, datasetExec := range datasets {
+		go func(de *collector.DatasetExecution) {
+			datasetName := de.Config.Name
+			processorType := de.Config.ProcessorType
+
+			log.Printf("[%s] Starting dataset upload...", datasetName)
+			de.SetStatus(collector.StatusUploading)
+
+			experimentRun, err := mdc.uploadDataset(datasetName, processorType)
+			resultChan <- uploadResult{
+				datasetExec:   de,
+				experimentRun: experimentRun,
+				err:           err,
+			}
+		}(datasetExec)
+	}
+
+	// Collect all upload results
+	uploadedCount := 0
+	failedCount := 0
+
+	for i := 0; i < len(datasets); i++ {
+		result := <-resultChan
+
+		if result.err != nil {
+			log.Printf("[%s] Upload failed: %v", result.datasetExec.Config.Name, result.err)
+			result.datasetExec.SetError(fmt.Errorf("upload failed: %w", result.err))
+			mdc.experiment.IncrementFailedCount()
+			failedCount++
+		} else {
+			log.Printf("[%s] Upload completed successfully", result.datasetExec.Config.Name)
+			result.datasetExec.ExperimentRun = result.experimentRun
+			result.datasetExec.SetStatus(collector.StatusReady) // New status: ready for processing
+			uploadedCount++
+		}
+	}
+
+	log.Printf("[EXPERIMENT] Dataset upload phase completed: %d successful, %d failed", uploadedCount, failedCount)
+
+	if uploadedCount == 0 {
+		return fmt.Errorf("all dataset uploads failed")
+	}
+
+	return nil
+}
+
+// launchDatasetProcessing starts processing datasets with staggered timing (uploads already done)
+func (mdc *MultiDatasetController) launchDatasetProcessing() error {
+	// Get only successfully uploaded datasets
+	datasets := mdc.experiment.GetAllDatasets()
+	readyDatasets := make([]*collector.DatasetExecution, 0)
+
+	for _, datasetExec := range datasets {
+		if datasetExec.GetStatus() == collector.StatusReady {
+			readyDatasets = append(readyDatasets, datasetExec)
+		}
+	}
+
+	if len(readyDatasets) == 0 {
+		return fmt.Errorf("no datasets ready for processing")
+	}
+
+	interval := mdc.config.Workload.GetDatasetStartInterval()
+	log.Printf("[EXPERIMENT] Launching processing for %d datasets with %v intervals (max %d concurrent)",
+		len(readyDatasets), interval, cap(mdc.workerPool))
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	// Launch first dataset immediately
 	first := true
-	for _, datasetExec := range datasets {
+	for _, datasetExec := range readyDatasets {
 		if !first {
 			// Wait for interval before launching next dataset
 			select {
@@ -153,11 +232,11 @@ func (mdc *MultiDatasetController) launchDatasets() error {
 		// Wait for available slot
 		select {
 		case mdc.workerPool <- struct{}{}:
-			// Got slot, launch dataset
+			// Got slot, launch dataset processing
 			mdc.wg.Add(1)
-			go mdc.processDataset(datasetExec)
+			go mdc.processDatasetFromReady(datasetExec)
 
-			log.Printf("[%s] Dataset queued for launch (active: %d/%d)",
+			log.Printf("[%s] Dataset processing queued for launch (active: %d/%d)",
 				datasetExec.Config.Name,
 				mdc.experiment.GetActiveCount()+1,
 				cap(mdc.workerPool))
@@ -169,36 +248,22 @@ func (mdc *MultiDatasetController) launchDatasets() error {
 	return nil
 }
 
-// processDataset handles the complete lifecycle of a single dataset
-func (mdc *MultiDatasetController) processDataset(datasetExec *collector.DatasetExecution) {
+// processDatasetFromReady handles processing of a dataset that's already uploaded
+func (mdc *MultiDatasetController) processDatasetFromReady(datasetExec *collector.DatasetExecution) {
 	defer mdc.wg.Done()
 	defer func() { <-mdc.workerPool }() // Release slot
 
 	datasetName := datasetExec.Config.Name
-	processorType := datasetExec.Config.ProcessorType
-
-	log.Printf("[%s] Starting dataset processing (%s)", datasetName, processorType)
+	log.Printf("[%s] Starting dataset processing (already uploaded)", datasetName)
 
 	mdc.experiment.IncrementActiveCount()
 	defer mdc.experiment.DecrementActiveCount()
 
-	// Update status to uploading
-	datasetExec.SetStatus(collector.StatusUploading)
-
-	// Step 1: Upload dataset
-	experimentRun, err := mdc.uploadDataset(datasetName, processorType)
-	if err != nil {
-		datasetExec.SetError(fmt.Errorf("upload failed: %w", err))
-		mdc.experiment.IncrementFailedCount()
-		mdc.handleDatasetFailure(datasetExec)
-		return
-	}
-
-	datasetExec.ExperimentRun = experimentRun
+	// Dataset is already uploaded, go straight to processing
 	datasetExec.SetStatus(collector.StatusProcessing)
 
-	// Step 2: Process dataset through all scaling steps
-	err = mdc.runDatasetCycles(datasetExec)
+	// Process dataset through all scaling steps
+	err := mdc.runDatasetCycles(datasetExec)
 	if err != nil {
 		datasetExec.SetError(fmt.Errorf("processing failed: %w", err))
 		mdc.experiment.IncrementFailedCount()
@@ -206,7 +271,7 @@ func (mdc *MultiDatasetController) processDataset(datasetExec *collector.Dataset
 		return
 	}
 
-	// Step 3: Check if already completed (from runDatasetCycles)
+	// Check if already completed (from runDatasetCycles)
 	if datasetExec.GetStatus() != collector.StatusCompleted {
 		// This should not happen with our new logic, but safety check
 		datasetExec.SetStatus(collector.StatusCompleted)
@@ -643,20 +708,35 @@ func (mdc *MultiDatasetController) appendToTrainingData(summaries map[string]*me
 	return nil
 }
 
-// cleanupS3OutputFiles removes S3 output files for a dataset
+// cleanupS3OutputFiles removes S3 input, processed, and output files for a dataset
 func (mdc *MultiDatasetController) cleanupS3OutputFiles(ctx context.Context, experimentRun *collector.ExperimentRun) error {
-	log.Printf("[%s] Cleaning up S3 output files...", experimentRun.DatasetName)
+	log.Printf("[%s] Cleaning up S3 files (input, processed, output)...", experimentRun.DatasetName)
 
+	// Clean up input files for this specific dataset
+	inputPath := fmt.Sprintf("%s/input/%s/", experimentRun.ProcessorType, experimentRun.DatasetName)
+	log.Printf("[%s] Deleting S3 input directory: %s", experimentRun.DatasetName, inputPath)
+	err := mdc.s3Monitor.GetS3Client().DeleteDirectory(inputPath)
+	if err != nil {
+		log.Printf("[%s] Warning: failed to delete input directory %s: %v", experimentRun.DatasetName, inputPath, err)
+	}
+
+	// Clean up processed files for this specific dataset
+	processedPath := fmt.Sprintf("%s/processed/%s/", experimentRun.ProcessorType, experimentRun.DatasetName)
+	log.Printf("[%s] Deleting S3 processed directory: %s", experimentRun.DatasetName, processedPath)
+	err = mdc.s3Monitor.GetS3Client().DeleteDirectory(processedPath)
+	if err != nil {
+		log.Printf("[%s] Warning: failed to delete processed directory %s: %v", experimentRun.DatasetName, processedPath, err)
+	}
+
+	// Clean up output files for this specific dataset
 	outputPath := fmt.Sprintf("%s/output/%s/", experimentRun.ProcessorType, experimentRun.DatasetName)
-
-	log.Printf("[%s] Deleting S3 directory: %s", experimentRun.DatasetName, outputPath)
-
-	err := mdc.s3Monitor.GetS3Client().DeleteDirectory(outputPath)
+	log.Printf("[%s] Deleting S3 output directory: %s", experimentRun.DatasetName, outputPath)
+	err = mdc.s3Monitor.GetS3Client().DeleteDirectory(outputPath)
 	if err != nil {
 		return fmt.Errorf("failed to delete output directory %s: %w", outputPath, err)
 	}
 
-	log.Printf("[%s] Successfully deleted S3 output files", experimentRun.DatasetName)
+	log.Printf("[%s] Successfully deleted S3 files (input, processed, output)", experimentRun.DatasetName)
 	return nil
 }
 

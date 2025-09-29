@@ -121,6 +121,7 @@ type DatasetStatus string
 const (
 	StatusPending     DatasetStatus = "PENDING"
 	StatusUploading   DatasetStatus = "UPLOADING"
+	StatusReady       DatasetStatus = "READY" // New status: uploaded and ready for processing
 	StatusProcessing  DatasetStatus = "PROCESSING"
 	StatusAggregating DatasetStatus = "AGGREGATING"
 	StatusCompleted   DatasetStatus = "COMPLETED"

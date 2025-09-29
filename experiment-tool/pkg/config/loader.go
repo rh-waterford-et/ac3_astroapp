@@ -63,8 +63,8 @@ func setDefaults() {
 	viper.SetDefault("scaling.min_processors", 1)
 	viper.SetDefault("scaling.max_processors", 10)
 	viper.SetDefault("scaling.scale_steps", []int{1, 2, 3, 5, 7, 10})
-	// Set defaults for optional fields
-	viper.SetDefault("scaling.stabilize_time", "2m")
+	// Set defaults for optional fields - removed stabilize_time delay
+	viper.SetDefault("scaling.stabilize_time", "0s")
 	viper.SetDefault("scaling.scale_up_interval", "5m")
 	viper.SetDefault("scaling.scale_down_interval", "3m")
 
