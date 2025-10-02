@@ -17,7 +17,7 @@ import (
 )
 
 type BatchSender interface {
-	SendBatch(batch api.Batch, appName string, side string, q queue.QueueInterface)
+	SendBatch(batch api.Batch, appName string, side string)
 }
 
 type RabbitMQSender struct {
@@ -34,7 +34,7 @@ func NewRabbitMQSender(queue queue.QueueInterface, utils common.UtilsInterface, 
 	}
 }
 
-func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string, q queue.QueueInterface) {
+func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string) {
 	var queueName string
 
 	if side == "producer" {
@@ -42,20 +42,14 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string,
 	} else {
 		queueName = "processor_to_producer_queue"
 	}
-
-	err := q.Connect()
-	if err != nil {
-		s.Utils.FailOnError("Failed to connect to RabbitMQ", err)
-	}
-	defer q.Close()
-
-	err = q.DeclareQueue(queueName)
+	
+	err := s.Queue.DeclareQueue(queueName)
 	if err != nil {
 		s.Utils.FailOnError(fmt.Sprintf("Failed to declare queue"), err)
 	}
 
 	if side == "producer" {
-		stats, err := q.InspectQueue(queueName)
+		stats, err := s.Queue.InspectQueue(queueName)
 		if err != nil {
 			log.Printf("Failed to inspect queue %s: %v", queueName, err)
 		} else {
@@ -106,8 +100,8 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string,
 	}
 	headers["filenames"] = strings.Join(filenames, ",")
 
-	err = q.Publish(ctx, queueName, batchJSON, headers)
-	stats, err := q.InspectQueue(queueName)
+	err = s.Queue.Publish(ctx, queueName, batchJSON, headers)
+	stats, err := s.Queue.InspectQueue(queueName)
 	log.Printf("Queue %s after publish: messages=%d, consumers=%d",
 				queueName, stats.Messages, stats.Consumers)
 	if err != nil {

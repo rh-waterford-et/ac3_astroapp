@@ -287,7 +287,7 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 		}
 		// Initialize sender
 		sender := sender.NewRabbitMQSender(queue, utils, redisClient)
-		sender.SendBatch(batch, appName, side, queue)
+		sender.SendBatch(batch, appName, side)
 
 	}
 	//log.Printf("DEBUG: Successfully processed job file: %s", filePath)

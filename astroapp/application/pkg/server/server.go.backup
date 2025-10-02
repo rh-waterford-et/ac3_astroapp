@@ -6,16 +6,13 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
-	"github.com/rh-waterford-et/ac3_astroapp/pkg/metrics"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
 )
 
 type Server struct {
 	fileUploadHandler *api.FileUploadHandler
 	progressTracker   *api.ProgressTracker
-	prometheusMetrics *metrics.PrometheusMetrics
 }
 
 func NewServer() *Server {
@@ -24,64 +21,57 @@ func NewServer() *Server {
 	// Initialize progress tracker
 	progressTracker := api.NewProgressTracker()
 
-	// Initialize Prometheus metrics
-	prometheusMetrics := metrics.NewPrometheusMetrics()
-
 	fileUploadHandler := api.NewFileUploadHandler(s3Bucket, progressTracker)
 
 	return &Server{
 		fileUploadHandler: fileUploadHandler,
 		progressTracker:   progressTracker,
-		prometheusMetrics: prometheusMetrics,
 	}
 }
 
 func (s *Server) setupRoutes() {
-	// Prometheus metrics endpoint
-	http.Handle("/metrics", promhttp.Handler())
-
 	// File upload endpoint
-	http.HandleFunc("/api/upload", metrics.InstrumentHandler(s.fileUploadHandler.UploadFile, s.prometheusMetrics))
+	http.HandleFunc("/api/upload", s.fileUploadHandler.UploadFile)
 
 	// List datasets endpoint
-	http.HandleFunc("/api/datasets", metrics.InstrumentHandler(s.fileUploadHandler.ListDatasets, s.prometheusMetrics))
+	http.HandleFunc("/api/datasets", s.fileUploadHandler.ListDatasets)
 
 	// List dataset files endpoint
-	http.HandleFunc("/api/datasets/files", metrics.InstrumentHandler(s.fileUploadHandler.ListDatasetFiles, s.prometheusMetrics))
+	http.HandleFunc("/api/datasets/files", s.fileUploadHandler.ListDatasetFiles)
 
 	// List dataset output files endpoint
-	http.HandleFunc("/api/datasets/output-files", metrics.InstrumentHandler(s.fileUploadHandler.ListDatasetOutputFiles, s.prometheusMetrics))
+	http.HandleFunc("/api/datasets/output-files", s.fileUploadHandler.ListDatasetOutputFiles)
 
 	// List dataset output files with pagination endpoint
-	http.HandleFunc("/api/datasets/output-files-paginated", metrics.InstrumentHandler(s.fileUploadHandler.ListDatasetOutputFilesPaginated, s.prometheusMetrics))
+	http.HandleFunc("/api/datasets/output-files-paginated", s.fileUploadHandler.ListDatasetOutputFilesPaginated)
 
 	// Unified file listing endpoint with robust offset-based pagination
-	http.HandleFunc("/api/datasets/files-unified", metrics.InstrumentHandler(s.fileUploadHandler.ListDatasetFilesUnified, s.prometheusMetrics))
+	http.HandleFunc("/api/datasets/files-unified", s.fileUploadHandler.ListDatasetFilesUnified)
 
 	// Create dataset endpoint
-	http.HandleFunc("/api/datasets/create", metrics.InstrumentHandler(s.fileUploadHandler.CreateDataset, s.prometheusMetrics))
+	http.HandleFunc("/api/datasets/create", s.fileUploadHandler.CreateDataset)
 
 	// Delete dataset endpoint
-	http.HandleFunc("/api/datasets/delete", metrics.InstrumentHandler(s.fileUploadHandler.DeleteDataset, s.prometheusMetrics))
+	http.HandleFunc("/api/datasets/delete", s.fileUploadHandler.DeleteDataset)
 
 	// Process dataset endpoint
-	http.HandleFunc("/api/datasets/process", metrics.InstrumentHandler(s.fileUploadHandler.ProcessDataset, s.prometheusMetrics))
+	http.HandleFunc("/api/datasets/process", s.fileUploadHandler.ProcessDataset)
 
 	// Process single file endpoint
-	http.HandleFunc("/api/files/process", metrics.InstrumentHandler(s.fileUploadHandler.ProcessSingleFile, s.prometheusMetrics))
+	http.HandleFunc("/api/files/process", s.fileUploadHandler.ProcessSingleFile)
 
 	// Delete file endpoint
-	http.HandleFunc("/api/files/delete", metrics.InstrumentHandler(s.fileUploadHandler.DeleteFile, s.prometheusMetrics))
+	http.HandleFunc("/api/files/delete", s.fileUploadHandler.DeleteFile)
 
 	// Download file endpoint
-	log.Printf("�� Registering download endpoint: /api/files/download")
-	http.HandleFunc("/api/files/download", metrics.InstrumentHandler(s.fileUploadHandler.DownloadFile, s.prometheusMetrics))
+	log.Printf("🔧 Registering download endpoint: /api/files/download")
+	http.HandleFunc("/api/files/download", s.fileUploadHandler.DownloadFile)
 	log.Printf("✅ Download endpoint registered successfully")
 
 	// Progress tracking endpoints
-	http.HandleFunc("/api/progress", metrics.InstrumentHandler(s.fileUploadHandler.GetDatasetProgress, s.prometheusMetrics))
-	http.HandleFunc("/api/progress/all", metrics.InstrumentHandler(s.fileUploadHandler.GetAllProgress, s.prometheusMetrics))
-	http.HandleFunc("/api/progress/update", metrics.InstrumentHandler(s.fileUploadHandler.UpdateProgress, s.prometheusMetrics))
+	http.HandleFunc("/api/progress", s.fileUploadHandler.GetDatasetProgress)
+	http.HandleFunc("/api/progress/all", s.fileUploadHandler.GetAllProgress)
+	http.HandleFunc("/api/progress/update", s.fileUploadHandler.UpdateProgress)
 
 	// Health check endpoint
 	http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +91,6 @@ func (s *Server) Start() {
 	s.setupRoutes()
 
 	log.Printf("Starting HTTP server on port %s", port)
-	log.Printf("Prometheus metrics endpoint: http://localhost:%s/metrics", port)
 	log.Printf("File upload endpoint: http://localhost:%s/api/upload", port)
 	log.Printf("List datasets endpoint: http://localhost:%s/api/datasets", port)
 	log.Printf("List dataset files endpoint: http://localhost:%s/api/datasets/files", port)
