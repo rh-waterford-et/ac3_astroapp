@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: starlight
+  name: ucm-processor-deployment
   namespace: uc3-applications
   labels:
-    app: starlight
+    app: ucm-processor
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: starlight
+      app: ucm-processor
   template:
     metadata:
       labels:
-        app: starlight
+        app: ucm-processor
     spec:
       securityContext:
         runAsUser: 0
@@ -62,7 +62,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: IN_FILE_OUTPUT_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST_STARLIGHT
@@ -134,7 +134,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-provider"
         - name: EXPLORED_STARLIGHT
           value: "/processing_data/starlight/data/output"
         - name: OUTPUT_STARLIGHT
@@ -192,5 +192,6 @@ spec:
           value: "/processing_data/ppxf/data/output"
         - name: PROCESS_FILE
           value: "/processing_data/ppxf/runtime/processlist.txt"
+
         - name: API_URL
           value: "http://uc3-backend-service:8080/api/progress/update"
