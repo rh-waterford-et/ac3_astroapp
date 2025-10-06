@@ -27,7 +27,7 @@ metrics:
 
 infrastructure:
   namespace: "uc3-applications"
-  deployment_name: "starlight"
+  deployment_name: "ucm-processor-deployment"
   uc3_api_base_url: "http://uc3-backend-service:8080"
   trigger_url: "http://uc3-backend-service:8081"
   redis_host: "redis"

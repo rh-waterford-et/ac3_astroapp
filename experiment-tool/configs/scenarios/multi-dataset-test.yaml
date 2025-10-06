@@ -25,7 +25,7 @@ workload:
       processor_type: "starlight"
   
   # Multi-dataset timing and limits
-  dataset_start_interval: "30s"
+  dataset_start_interval: "45s"
   max_concurrent_datasets: 5      
   failure_strategy: "continue"     
   
@@ -44,7 +44,7 @@ metrics:
 
 infrastructure:
   namespace: "uc3-applications"
-  deployment_name: "starlight"
+  deployment_name: "ucm-processor-deployment"
   uc3_api_base_url: "http://uc3-backend-service:8080"
   trigger_url: "http://uc3-backend-service:8081"
   redis_host: "redis"

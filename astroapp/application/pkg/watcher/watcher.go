@@ -106,7 +106,7 @@ func (w *Watcher) RunProducer(appName string, jobName string, side string, utils
 
 	if shouldProcess {
 		log.Printf("Processing %s files...\n", appName)
-	
+
 		// Check if this app needs binary processing (PPXF)
 		if api.IsAppBinary(appName) {
 			log.Printf("Using binary processing for %s (prbatchs .fits corruption)", appName)
@@ -260,17 +260,16 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 			sourcePath := filepath.Join(inputDir, fileName)
 			if _, err := os.Stat(sourcePath); err == nil {
 				time.Sleep(2 * time.Second)
-					content, err := os.ReadFile(sourcePath)
-					if err != nil {
-						return fmt.Errorf("failed to read file %s: %w", fileName, err)
-					}
-					job = append(job, api.DataFile{Name: fileName, Content: string(content)})
+				content, err := os.ReadFile(sourcePath)
+				if err != nil {
+					return fmt.Errorf("failed to read file %s: %w", fileName, err)
+				}
+				job = append(job, api.DataFile{Name: fileName, Content: string(content)})
 
-					destPath := filepath.Join(processedDir, fileName)
-					if err := os.Rename(sourcePath, destPath); err != nil {
-						return fmt.Errorf("failed to move file %s: %w", fileName, err)
-					}
-				
+				destPath := filepath.Join(processedDir, fileName)
+				if err := os.Rename(sourcePath, destPath); err != nil {
+					return fmt.Errorf("failed to move file %s: %w", fileName, err)
+				}
 
 			} else {
 				remaining = append(remaining, fileName)
@@ -287,7 +286,7 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 		}
 		// Initialize sender
 		sender := sender.NewRabbitMQSender(queue, utils, redisClient)
-		sender.SendBatch(batch, appName, side)
+		sender.SendBatch(batch, appName, side, queue)
 
 	}
 	//log.Printf("DEBUG: Successfully processed job file: %s", filePath)

@@ -3,7 +3,6 @@ package sender
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -17,7 +16,7 @@ import (
 )
 
 type BatchSender interface {
-	SendBatch(batch api.Batch, appName string, side string)
+	SendBatch(batch api.Batch, appName string, side string, q queue.QueueInterface)
 }
 
 type RabbitMQSender struct {
@@ -34,7 +33,7 @@ func NewRabbitMQSender(queue queue.QueueInterface, utils common.UtilsInterface, 
 	}
 }
 
-func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string) {
+func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string, q queue.QueueInterface) {
 	var queueName string
 
 	if side == "producer" {
@@ -42,20 +41,20 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string)
 	} else {
 		queueName = "processor_to_producer_queue"
 	}
-	
-	err := s.Queue.DeclareQueue(queueName)
+
+	err := q.DeclareQueue(queueName)
 	if err != nil {
-		s.Utils.FailOnError(fmt.Sprintf("Failed to declare queue"), err)
+		s.Utils.FailOnError("Failed to declare queue", err)
 	}
 
 	if side == "producer" {
-		stats, err := s.Queue.InspectQueue(queueName)
+		stats, err := q.InspectQueue(queueName)
 		if err != nil {
 			log.Printf("Failed to inspect queue %s: %v", queueName, err)
 		} else {
 			log.Printf("Queue %s before publish: messages=%d, consumers=%d",
 				queueName, stats.Messages, stats.Consumers)
-			
+
 			// Record queue metrics in Redis
 			if s.RedisClient != nil {
 				metricsStore := metrics.NewMetricsStore(s.RedisClient, 168*time.Hour)
@@ -100,12 +99,17 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string)
 	}
 	headers["filenames"] = strings.Join(filenames, ",")
 
-	err = s.Queue.Publish(ctx, queueName, batchJSON, headers)
-	stats, err := s.Queue.InspectQueue(queueName)
-	log.Printf("Queue %s after publish: messages=%d, consumers=%d",
-				queueName, stats.Messages, stats.Consumers)
+	err = q.Publish(ctx, queueName, batchJSON, headers)
 	if err != nil {
-		s.Utils.FailOnError("Failed to publish message: %v", err)
+		s.Utils.FailOnError("Failed to publish message", err)
+	}
+
+	stats, err := q.InspectQueue(queueName)
+	if err != nil {
+		log.Printf("Failed to inspect queue after publish: %v", err)
+	} else {
+		log.Printf("Queue %s after publish: messages=%d, consumers=%d",
+			queueName, stats.Messages, stats.Consumers)
 	}
 
 	if side == "producer" {

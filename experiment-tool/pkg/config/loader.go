@@ -86,7 +86,7 @@ func setDefaults() {
 	// Infrastructure defaults
 	viper.SetDefault("infrastructure.kube_config", "") // Use in-cluster config
 	viper.SetDefault("infrastructure.namespace", "uc3-applications")
-	viper.SetDefault("infrastructure.deployment_name", "starlight")
+	viper.SetDefault("infrastructure.deployment_name", "ucm-processor-deployment")
 	viper.SetDefault("infrastructure.uc3_api_base_url", "https://uc3-backend-api-uc3-applications.apps.ac3.rh-horizon.eu")
 	viper.SetDefault("infrastructure.trigger_url", "http://localhost:8081")
 	viper.SetDefault("infrastructure.redis_host", "localhost")

@@ -74,7 +74,7 @@ func (p *Producer) CreateBatch(appName string, side string, q queue.QueueInterfa
 	go func() {
 		for batch := range p.BatchQueue {
 			log.Printf("Sending batch (ID: %s, JobID: %s) with %d files\n", p.BatchID, batch.JobID, len(batch.Files))
-			p.Sender.SendBatch(batch, appName, side)
+			p.Sender.SendBatch(batch, appName, side, q)
 		}
 	}()
 

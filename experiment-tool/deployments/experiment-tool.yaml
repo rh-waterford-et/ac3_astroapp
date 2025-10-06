@@ -54,7 +54,7 @@ spec:
         - name: UC3_EXP_INFRASTRUCTURE_NAMESPACE
           value: "uc3-applications"
         - name: UC3_EXP_INFRASTRUCTURE_DEPLOYMENT_NAME
-          value: "starlight"
+          value: "ucm-processor-deployment"
         - name: UC3_EXP_METRICS_OUTPUT_DIRECTORY
           value: "/app/experiment-data"
         volumeMounts:
