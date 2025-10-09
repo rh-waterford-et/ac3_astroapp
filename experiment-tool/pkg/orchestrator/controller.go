@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -72,7 +73,7 @@ func (e *ExperimentController) RunExperiment() error {
 	log.Printf("Description: %s", e.config.Description)
 	log.Printf("Dataset: %s", e.config.Workload.Dataset)
 	log.Printf("Processor Type: %s", e.config.Workload.ProcessorType)
-	log.Printf("Scale Steps: %v", e.config.Scaling.ScaleSteps)
+	log.Printf("Processor Counts: %v", e.config.Scaling.ProcessorCounts)
 	log.Printf("Output Directory: %s", e.outputDir)
 
 	// Step 1: Upload dataset to S3
@@ -82,8 +83,8 @@ func (e *ExperimentController) RunExperiment() error {
 	}
 
 	// Step 2: Run experiment cycles for each processor count
-	for i, processorCount := range e.config.Scaling.ScaleSteps {
-		log.Printf("Running cycle %d/%d: %d processors", i+1, len(e.config.Scaling.ScaleSteps), processorCount)
+	for i, processorCount := range e.config.Scaling.ProcessorCounts {
+		log.Printf("Running cycle %d/%d: %d processors", i+1, len(e.config.Scaling.ProcessorCounts), processorCount)
 
 		err := e.runSingleCycle(experimentRun, processorCount)
 		if err != nil {
@@ -91,7 +92,14 @@ func (e *ExperimentController) RunExperiment() error {
 			continue // Skip failed cycles, continue with remaining
 		}
 
-		log.Printf("Completed cycle %d/%d successfully", i+1, len(e.config.Scaling.ScaleSteps))
+		log.Printf("Completed cycle %d/%d successfully", i+1, len(e.config.Scaling.ProcessorCounts))
+	}
+
+	// Step 3: Clean up shared volumes
+	err = e.cleanupSharedVolumes()
+	if err != nil {
+		log.Printf("Warning: failed to cleanup shared volumes: %v", err)
+		// Don't fail the experiment for cleanup issues
 	}
 
 	log.Printf("Experiment completed successfully! Data saved to: %s", e.outputDir)
@@ -182,7 +190,7 @@ func (e *ExperimentController) runSingleCycle(experimentRun *collector.Experimen
 	}
 
 	// Step 4: Wait for completion using S3 monitoring
-	err = e.waitForS3Completion(ctx, experimentRun)
+	err = e.waitForS3Completion(ctx, experimentRun, processorCount)
 	if err != nil {
 		return fmt.Errorf("failed waiting for completion: %w", err)
 	}
@@ -204,7 +212,7 @@ func (e *ExperimentController) runSingleCycle(experimentRun *collector.Experimen
 }
 
 // waitForS3Completion waits for processing to complete using S3 output monitoring
-func (e *ExperimentController) waitForS3Completion(ctx context.Context, experimentRun *collector.ExperimentRun) error {
+func (e *ExperimentController) waitForS3Completion(ctx context.Context, experimentRun *collector.ExperimentRun, processorCount int) error {
 	log.Printf("Waiting for dataset processing completion: %s", experimentRun.DatasetName)
 
 	// Use S3Monitor for reliable completion detection
@@ -220,9 +228,17 @@ func (e *ExperimentController) waitForS3Completion(ctx context.Context, experime
 
 	// Now wait for metrics aggregation cycle
 	log.Printf("Waiting for metrics aggregation cycle...")
-	err = e.waitForMetricsAggregation(ctx, experimentRun)
+	err = e.waitForMetricsAggregation(ctx, experimentRun, processorCount)
 	if err != nil {
 		return fmt.Errorf("failed waiting for metrics aggregation: %w", err)
+	}
+
+	// Sort the job records CSV by queue_start_time
+	jobRecordsPath := filepath.Join(e.outputDir, "job_records_detailed.csv")
+	err = e.collector.SortJobRecordsCSV(jobRecordsPath)
+	if err != nil {
+		log.Printf("Warning: failed to sort job records CSV: %v", err)
+		// Don't fail for sorting issues
 	}
 
 	log.Printf("Dataset %s fully completed (metrics aggregated)", experimentRun.DatasetName)
@@ -230,7 +246,7 @@ func (e *ExperimentController) waitForS3Completion(ctx context.Context, experime
 }
 
 // waitForMetricsAggregation waits for the next aggregation cycle after processing completes
-func (e *ExperimentController) waitForMetricsAggregation(ctx context.Context, experimentRun *collector.ExperimentRun) error {
+func (e *ExperimentController) waitForMetricsAggregation(ctx context.Context, experimentRun *collector.ExperimentRun, processorCount int) error {
 	// UC3 aggregation runs every 5 minutes
 	aggregationInterval := 5 * time.Minute
 	maxWaitTime := 6 * time.Minute // 5 min + 1 min buffer
@@ -269,7 +285,7 @@ func (e *ExperimentController) waitForMetricsAggregation(ctx context.Context, ex
 			timeWaited := time.Since(waitStartTime)
 
 			// Dynamically collect new job records
-			newJobCount, err := e.collector.AppendJobRecordsToCSV(ctx, experimentRun.DatasetName, jobRecordsPath, seenJobIDs)
+			newJobCount, err := e.collector.AppendJobRecordsToCSV(ctx, experimentRun.DatasetName, jobRecordsPath, seenJobIDs, processorCount)
 			if err != nil {
 				log.Printf("Error collecting job records: %v", err)
 			} else if newJobCount > 0 {
@@ -336,6 +352,7 @@ func (e *ExperimentController) createJobRecordsCSV(csvPath string) error {
 		"processing_duration_seconds",
 		"total_duration_seconds",
 		"job_size_mb",
+		"processor_count",
 		"queue_ahead_length",
 	}
 
@@ -398,6 +415,32 @@ func (e *ExperimentController) cleanupS3OutputFiles(ctx context.Context, experim
 	}
 
 	log.Printf("Successfully deleted S3 files (input, processed, output) for dataset: %s", experimentRun.DatasetName)
+	return nil
+}
+
+// cleanupSharedVolumes runs the cleanup script to clear shared volumes after experiment completes
+func (e *ExperimentController) cleanupSharedVolumes() error {
+	log.Printf("Cleaning up shared volumes...")
+
+	scriptPath := "scripts/clear_shared_volumes.sh"
+
+	// Check if script exists
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		log.Printf("Warning: cleanup script not found at %s, skipping shared volume cleanup", scriptPath)
+		return nil
+	}
+
+	// Execute the cleanup script
+	cmd := exec.Command("/bin/bash", scriptPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to run cleanup script: %w", err)
+	}
+
+	log.Printf("Shared volumes cleaned successfully")
 	return nil
 }
 

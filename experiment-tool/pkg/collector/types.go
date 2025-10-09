@@ -45,6 +45,7 @@ type JobMetrics struct {
 	TotalDuration      float64   `json:"total_duration"`
 	IsComplete         bool      `json:"is_complete"`
 	JobSizeMB          float64   `json:"job_size_mb"`
+	ProcessorCount     int       `json:"processor_count"`
 	QueueAheadLength   int       `json:"queue_ahead_length"`
 }
 

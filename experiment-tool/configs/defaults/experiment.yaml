@@ -7,29 +7,17 @@ description: "UC3 autoscaling training data generation experiment"
 
 # Processor scaling configuration
 scaling:
-  min_processors: 1
-  max_processors: 10
-  scale_steps: [1, 2, 3, 5, 7, 10]  # Specific processor counts to test
-  stabilize_time: "0s"              # Time to wait after scaling before collecting metrics (removed delay)
-  scale_up_interval: "5m"           # Time between scale-up operations
-  scale_down_interval: "3m"         # Time between scale-down operations
+  processor_counts: [1, 2, 3, 5, 7, 10]  # Processor counts to test (runs dataset once per count for ML training data)
+  stabilize_time: "0s"                   # Time to wait after scaling before triggering processing
 
 # Workload generation configuration
 workload:
   dataset: "NGC7025"                # Dataset to process
   processor_type: "starlight"      # "starlight" or "ppxf"
-  batch_size: 10                   # Number of files per batch
-  submission_rate: "30s"           # Time between batch submissions
-  job_size_variation: "mixed"      # "small", "medium", "large", or "mixed"
-  pauses_between_jobs: false       # Whether to include random pauses
 
 # Metrics collection configuration
 metrics:
-  collection_interval: "30s"       # How often to collect metrics
-  export_format: "csv"             # "csv" or "json"
   output_directory: "./experiment-data"
-  include_job_level: true          # Export individual job metrics
-  include_summary: true            # Export aggregated batch summaries
 
 # Infrastructure connection details
 infrastructure:

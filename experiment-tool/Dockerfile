@@ -23,8 +23,14 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o uc3-experiment ./
 # Final stage
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
+# Install ca-certificates for HTTPS requests, bash for cleanup script, and curl
+RUN apk --no-cache add ca-certificates bash curl
+
+# Install kubectl (OpenShift CLI compatible)
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    chmod +x kubectl && \
+    mv kubectl /usr/local/bin/kubectl && \
+    ln -s /usr/local/bin/kubectl /usr/local/bin/oc
 
 # Create app directory
 WORKDIR /app
@@ -35,14 +41,16 @@ COPY --from=builder /app/uc3-experiment .
 # Copy configuration files to the correct location
 COPY --from=builder /app/configs ./configs
 
+# Copy cleanup scripts
+COPY --from=builder /app/scripts ./scripts
+
 # Copy dataset files from host system
-COPY NGC7025_short /app/datasets/NGC7025_short
-COPY NGC7025_full /app/datasets/NGC7025_full
-COPY NGC7000 /app/datasets/NGC7000
+COPY NGC7020 /app/datasets/NGC7020
 COPY NGC7021 /app/datasets/NGC7021
 COPY NGC7022 /app/datasets/NGC7022
 COPY NGC7023 /app/datasets/NGC7023
 COPY NGC7024 /app/datasets/NGC7024
+COPY NGC7025 /app/datasets/NGC7025
 
 # Create directories for data and results
 RUN mkdir -p /app/experiment-data /app/test-results

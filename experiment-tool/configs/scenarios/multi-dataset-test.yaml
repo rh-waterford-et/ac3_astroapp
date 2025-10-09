@@ -3,17 +3,13 @@ name: "multi-dataset-test"
 description: "Test concurrent processing of multiple datasets with staggered starts"
 
 scaling:
-  min_processors: 1
-  max_processors: 1
-  scale_steps: [1]
+  processor_counts: [3]
   stabilize_time: "0s"
-  scale_up_interval: "1m"
-  scale_down_interval: "45s"
 
 workload:
   # Multi-dataset configuration
   datasets:
-    - name: "NGC7000"
+    - name: "NGC7020"
       processor_type: "starlight"
     - name: "NGC7021"
       processor_type: "starlight"
@@ -23,24 +19,16 @@ workload:
       processor_type: "starlight"
     - name: "NGC7024"
       processor_type: "starlight"
+    - name: "NGC7025"
+      processor_type: "starlight"
   
   # Multi-dataset timing and limits
   dataset_start_interval: "45s"
-  max_concurrent_datasets: 5      
+  max_concurrent_datasets: 6      
   failure_strategy: "continue"     
-  
-  # Common workload settings
-  batch_size: 5
-  submission_rate: "15s"
-  job_size_variation: "small"
-  pauses_between_jobs: false
 
 metrics:
-  collection_interval: "10s"
-  export_format: "csv"
   output_directory: "/app/experiment-data"
-  include_job_level: true
-  include_summary: true
 
 infrastructure:
   namespace: "uc3-applications"

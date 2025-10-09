@@ -71,14 +71,12 @@ func showConfig(cfg *config.ExperimentConfig) {
 	fmt.Printf("  Description: %s\n", cfg.Description)
 
 	fmt.Printf("\nScaling Configuration:\n")
-	fmt.Printf("  Processor Range: %d-%d\n", cfg.Scaling.MinProcessors, cfg.Scaling.MaxProcessors)
-	fmt.Printf("  Scale Steps: %v\n", cfg.Scaling.ScaleSteps)
+	fmt.Printf("  Processor Counts: %v\n", cfg.Scaling.ProcessorCounts)
 	fmt.Printf("  Stabilize Time: %s\n", cfg.Scaling.StabilizeTime)
 
 	fmt.Printf("\nWorkload Configuration:\n")
 	fmt.Printf("  Dataset: %s\n", cfg.Workload.Dataset)
 	fmt.Printf("  Processor Type: %s\n", cfg.Workload.ProcessorType)
-	fmt.Printf("  Batch Size: %d\n", cfg.Workload.BatchSize)
 
 	fmt.Printf("\nInfrastructure:\n")
 	fmt.Printf("  Namespace: %s\n", cfg.Infrastructure.Namespace)
@@ -86,7 +84,6 @@ func showConfig(cfg *config.ExperimentConfig) {
 	fmt.Printf("  UC3 API: %s\n", cfg.Infrastructure.UC3APIBaseURL)
 
 	fmt.Printf("\nMetrics:\n")
-	fmt.Printf("  Collection Interval: %s\n", cfg.Metrics.CollectionInterval)
 	fmt.Printf("  Output Directory: %s\n", cfg.Metrics.OutputDirectory)
 }
 
@@ -104,19 +101,21 @@ func validateConfig(cfg *config.ExperimentConfig) {
 	}
 
 	// Validate scaling configuration
-	if cfg.Scaling.MinProcessors <= 0 {
-		fmt.Printf("❌ Invalid min processors: %d\n", cfg.Scaling.MinProcessors)
+	if len(cfg.Scaling.ProcessorCounts) == 0 {
+		fmt.Printf("❌ No processor counts specified\n")
 		valid = false
 	} else {
-		fmt.Printf("✅ Min processors: %d\n", cfg.Scaling.MinProcessors)
-	}
-
-	if cfg.Scaling.MaxProcessors < cfg.Scaling.MinProcessors {
-		fmt.Printf("❌ Max processors (%d) less than min processors (%d)\n",
-			cfg.Scaling.MaxProcessors, cfg.Scaling.MinProcessors)
-		valid = false
-	} else {
-		fmt.Printf("✅ Max processors: %d\n", cfg.Scaling.MaxProcessors)
+		fmt.Printf("✅ Processor counts: %v\n", cfg.Scaling.ProcessorCounts)
+		for _, count := range cfg.Scaling.ProcessorCounts {
+			if count <= 0 {
+				fmt.Printf("❌ Invalid processor count: %d (must be > 0)\n", count)
+				valid = false
+			}
+			if count > 50 {
+				fmt.Printf("❌ Processor count %d exceeds safety limit of 50\n", count)
+				valid = false
+			}
+		}
 	}
 
 	// Validate infrastructure

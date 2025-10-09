@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -514,7 +515,7 @@ func (rc *RedisCollector) getJobRecord(ctx context.Context, key string) (*metric
 }
 
 // AppendJobRecordsToCSV appends new job records to an existing CSV file
-func (rc *RedisCollector) AppendJobRecordsToCSV(ctx context.Context, datasetName, csvPath string, seenJobIDs map[string]bool) (int, error) {
+func (rc *RedisCollector) AppendJobRecordsToCSV(ctx context.Context, datasetName, csvPath string, seenJobIDs map[string]bool, processorCount int) (int, error) {
 	jobRecords, err := rc.GetJobRecordsForDataset(ctx, datasetName)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get job records: %w", err)
@@ -532,6 +533,11 @@ func (rc *RedisCollector) AppendJobRecordsToCSV(ctx context.Context, datasetName
 	if len(newRecords) == 0 {
 		return 0, nil // No new records
 	}
+
+	// Sort new records by queue start time before appending
+	sort.Slice(newRecords, func(i, j int) bool {
+		return newRecords[i].QueueStartTime.Before(newRecords[j].QueueStartTime)
+	})
 
 	// Open file in append mode
 	file, err := os.OpenFile(csvPath, os.O_WRONLY|os.O_APPEND, 0644)
@@ -555,6 +561,7 @@ func (rc *RedisCollector) AppendJobRecordsToCSV(ctx context.Context, datasetName
 			fmt.Sprintf("%.6f", record.ProcessingDuration),
 			fmt.Sprintf("%.6f", record.TotalDuration),
 			fmt.Sprintf("%.2f", record.JobSizeMB),
+			fmt.Sprintf("%d", processorCount),
 			fmt.Sprintf("%d", record.JobQueueAheadLength),
 		}
 
@@ -565,6 +572,68 @@ func (rc *RedisCollector) AppendJobRecordsToCSV(ctx context.Context, datasetName
 
 	log.Printf("Appended %d new job records to %s", len(newRecords), csvPath)
 	return len(newRecords), nil
+}
+
+// SortJobRecordsCSV sorts an entire job records CSV file by queue_start_time
+func (rc *RedisCollector) SortJobRecordsCSV(csvPath string) error {
+	// Read the entire CSV file
+	file, err := os.Open(csvPath)
+	if err != nil {
+		return fmt.Errorf("failed to open CSV file: %w", err)
+	}
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	file.Close()
+
+	if err != nil {
+		return fmt.Errorf("failed to read CSV file: %w", err)
+	}
+
+	if len(records) <= 1 {
+		return nil // No data rows to sort (only header or empty)
+	}
+
+	// Separate header and data
+	header := records[0]
+	dataRows := records[1:]
+
+	// Parse queue_start_time (column index 2) and sort
+	sort.Slice(dataRows, func(i, j int) bool {
+		timeI, errI := time.Parse(time.RFC3339Nano, dataRows[i][2])
+		timeJ, errJ := time.Parse(time.RFC3339Nano, dataRows[j][2])
+
+		if errI != nil || errJ != nil {
+			return false // Keep original order if parse fails
+		}
+
+		return timeI.Before(timeJ)
+	})
+
+	// Write sorted data back to file
+	outFile, err := os.Create(csvPath)
+	if err != nil {
+		return fmt.Errorf("failed to create sorted CSV file: %w", err)
+	}
+	defer outFile.Close()
+
+	writer := csv.NewWriter(outFile)
+	defer writer.Flush()
+
+	// Write header
+	if err := writer.Write(header); err != nil {
+		return fmt.Errorf("failed to write header: %w", err)
+	}
+
+	// Write sorted data rows
+	for _, row := range dataRows {
+		if err := writer.Write(row); err != nil {
+			return fmt.Errorf("failed to write row: %w", err)
+		}
+	}
+
+	log.Printf("Sorted %d job records in %s by queue_start_time", len(dataRows), csvPath)
+	return nil
 }
 
 // Close closes the Redis connection

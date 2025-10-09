@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -125,6 +127,13 @@ func (mdc *MultiDatasetController) Run() error {
 	err = mdc.generateFinalReports()
 	if err != nil {
 		return fmt.Errorf("failed to generate final reports: %w", err)
+	}
+
+	// Step 5: Clean up shared volumes
+	err = mdc.cleanupSharedVolumes()
+	if err != nil {
+		log.Printf("[EXPERIMENT] Warning: failed to cleanup shared volumes: %v", err)
+		// Don't fail the experiment for cleanup issues
 	}
 
 	log.Printf("[EXPERIMENT] Multi-dataset experiment completed successfully! Data saved to: %s", mdc.outputDir)
@@ -357,7 +366,7 @@ func (mdc *MultiDatasetController) runDatasetCycles(datasetExec *collector.Datas
 		return nil
 	}
 
-	for i, processorCount := range mdc.config.Scaling.ScaleSteps {
+	for i, processorCount := range mdc.config.Scaling.ProcessorCounts {
 		// Check if dataset was completed during this experiment (prevent multiple cycles)
 		if datasetExec.GetStatus() == collector.StatusCompleted {
 			log.Printf("[%s] Dataset completed during previous cycle, skipping remaining cycles", datasetName)
@@ -365,7 +374,7 @@ func (mdc *MultiDatasetController) runDatasetCycles(datasetExec *collector.Datas
 		}
 
 		log.Printf("[%s] Running cycle %d/%d: %d processors",
-			datasetName, i+1, len(mdc.config.Scaling.ScaleSteps), processorCount)
+			datasetName, i+1, len(mdc.config.Scaling.ProcessorCounts), processorCount)
 
 		datasetExec.ProcessorCount = processorCount
 
@@ -375,7 +384,7 @@ func (mdc *MultiDatasetController) runDatasetCycles(datasetExec *collector.Datas
 		}
 
 		log.Printf("[%s] Completed cycle %d/%d successfully",
-			datasetName, i+1, len(mdc.config.Scaling.ScaleSteps))
+			datasetName, i+1, len(mdc.config.Scaling.ProcessorCounts))
 	}
 
 	// Mark dataset as completed only after ALL cycles finish
@@ -416,7 +425,7 @@ func (mdc *MultiDatasetController) runSingleDatasetCycle(datasetExec *collector.
 
 	// Step 5: Wait for metrics aggregation
 	log.Printf("[%s] Waiting for metrics aggregation cycle...", datasetName)
-	err = mdc.waitForMetricsAggregation(ctx, experimentRun)
+	err = mdc.waitForMetricsAggregation(ctx, experimentRun, processorCount)
 	if err != nil {
 		return fmt.Errorf("failed waiting for metrics aggregation: %w", err)
 	}
@@ -427,6 +436,14 @@ func (mdc *MultiDatasetController) runSingleDatasetCycle(datasetExec *collector.
 	err = mdc.collectAndExportDatasetData(ctx, processorCount, datasetName)
 	if err != nil {
 		return fmt.Errorf("failed to collect and export data: %w", err)
+	}
+
+	// Step 6b: Sort the dataset's job records CSV by queue_start_time
+	jobRecordsPath := fmt.Sprintf("%s/%s_job_records_detailed.csv", mdc.outputDir, datasetName)
+	err = mdc.collector.SortJobRecordsCSV(jobRecordsPath)
+	if err != nil {
+		log.Printf("[%s] Warning: failed to sort job records CSV: %v", datasetName, err)
+		// Don't fail the dataset for sorting issues
 	}
 
 	// Step 7: Clean up S3 output files
@@ -440,7 +457,7 @@ func (mdc *MultiDatasetController) runSingleDatasetCycle(datasetExec *collector.
 }
 
 // waitForMetricsAggregation waits for the 5-minute aggregation cycle (reuse existing logic)
-func (mdc *MultiDatasetController) waitForMetricsAggregation(ctx context.Context, experimentRun *collector.ExperimentRun) error {
+func (mdc *MultiDatasetController) waitForMetricsAggregation(ctx context.Context, experimentRun *collector.ExperimentRun, processorCount int) error {
 	// Reuse the existing logic from the single-dataset controller
 	// This is the same 5-minute wait logic we implemented before
 	aggregationInterval := 5 * time.Minute
@@ -476,7 +493,7 @@ func (mdc *MultiDatasetController) waitForMetricsAggregation(ctx context.Context
 		case <-ticker.C:
 			timeWaited := time.Since(waitStartTime)
 
-			newJobCount, err := mdc.collector.AppendJobRecordsToCSV(ctx, experimentRun.DatasetName, jobRecordsPath, seenJobIDs)
+			newJobCount, err := mdc.collector.AppendJobRecordsToCSV(ctx, experimentRun.DatasetName, jobRecordsPath, seenJobIDs, processorCount)
 			if err != nil {
 				log.Printf("[%s] Warning: failed to append job records: %v", experimentRun.DatasetName, err)
 			} else if newJobCount > 0 {
@@ -549,6 +566,7 @@ func (mdc *MultiDatasetController) initializeJobRecordsCSV(filename string) erro
 		"processing_duration_seconds",
 		"total_duration_seconds",
 		"job_size_mb",
+		"processor_count",
 		"queue_ahead_length",
 	}
 
@@ -774,6 +792,12 @@ func (mdc *MultiDatasetController) generateFinalReports() error {
 		return fmt.Errorf("failed to generate dataset timeline: %w", err)
 	}
 
+	// Merge all job records into consolidated file
+	err = mdc.mergeAllJobRecords()
+	if err != nil {
+		return fmt.Errorf("failed to merge job records: %w", err)
+	}
+
 	return nil
 }
 
@@ -926,6 +950,134 @@ func (mdc *MultiDatasetController) generateDatasetTimeline() error {
 	}
 
 	log.Printf("[EXPERIMENT] Generated dataset timeline: %s", timelineFile)
+	return nil
+}
+
+// mergeAllJobRecords merges all per-dataset job_records_detailed.csv files into one consolidated file
+func (mdc *MultiDatasetController) mergeAllJobRecords() error {
+	consolidatedFile := fmt.Sprintf("%s/all_jobs_detailed.csv", mdc.outputDir)
+
+	// Ensure output directory exists
+	if err := os.MkdirAll(filepath.Dir(consolidatedFile), 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	// Collect all records from all datasets
+	var allRecords [][]string
+	var header []string
+
+	// Get all datasets
+	datasets := mdc.experiment.GetAllDatasets()
+
+	// Iterate through each dataset and collect its job records
+	for _, dataset := range datasets {
+		datasetJobFile := fmt.Sprintf("%s/%s_job_records_detailed.csv", mdc.outputDir, dataset.Config.Name)
+
+		// Check if file exists
+		if _, err := os.Stat(datasetJobFile); os.IsNotExist(err) {
+			log.Printf("[EXPERIMENT] Skipping %s (file not found)", datasetJobFile)
+			continue
+		}
+
+		// Open dataset-specific job records file
+		inFile, err := os.Open(datasetJobFile)
+		if err != nil {
+			log.Printf("[EXPERIMENT] Warning: failed to open %s: %v", datasetJobFile, err)
+			continue
+		}
+
+		reader := csv.NewReader(inFile)
+
+		// Read all records
+		records, err := reader.ReadAll()
+		inFile.Close()
+
+		if err != nil {
+			log.Printf("[EXPERIMENT] Warning: failed to read %s: %v", datasetJobFile, err)
+			continue
+		}
+
+		if len(records) == 0 {
+			continue
+		}
+
+		// Save header from first file
+		if len(header) == 0 {
+			header = records[0]
+		}
+
+		// Collect all data records (skip header)
+		allRecords = append(allRecords, records[1:]...)
+
+		log.Printf("[EXPERIMENT] Collected %d records from %s", len(records)-1, filepath.Base(datasetJobFile))
+	}
+
+	if len(allRecords) == 0 {
+		log.Printf("[EXPERIMENT] No job records to merge")
+		return nil
+	}
+
+	// Sort all records by queue_start_time (column index 2)
+	sort.Slice(allRecords, func(i, j int) bool {
+		timeI, errI := time.Parse(time.RFC3339Nano, allRecords[i][2])
+		timeJ, errJ := time.Parse(time.RFC3339Nano, allRecords[j][2])
+
+		if errI != nil || errJ != nil {
+			return false // Keep original order if parse fails
+		}
+
+		return timeI.Before(timeJ)
+	})
+
+	// Write sorted consolidated file
+	outFile, err := os.Create(consolidatedFile)
+	if err != nil {
+		return fmt.Errorf("failed to create consolidated job records file: %w", err)
+	}
+	defer outFile.Close()
+
+	writer := csv.NewWriter(outFile)
+	defer writer.Flush()
+
+	// Write header
+	if err := writer.Write(header); err != nil {
+		return fmt.Errorf("failed to write header: %w", err)
+	}
+
+	// Write all sorted records
+	for _, record := range allRecords {
+		if err := writer.Write(record); err != nil {
+			return fmt.Errorf("failed to write record: %w", err)
+		}
+	}
+
+	log.Printf("[EXPERIMENT] Generated consolidated job records: %s (%d total records, sorted by queue_start_time)", consolidatedFile, len(allRecords))
+	return nil
+}
+
+// cleanupSharedVolumes runs the cleanup script to clear shared volumes after experiment completes
+func (mdc *MultiDatasetController) cleanupSharedVolumes() error {
+	log.Printf("[EXPERIMENT] Cleaning up shared volumes...")
+
+	scriptPath := "scripts/clear_shared_volumes.sh"
+
+	// Check if script exists
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		log.Printf("[EXPERIMENT] Warning: cleanup script not found at %s, skipping shared volume cleanup", scriptPath)
+		return nil
+	}
+
+	// Execute the cleanup script
+	cmd := exec.Command("/bin/bash", scriptPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to run cleanup script: %w", err)
+	}
+
+	log.Printf("[EXPERIMENT] Shared volumes cleaned successfully")
 	return nil
 }
 

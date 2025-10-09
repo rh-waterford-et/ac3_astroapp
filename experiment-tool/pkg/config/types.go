@@ -23,12 +23,8 @@ type ExperimentConfig struct {
 
 // ScalingConfig defines processor scaling parameters
 type ScalingConfig struct {
-	MinProcessors     int           `mapstructure:"min_processors"`
-	MaxProcessors     int           `mapstructure:"max_processors"`
-	ScaleSteps        []int         `mapstructure:"scale_steps"`
-	StabilizeTime     time.Duration `mapstructure:"stabilize_time"`
-	ScaleUpInterval   time.Duration `mapstructure:"scale_up_interval"`
-	ScaleDownInterval time.Duration `mapstructure:"scale_down_interval"`
+	ProcessorCounts []int         `mapstructure:"processor_counts"` // Processor counts to test (runs dataset once per count)
+	StabilizeTime   time.Duration `mapstructure:"stabilize_time"`   // Time to wait after scaling before triggering processing
 }
 
 // DatasetConfig defines a single dataset configuration
@@ -49,12 +45,6 @@ type WorkloadConfig struct {
 	DatasetStartInterval  time.Duration   `mapstructure:"dataset_start_interval"`
 	MaxConcurrentDatasets int             `mapstructure:"max_concurrent_datasets"`
 	FailureStrategy       string          `mapstructure:"failure_strategy"` // "continue" | "abort_all"
-
-	// Common fields
-	BatchSize         int           `mapstructure:"batch_size"`
-	SubmissionRate    time.Duration `mapstructure:"submission_rate"`
-	JobSizeVariation  string        `mapstructure:"job_size_variation"` // "small", "medium", "large", "mixed"
-	PausesBetweenJobs bool          `mapstructure:"pauses_between_jobs"`
 }
 
 // IsMultiDataset returns true if this is a multi-dataset configuration
@@ -110,11 +100,7 @@ func (w *WorkloadConfig) GetDatasetStartInterval() time.Duration {
 
 // MetricsConfig defines data collection parameters
 type MetricsConfig struct {
-	CollectionInterval time.Duration `mapstructure:"collection_interval"`
-	ExportFormat       string        `mapstructure:"export_format"`
-	OutputDirectory    string        `mapstructure:"output_directory"`
-	IncludeJobLevel    bool          `mapstructure:"include_job_level"`
-	IncludeSummary     bool          `mapstructure:"include_summary"`
+	OutputDirectory string `mapstructure:"output_directory"`
 }
 
 // InfrastructureConfig defines UC3 system connection details

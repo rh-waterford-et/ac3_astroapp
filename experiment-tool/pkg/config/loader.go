@@ -60,13 +60,8 @@ func setDefaults() {
 	viper.SetDefault("description", "UC3 autoscaling training data generation")
 
 	// Scaling defaults
-	viper.SetDefault("scaling.min_processors", 1)
-	viper.SetDefault("scaling.max_processors", 10)
-	viper.SetDefault("scaling.scale_steps", []int{1, 2, 3, 5, 7, 10})
-	// Set defaults for optional fields - removed stabilize_time delay
+	viper.SetDefault("scaling.processor_counts", []int{1, 2, 3, 5, 7, 10})
 	viper.SetDefault("scaling.stabilize_time", "0s")
-	viper.SetDefault("scaling.scale_up_interval", "5m")
-	viper.SetDefault("scaling.scale_down_interval", "3m")
 
 	// Workload defaults
 	viper.SetDefault("workload.dataset", "NGC7025")
