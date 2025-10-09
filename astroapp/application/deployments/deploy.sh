@@ -29,8 +29,8 @@ oc apply -f deployment_redis.yaml
 
 # Deploy backend services
 echo "⚙️ Deploying backend..."
-oc apply -f deployment.yaml
-oc apply -f deployment_starlight.yaml
+oc apply -f deployment_producer.yaml
+oc apply -f deployment_processor.yaml
 oc apply -f service_backend.yaml
 
 # Deploy frontend

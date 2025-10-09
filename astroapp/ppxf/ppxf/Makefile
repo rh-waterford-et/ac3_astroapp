@@ -1,7 +1,7 @@
 # UC3 pPXF Build and Deploy Makefile
 IMAGE_NAME = quay.io/bcapper30/uc3-ppxf:latest
 DOCKERFILE = Dockerfile
-PROCESSOR_DEPLOYMENT = starlight
+PROCESSOR_DEPLOYMENT = ucm-processor-deployment
 NAMESPACE = uc3-applications
 
 .PHONY: build push deploy rebuild status clean help

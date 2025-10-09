@@ -71,10 +71,36 @@ var starlight app.StarlightInterface = &app.Starlight{
 }
 
 func (p *Producer) CreateBatch(appName string, side string, q queue.QueueInterface) {
+	// Validate queue interface early
+	if q == nil {
+		log.Printf("ERROR: Queue interface is nil in CreateBatch for app %s, side %s", appName, side)
+		log.Printf("WARNING: Batches will be processed but not sent to RabbitMQ - jobs will be lost!")
+	}
+
 	go func() {
+		// Panic recovery to prevent pod crashes
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("PANIC RECOVERED in batch sender goroutine: %v", r)
+				log.Printf("Stack trace available in container logs")
+				// Don't exit - allow the watcher to continue processing other datasets
+			}
+		}()
+
 		for batch := range p.BatchQueue {
 			log.Printf("Sending batch (ID: %s, JobID: %s) with %d files\n", p.BatchID, batch.JobID, len(batch.Files))
-			p.Sender.SendBatch(batch, appName, side, q)
+
+			// Additional safety: wrap SendBatch in its own recovery
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("PANIC RECOVERED while sending batch %s (JobID: %s): %v", batch.ID, batch.JobID, r)
+						log.Printf("This batch will be lost. Consider reprocessing dataset %s", batch.ID)
+					}
+				}()
+
+				p.Sender.SendBatch(batch, appName, side, q)
+			}()
 		}
 	}()
 

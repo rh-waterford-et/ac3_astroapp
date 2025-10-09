@@ -30,7 +30,7 @@ spec:
         persistentVolumeClaim:
           claimName: ucm-pv-claim
       containers:
-      - image: quay.io/rh-ee-kromashk/ucm-starlight
+      - image: quay.io/bcapper30/starlight
         name: starlight
         workingDir: /docker/starlight/STARLIGHTv04
         command: ["./bash_script2.sh"]
@@ -39,7 +39,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/bcapper30/uc3-backend:latest
         name: receiver-processor
         workingDir: /processing_data/
         volumeMounts:
@@ -67,7 +67,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-provider"
+          value: "test-consumer"
         - name: IN_FILE_OUTPUT_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST_STARLIGHT
@@ -114,7 +114,7 @@ spec:
           value: ""
         ports:
         - containerPort: 5672  
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/bcapper30/uc3-backend:latest
         name: watcher-processor
         workingDir: /processing_data/
         command: ["/usr/bin/ucm"]
@@ -139,7 +139,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-provider"
+          value: "test-consumer"
         - name: EXPLORED_STARLIGHT
           value: "/processing_data/starlight/data/output"
         - name: OUTPUT_STARLIGHT

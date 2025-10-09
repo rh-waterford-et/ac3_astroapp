@@ -335,6 +335,8 @@ func (e *ExperimentController) createJobRecordsCSV(csvPath string) error {
 		"queue_duration_seconds",
 		"processing_duration_seconds",
 		"total_duration_seconds",
+		"job_size_mb",
+		"queue_ahead_length",
 	}
 
 	if err := writer.Write(headers); err != nil {

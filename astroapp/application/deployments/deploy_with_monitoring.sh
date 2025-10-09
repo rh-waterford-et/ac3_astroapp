@@ -39,8 +39,8 @@ oc apply -f deployment_grafana.yaml
 
 # Deploy backend services
 echo "⚙️ Deploying backend..."
+oc apply -f deployment_producer.yaml
 oc apply -f deployment_processor.yaml
-oc apply -f deployment_starlight.yaml
 oc apply -f service_backend.yaml
 
 # Deploy frontend

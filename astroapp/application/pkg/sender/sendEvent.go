@@ -34,6 +34,12 @@ func NewRabbitMQSender(queue queue.QueueInterface, utils common.UtilsInterface, 
 }
 
 func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string, q queue.QueueInterface) {
+	// Validate queue interface to prevent nil pointer panics
+	if q == nil {
+		log.Printf("ERROR: Queue interface is nil, cannot send batch %s (JobID: %s). Job will be lost!", batch.ID, batch.JobID)
+		return
+	}
+
 	var queueName string
 
 	if side == "producer" {
@@ -42,9 +48,11 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string,
 		queueName = "processor_to_producer_queue"
 	}
 
+	// Declare queue with error handling instead of panic
 	err := q.DeclareQueue(queueName)
 	if err != nil {
-		s.Utils.FailOnError("Failed to declare queue", err)
+		log.Printf("ERROR: Failed to declare queue %s: %v. Batch %s (JobID: %s) cannot be sent.", queueName, err, batch.ID, batch.JobID)
+		return
 	}
 
 	if side == "producer" {
@@ -84,7 +92,8 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string,
 
 	batchJSON, err := json.Marshal(batch)
 	if err != nil {
-		s.Utils.FailOnError("Failed to marshal batch", err)
+		log.Printf("ERROR: Failed to marshal batch %s (JobID: %s): %v. Job cannot be sent.", batch.ID, batch.JobID, err)
+		return
 	}
 
 	headers := make(amqp.Table)
@@ -99,9 +108,27 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string,
 	}
 	headers["filenames"] = strings.Join(filenames, ",")
 
-	err = q.Publish(ctx, queueName, batchJSON, headers)
-	if err != nil {
-		s.Utils.FailOnError("Failed to publish message", err)
+	// Retry logic for publishing to handle transient RabbitMQ failures
+	maxRetries := 5
+	retryDelay := 2 * time.Second
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err = q.Publish(ctx, queueName, batchJSON, headers)
+		if err == nil {
+			// Success!
+			break
+		}
+
+		if attempt < maxRetries {
+			log.Printf("WARNING: Failed to publish batch %s (JobID: %s) to queue %s (attempt %d/%d): %v. Retrying in %v...",
+				batch.ID, batch.JobID, queueName, attempt, maxRetries, err, retryDelay)
+			time.Sleep(retryDelay)
+			retryDelay *= 2 // Exponential backoff
+		} else {
+			log.Printf("ERROR: Failed to publish batch %s (JobID: %s) to queue %s after %d attempts: %v. Job will be lost!",
+				batch.ID, batch.JobID, queueName, maxRetries, err)
+			return
+		}
 	}
 
 	stats, err := q.InspectQueue(queueName)

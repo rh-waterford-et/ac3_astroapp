@@ -486,6 +486,16 @@ func (rc *RedisCollector) parseExportedJobRecords(exportData, datasetName string
 			if f, err := strconv.ParseFloat(durStr, 64); err == nil {
 				currentJob.TotalDuration = f
 			}
+		} else if strings.HasPrefix(line, "job_size_mb: ") {
+			sizeStr := strings.TrimPrefix(line, "job_size_mb: ")
+			if f, err := strconv.ParseFloat(sizeStr, 64); err == nil {
+				currentJob.JobSizeMB = f
+			}
+		} else if strings.HasPrefix(line, "job_queue_ahead_length: ") {
+			queueStr := strings.TrimPrefix(line, "job_queue_ahead_length: ")
+			if i, err := strconv.Atoi(queueStr); err == nil {
+				currentJob.JobQueueAheadLength = i
+			}
 		}
 	}
 
@@ -544,6 +554,8 @@ func (rc *RedisCollector) AppendJobRecordsToCSV(ctx context.Context, datasetName
 			fmt.Sprintf("%.6f", record.QueueDuration),
 			fmt.Sprintf("%.6f", record.ProcessingDuration),
 			fmt.Sprintf("%.6f", record.TotalDuration),
+			fmt.Sprintf("%.2f", record.JobSizeMB),
+			fmt.Sprintf("%d", record.JobQueueAheadLength),
 		}
 
 		if err := writer.Write(row); err != nil {

@@ -31,6 +31,13 @@ func NewWatcher() *Watcher {
 }
 
 func (w *Watcher) RunProducer(appName string, jobName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
+	// Add panic recovery to prevent pod crashes
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in RunProducer for app %s, job %s: %v", appName, jobName, r)
+			log.Printf("Processing will continue for other jobs/datasets")
+		}
+	}()
 
 	inputDirEnv := "EXPLORED_" + appName
 	outputDirEnv := "OUTPUT_" + appName
@@ -123,6 +130,13 @@ func (w *Watcher) RunProducer(appName string, jobName string, side string, utils
 }
 
 func (w *Watcher) RunForSingleFile(appName string, jobName string, fileName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
+	// Add panic recovery to prevent pod crashes
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in RunForSingleFile for app %s, job %s, file %s: %v", appName, jobName, fileName, r)
+			log.Printf("Processing will continue for other files/jobs")
+		}
+	}()
 
 	inputDirEnv := "EXPLORED_" + appName
 	outputDirEnv := "OUTPUT_" + appName
@@ -184,6 +198,14 @@ func (w *Watcher) RunForSingleFile(appName string, jobName string, fileName stri
 }
 
 func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
+	// Add panic recovery to prevent pod crashes
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in RunProcessor main loop: %v", r)
+			log.Printf("RunProcessor has stopped - this is a critical error")
+		}
+	}()
+
 	jobInfoDir := os.Getenv("BATCH_INFO_DIR")
 
 	log.Println("Checking for completed files...")
@@ -196,15 +218,25 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 		} else {
 			//log.Printf("DEBUG: Found %d files in %s", len(files), jobInfoDir)
 			for _, file := range files {
-				//log.Printf("DEBUG: Processing file: %s", file.Name())
-				filePath := filepath.Join(jobInfoDir, file.Name())
-				//log.Printf("DEBUG: File path: %s", filePath)
-				if err := w.processJobFile(filePath, side, utils, queue, redisClient); err != nil {
-					log.Printf("Error processing job file %s: %v\n", filePath, err)
-					continue
-				}
-				log.Printf("DEBUG: Successfully processed job file %s, removing file", filePath)
-				os.Remove(filePath)
+				// Wrap each file processing in panic recovery
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							log.Printf("PANIC RECOVERED while processing job file %s: %v", file.Name(), r)
+							log.Printf("Skipping this file and continuing with others")
+						}
+					}()
+
+					//log.Printf("DEBUG: Processing file: %s", file.Name())
+					filePath := filepath.Join(jobInfoDir, file.Name())
+					//log.Printf("DEBUG: File path: %s", filePath)
+					if err := w.processJobFile(filePath, side, utils, queue, redisClient); err != nil {
+						log.Printf("Error processing job file %s: %v\n", filePath, err)
+						return
+					}
+					log.Printf("DEBUG: Successfully processed job file %s, removing file", filePath)
+					os.Remove(filePath)
+				}()
 			}
 		}
 
