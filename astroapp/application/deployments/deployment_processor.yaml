@@ -34,6 +34,11 @@ spec:
         name: starlight
         workingDir: /docker/starlight/STARLIGHTv04
         command: ["./bash_script2.sh"]
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         volumeMounts:
         - mountPath: /processing_data/
           name: ucm-pv-storage
@@ -50,6 +55,10 @@ spec:
         command: ["/usr/bin/ucm"]
         args: ["consumer", "processor"]
         env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: RABBITMQ_USER
           value: "guest"
         - name: RABBITMQ_PASSWORD
@@ -71,7 +80,7 @@ spec:
         - name: IN_FILE_OUTPUT_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST_STARLIGHT
-          value: "/processing_data/starlight/runtime/processlist.txt"
+          value: "/processing_data/starlight/runtime/processlist-$(POD_NAME).txt"
         - name: PROCESS_LIST_STARLIGHT_PATH
           value: "/processing_data/starlight/runtime" 
         - name: PROCESS_LIST_PPXF
@@ -120,6 +129,10 @@ spec:
         command: ["/usr/bin/ucm"]
         args: ["watcher", "processor"]
         env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: RABBITMQ_USER
           value: "guest"
         - name: RABBITMQ_PASSWORD

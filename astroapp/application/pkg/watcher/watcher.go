@@ -206,7 +206,7 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 		}
 	}()
 
-	jobInfoDir := os.Getenv("BATCH_INFO_DIR")
+	jobInfoDir := common.GetBatchInfoDir()
 
 	log.Println("Checking for completed files...")
 
