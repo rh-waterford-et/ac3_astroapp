@@ -23,8 +23,8 @@ type ExperimentConfig struct {
 
 // ScalingConfig defines processor scaling parameters
 type ScalingConfig struct {
-	ProcessorCounts []int         `mapstructure:"processor_counts"` // Processor counts to test (runs dataset once per count)
-	StabilizeTime   time.Duration `mapstructure:"stabilize_time"`   // Time to wait after scaling before triggering processing
+	ProcessorCount int           `mapstructure:"processor_count"` // Number of processor pods to run
+	StabilizeTime  time.Duration `mapstructure:"stabilize_time"`  // Time to wait after scaling before triggering processing
 }
 
 // DatasetConfig defines a single dataset configuration
@@ -41,10 +41,11 @@ type WorkloadConfig struct {
 	ProcessorType string `mapstructure:"processor_type"`
 
 	// Multi-Dataset Mode (new)
-	Datasets              []DatasetConfig `mapstructure:"datasets"`
-	DatasetStartInterval  time.Duration   `mapstructure:"dataset_start_interval"`
-	MaxConcurrentDatasets int             `mapstructure:"max_concurrent_datasets"`
-	FailureStrategy       string          `mapstructure:"failure_strategy"` // "continue" | "abort_all"
+	Datasets        []DatasetConfig `mapstructure:"datasets"`
+	FailureStrategy string          `mapstructure:"failure_strategy"` // "continue" | "abort_all"
+
+	// Dataset Staggering (for multi-dataset mode)
+	DatasetStartInterval time.Duration `mapstructure:"dataset_start_interval"` // Delay between starting each dataset (prevents overwhelming producer pod)
 }
 
 // IsMultiDataset returns true if this is a multi-dataset configuration
@@ -79,21 +80,10 @@ func (w *WorkloadConfig) GetFailureStrategy() string {
 	return w.FailureStrategy
 }
 
-// GetMaxConcurrentDatasets returns the max concurrent datasets with a sensible default
-func (w *WorkloadConfig) GetMaxConcurrentDatasets() int {
-	if w.MaxConcurrentDatasets <= 0 {
-		if w.IsMultiDataset() {
-			return 3 // Default for multi-dataset mode
-		}
-		return 1 // Single dataset mode
-	}
-	return w.MaxConcurrentDatasets
-}
-
 // GetDatasetStartInterval returns the dataset start interval with a sensible default
 func (w *WorkloadConfig) GetDatasetStartInterval() time.Duration {
-	if w.DatasetStartInterval <= 0 {
-		return 1 * time.Minute // Default 1 minute between dataset starts
+	if w.DatasetStartInterval == 0 {
+		return 30 * time.Second // Default to 30 seconds between dataset starts
 	}
 	return w.DatasetStartInterval
 }
@@ -118,7 +108,4 @@ type InfrastructureConfig struct {
 	RedisHost     string `mapstructure:"redis_host"`
 	RedisPort     int    `mapstructure:"redis_port"`
 	RedisPassword string `mapstructure:"redis_password"`
-
-	// RabbitMQ Exporter
-	RabbitMQExporterURL string `mapstructure:"rabbitmq_exporter_url"`
 }

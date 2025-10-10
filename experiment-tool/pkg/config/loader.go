@@ -60,23 +60,17 @@ func setDefaults() {
 	viper.SetDefault("description", "UC3 autoscaling training data generation")
 
 	// Scaling defaults
-	viper.SetDefault("scaling.processor_counts", []int{1, 2, 3, 5, 7, 10})
+	viper.SetDefault("scaling.processor_count", 3)
 	viper.SetDefault("scaling.stabilize_time", "0s")
 
 	// Workload defaults
 	viper.SetDefault("workload.dataset", "NGC7025")
 	viper.SetDefault("workload.processor_type", "starlight")
-	viper.SetDefault("workload.batch_size", 10)
-	viper.SetDefault("workload.submission_rate", "30s")
-	viper.SetDefault("workload.job_size_variation", "mixed")
-	viper.SetDefault("workload.pauses_between_jobs", false)
+	viper.SetDefault("workload.failure_strategy", "continue")
+	viper.SetDefault("workload.dataset_start_interval", "30s")
 
 	// Metrics defaults
-	viper.SetDefault("metrics.collection_interval", "30s")
-	viper.SetDefault("metrics.export_format", "csv")
 	viper.SetDefault("metrics.output_directory", "./experiment-data")
-	viper.SetDefault("metrics.include_job_level", true)
-	viper.SetDefault("metrics.include_summary", true)
 
 	// Infrastructure defaults
 	viper.SetDefault("infrastructure.kube_config", "") // Use in-cluster config
@@ -87,5 +81,4 @@ func setDefaults() {
 	viper.SetDefault("infrastructure.redis_host", "localhost")
 	viper.SetDefault("infrastructure.redis_port", 6379)
 	viper.SetDefault("infrastructure.redis_password", "")
-	viper.SetDefault("infrastructure.rabbitmq_exporter_url", "http://localhost:9419/metrics")
 }

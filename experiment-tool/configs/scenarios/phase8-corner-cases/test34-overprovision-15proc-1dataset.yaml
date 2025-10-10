@@ -1,9 +1,10 @@
-# Quick Test Scenario - Minimal configuration for testing
-name: "quick-test"
-description: "Quick test with minimal processor scaling for development"
+# Test 34: Extreme Over-provisioning
+# Phase 8: Corner Cases & Edge
+name: "test34-extreme-over-provisioning"
+description: "Extreme over-provisioning"
 
 scaling:
-  processor_count: 1
+  processor_count: 10
   stabilize_time: "180s"
 
 workload:
@@ -19,4 +20,4 @@ infrastructure:
   uc3_api_base_url: "http://uc3-backend-service:8080"
   trigger_url: "http://uc3-backend-service:8081"
   redis_host: "redis"
-  redis_port: 6379 
+  redis_port: 6379

@@ -71,12 +71,23 @@ func showConfig(cfg *config.ExperimentConfig) {
 	fmt.Printf("  Description: %s\n", cfg.Description)
 
 	fmt.Printf("\nScaling Configuration:\n")
-	fmt.Printf("  Processor Counts: %v\n", cfg.Scaling.ProcessorCounts)
+	fmt.Printf("  Processor Count: %d\n", cfg.Scaling.ProcessorCount)
 	fmt.Printf("  Stabilize Time: %s\n", cfg.Scaling.StabilizeTime)
 
 	fmt.Printf("\nWorkload Configuration:\n")
-	fmt.Printf("  Dataset: %s\n", cfg.Workload.Dataset)
-	fmt.Printf("  Processor Type: %s\n", cfg.Workload.ProcessorType)
+	if cfg.Workload.IsMultiDataset() {
+		fmt.Printf("  Mode: Multi-Dataset\n")
+		fmt.Printf("  Datasets: %d\n", len(cfg.Workload.Datasets))
+		for i, ds := range cfg.Workload.Datasets {
+			fmt.Printf("    %d. %s (%s)\n", i+1, ds.Name, ds.ProcessorType)
+		}
+		fmt.Printf("  Failure Strategy: %s\n", cfg.Workload.GetFailureStrategy())
+		fmt.Printf("  Dataset Start Interval: %s\n", cfg.Workload.GetDatasetStartInterval())
+	} else {
+		fmt.Printf("  Mode: Single-Dataset\n")
+		fmt.Printf("  Dataset: %s\n", cfg.Workload.Dataset)
+		fmt.Printf("  Processor Type: %s\n", cfg.Workload.ProcessorType)
+	}
 
 	fmt.Printf("\nInfrastructure:\n")
 	fmt.Printf("  Namespace: %s\n", cfg.Infrastructure.Namespace)
@@ -101,21 +112,14 @@ func validateConfig(cfg *config.ExperimentConfig) {
 	}
 
 	// Validate scaling configuration
-	if len(cfg.Scaling.ProcessorCounts) == 0 {
-		fmt.Printf("❌ No processor counts specified\n")
+	if cfg.Scaling.ProcessorCount <= 0 {
+		fmt.Printf("❌ Invalid processor count: %d (must be > 0)\n", cfg.Scaling.ProcessorCount)
+		valid = false
+	} else if cfg.Scaling.ProcessorCount > 50 {
+		fmt.Printf("❌ Processor count %d exceeds safety limit of 50\n", cfg.Scaling.ProcessorCount)
 		valid = false
 	} else {
-		fmt.Printf("✅ Processor counts: %v\n", cfg.Scaling.ProcessorCounts)
-		for _, count := range cfg.Scaling.ProcessorCounts {
-			if count <= 0 {
-				fmt.Printf("❌ Invalid processor count: %d (must be > 0)\n", count)
-				valid = false
-			}
-			if count > 50 {
-				fmt.Printf("❌ Processor count %d exceeds safety limit of 50\n", count)
-				valid = false
-			}
-		}
+		fmt.Printf("✅ Processor count: %d\n", cfg.Scaling.ProcessorCount)
 	}
 
 	// Validate infrastructure

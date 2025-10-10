@@ -45,12 +45,7 @@ COPY --from=builder /app/configs ./configs
 COPY --from=builder /app/scripts ./scripts
 
 # Copy dataset files from host system
-COPY NGC7020 /app/datasets/NGC7020
-COPY NGC7021 /app/datasets/NGC7021
-COPY NGC7022 /app/datasets/NGC7022
-COPY NGC7023 /app/datasets/NGC7023
-COPY NGC7024 /app/datasets/NGC7024
-COPY NGC7025 /app/datasets/NGC7025
+COPY datasets /app/datasets/
 
 # Create directories for data and results
 RUN mkdir -p /app/experiment-data /app/test-results

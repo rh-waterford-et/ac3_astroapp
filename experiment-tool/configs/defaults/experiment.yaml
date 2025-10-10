@@ -7,13 +7,16 @@ description: "UC3 autoscaling training data generation experiment"
 
 # Processor scaling configuration
 scaling:
-  processor_counts: [1, 2, 3, 5, 7, 10]  # Processor counts to test (runs dataset once per count for ML training data)
-  stabilize_time: "0s"                   # Time to wait after scaling before triggering processing
+  processor_count: 3        # Number of processor pods to run
+  stabilize_time: "0s"      # Time to wait after scaling before triggering processing
 
 # Workload generation configuration
 workload:
-  dataset: "NGC7025"                # Dataset to process
+  dataset: "NGC7025"                # Dataset to process (single-dataset mode)
   processor_type: "starlight"      # "starlight" or "ppxf"
+  
+  # Multi-dataset staggering (for multi-dataset mode only)
+  dataset_start_interval: "30s"    # Delay between starting each dataset (prevents overwhelming producer pod)
 
 # Metrics collection configuration
 metrics:
@@ -33,7 +36,4 @@ infrastructure:
   # Redis connection
   redis_host: "localhost"
   redis_port: 6379
-  redis_password: ""
-
-  # RabbitMQ metrics
-  rabbitmq_exporter_url: "http://localhost:9419/metrics" 
+  redis_password: "" 

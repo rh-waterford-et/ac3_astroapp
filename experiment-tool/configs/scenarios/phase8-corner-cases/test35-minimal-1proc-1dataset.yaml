@@ -1,6 +1,7 @@
-# Quick Test Scenario - Minimal configuration for testing
-name: "quick-test"
-description: "Quick test with minimal processor scaling for development"
+# Test 35: Minimal Configuration
+# Phase 8: Corner Cases & Edge
+name: "test35-minimal-configuration"
+description: "Minimal configuration"
 
 scaling:
   processor_count: 1
@@ -19,4 +20,4 @@ infrastructure:
   uc3_api_base_url: "http://uc3-backend-service:8080"
   trigger_url: "http://uc3-backend-service:8081"
   redis_host: "redis"
-  redis_port: 6379 
+  redis_port: 6379

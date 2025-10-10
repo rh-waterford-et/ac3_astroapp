@@ -31,10 +31,9 @@ type MultiDatasetController struct {
 	experiment *collector.MultiDatasetExperiment
 
 	// Concurrency control
-	workerPool chan struct{} // Semaphore for max concurrent datasets
-	wg         sync.WaitGroup
-	ctx        context.Context
-	cancel     context.CancelFunc
+	wg     sync.WaitGroup
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // NewMultiDatasetController creates a new multi-dataset experiment controller
@@ -83,10 +82,6 @@ func NewMultiDatasetController(cfg *config.ExperimentConfig) (*MultiDatasetContr
 	// Create context for cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Create worker pool semaphore
-	maxConcurrent := cfg.Workload.GetMaxConcurrentDatasets()
-	workerPool := make(chan struct{}, maxConcurrent)
-
 	return &MultiDatasetController{
 		config:     cfg,
 		scaler:     k8sScaler,
@@ -95,7 +90,6 @@ func NewMultiDatasetController(cfg *config.ExperimentConfig) (*MultiDatasetContr
 		apiClient:  apiClient,
 		outputDir:  cfg.Metrics.OutputDirectory,
 		experiment: experiment,
-		workerPool: workerPool,
 		ctx:        ctx,
 		cancel:     cancel,
 	}, nil
@@ -105,38 +99,51 @@ func NewMultiDatasetController(cfg *config.ExperimentConfig) (*MultiDatasetContr
 func (mdc *MultiDatasetController) Run() error {
 	defer mdc.cancel() // Ensure cleanup on exit
 
-	log.Printf("[EXPERIMENT] Starting multi-dataset experiment with %d datasets",
-		mdc.experiment.GetTotalDatasetCount())
+	log.Printf("[EXPERIMENT] Starting with %d datasets", mdc.experiment.GetTotalDatasetCount())
 
-	// Step 1: Upload all datasets simultaneously (new optimized approach)
-	err := mdc.uploadAllDatasets()
+	// Step 1: Scale to configured processor count
+	processorCount := mdc.config.Scaling.ProcessorCount
+	log.Printf("[EXPERIMENT] Scaling to %d processors", processorCount)
+	err := mdc.scaler.Scale(mdc.ctx, int32(processorCount))
+	if err != nil {
+		return fmt.Errorf("failed to scale to %d processors: %w", processorCount, err)
+	}
+
+	// Wait for stabilization
+	if mdc.config.Scaling.StabilizeTime > 0 {
+		log.Printf("[EXPERIMENT] Waiting for stabilization (%s)", mdc.config.Scaling.StabilizeTime)
+		time.Sleep(mdc.config.Scaling.StabilizeTime)
+	}
+
+	// Step 2: Upload all datasets simultaneously (new optimized approach)
+	err = mdc.uploadAllDatasets()
 	if err != nil {
 		return fmt.Errorf("failed to upload datasets: %w", err)
 	}
 
-	// Step 2: Launch dataset processing with intervals
+	// Step 3: Launch dataset processing with intervals
 	err = mdc.launchDatasetProcessing()
 	if err != nil {
 		return fmt.Errorf("failed to launch dataset processing: %w", err)
 	}
 
-	// Step 3: Wait for all datasets to complete
+	// Step 4: Wait for all datasets to complete
 	mdc.wg.Wait()
 
-	// Step 4: Generate final reports
+	// Step 5: Generate final reports
 	err = mdc.generateFinalReports()
 	if err != nil {
 		return fmt.Errorf("failed to generate final reports: %w", err)
 	}
 
-	// Step 5: Clean up shared volumes
+	// Step 6: Clean up shared volumes
 	err = mdc.cleanupSharedVolumes()
 	if err != nil {
 		log.Printf("[EXPERIMENT] Warning: failed to cleanup shared volumes: %v", err)
 		// Don't fail the experiment for cleanup issues
 	}
 
-	log.Printf("[EXPERIMENT] Multi-dataset experiment completed successfully! Data saved to: %s", mdc.outputDir)
+	log.Printf("[EXPERIMENT] Completed! Data: %s", mdc.outputDir)
 	return nil
 }
 
@@ -192,7 +199,7 @@ func (mdc *MultiDatasetController) uploadAllDatasets() error {
 		}
 	}
 
-	log.Printf("[EXPERIMENT] Dataset upload phase completed: %d successful, %d failed", uploadedCount, failedCount)
+	log.Printf("[EXPERIMENT] Upload complete: %d ok, %d failed", uploadedCount, failedCount)
 
 	if uploadedCount == 0 {
 		return fmt.Errorf("all dataset uploads failed")
@@ -201,7 +208,7 @@ func (mdc *MultiDatasetController) uploadAllDatasets() error {
 	return nil
 }
 
-// launchDatasetProcessing starts processing datasets with staggered timing (uploads already done)
+// launchDatasetProcessing launches all ready datasets concurrently (uploads already done)
 func (mdc *MultiDatasetController) launchDatasetProcessing() error {
 	// Get only successfully uploaded datasets
 	datasets := mdc.experiment.GetAllDatasets()
@@ -217,40 +224,24 @@ func (mdc *MultiDatasetController) launchDatasetProcessing() error {
 		return fmt.Errorf("no datasets ready for processing")
 	}
 
-	interval := mdc.config.Workload.GetDatasetStartInterval()
-	log.Printf("[EXPERIMENT] Launching processing for %d datasets with %v intervals (max %d concurrent)",
-		len(readyDatasets), interval, cap(mdc.workerPool))
+	// Get staggering configuration
+	startInterval := mdc.config.Workload.GetDatasetStartInterval()
 
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	log.Printf("[EXPERIMENT] Launching %d datasets with %s interval between starts",
+		len(readyDatasets), startInterval)
 
-	// Launch first dataset immediately
-	first := true
-	for _, datasetExec := range readyDatasets {
-		if !first {
-			// Wait for interval before launching next dataset
-			select {
-			case <-ticker.C:
-				// Continue to launch next dataset
-			case <-mdc.ctx.Done():
-				return mdc.ctx.Err()
-			}
-		}
-		first = false
+	// Launch datasets with simple time delay between starts
+	for i, datasetExec := range readyDatasets {
+		mdc.wg.Add(1)
+		go mdc.processDatasetFromReady(datasetExec)
 
-		// Wait for available slot
-		select {
-		case mdc.workerPool <- struct{}{}:
-			// Got slot, launch dataset processing
-			mdc.wg.Add(1)
-			go mdc.processDatasetFromReady(datasetExec)
+		log.Printf("[%s] Dataset processing triggered (%d/%d)", datasetExec.Config.Name, i+1, len(readyDatasets))
 
-			log.Printf("[%s] Dataset processing queued for launch (active: %d/%d)",
-				datasetExec.Config.Name,
-				mdc.experiment.GetActiveCount()+1,
-				cap(mdc.workerPool))
-		case <-mdc.ctx.Done():
-			return mdc.ctx.Err()
+		// Wait before triggering next dataset (except for the last one)
+		// This prevents overwhelming the producer pod with simultaneous HTTP requests
+		if i < len(readyDatasets)-1 && startInterval > 0 {
+			log.Printf("[EXPERIMENT] Waiting %s before triggering next dataset...", startInterval)
+			time.Sleep(startInterval)
 		}
 	}
 
@@ -260,10 +251,9 @@ func (mdc *MultiDatasetController) launchDatasetProcessing() error {
 // processDatasetFromReady handles processing of a dataset that's already uploaded
 func (mdc *MultiDatasetController) processDatasetFromReady(datasetExec *collector.DatasetExecution) {
 	defer mdc.wg.Done()
-	defer func() { <-mdc.workerPool }() // Release slot
 
 	datasetName := datasetExec.Config.Name
-	log.Printf("[%s] Starting dataset processing (already uploaded)", datasetName)
+	log.Printf("[%s] Starting processing", datasetName)
 
 	mdc.experiment.IncrementActiveCount()
 	defer mdc.experiment.DecrementActiveCount()
@@ -287,13 +277,12 @@ func (mdc *MultiDatasetController) processDatasetFromReady(datasetExec *collecto
 	}
 	mdc.experiment.IncrementCompletedCount()
 
-	log.Printf("[%s] Dataset completed successfully (duration: %v)",
-		datasetName, datasetExec.Duration())
+	log.Printf("[%s] Completed (%v)", datasetName, datasetExec.Duration())
 }
 
 // uploadDataset uploads a single dataset and returns the experiment run
 func (mdc *MultiDatasetController) uploadDataset(datasetName, processorType string) (*collector.ExperimentRun, error) {
-	log.Printf("[%s] Uploading dataset...", datasetName)
+	log.Printf("[%s] Uploading...", datasetName)
 
 	// Dynamic path resolution for containerized environments
 	datasetPath := datasetName
@@ -340,11 +329,12 @@ func (mdc *MultiDatasetController) uploadDataset(datasetName, processorType stri
 		return nil, fmt.Errorf("failed to upload dataset: %w", err)
 	}
 
-	log.Printf("[%s] Dataset uploaded successfully (%d files)", datasetName, len(localDataset.Files))
+	log.Printf("[%s] Uploaded %d files", datasetName, len(localDataset.Files))
 
 	// Create ExperimentRun with uploaded file count
+	// Use the passed-in datasetName parameter to ensure correct naming
 	experimentRun, err := collector.NewExperimentRun(
-		localDataset.DatasetName,
+		datasetName,
 		processorType,
 		len(localDataset.Files),
 	)
@@ -355,90 +345,68 @@ func (mdc *MultiDatasetController) uploadDataset(datasetName, processorType stri
 	return experimentRun, nil
 }
 
-// runDatasetCycles processes a dataset through all scaling steps
+// runDatasetCycles processes a dataset once with the configured processor count
 func (mdc *MultiDatasetController) runDatasetCycles(datasetExec *collector.DatasetExecution) error {
 	datasetName := datasetExec.Config.Name
 	experimentRun := datasetExec.ExperimentRun
+	processorCount := mdc.config.Scaling.ProcessorCount
 
 	// Check if dataset is already completed (should not happen, but safety check)
 	if datasetExec.GetStatus() == collector.StatusCompleted {
-		log.Printf("[%s] Dataset already completed, skipping cycles", datasetName)
+		log.Printf("[%s] Dataset already completed, skipping", datasetName)
 		return nil
 	}
 
-	for i, processorCount := range mdc.config.Scaling.ProcessorCounts {
-		// Check if dataset was completed during this experiment (prevent multiple cycles)
-		if datasetExec.GetStatus() == collector.StatusCompleted {
-			log.Printf("[%s] Dataset completed during previous cycle, skipping remaining cycles", datasetName)
-			break
-		}
+	log.Printf("[%s] Processing with %d processors", datasetName, processorCount)
 
-		log.Printf("[%s] Running cycle %d/%d: %d processors",
-			datasetName, i+1, len(mdc.config.Scaling.ProcessorCounts), processorCount)
+	datasetExec.ProcessorCount = processorCount
 
-		datasetExec.ProcessorCount = processorCount
-
-		err := mdc.runSingleDatasetCycle(datasetExec, experimentRun, processorCount)
-		if err != nil {
-			return fmt.Errorf("cycle %d failed: %w", i+1, err)
-		}
-
-		log.Printf("[%s] Completed cycle %d/%d successfully",
-			datasetName, i+1, len(mdc.config.Scaling.ProcessorCounts))
+	err := mdc.runSingleDatasetCycle(datasetExec, experimentRun, processorCount)
+	if err != nil {
+		return fmt.Errorf("processing failed: %w", err)
 	}
 
-	// Mark dataset as completed only after ALL cycles finish
+	// Mark dataset as completed
 	datasetExec.SetStatus(collector.StatusCompleted)
-	log.Printf("[%s] All cycles completed, dataset marked as completed", datasetName)
+	log.Printf("[%s] Processing completed successfully", datasetName)
 
 	return nil
 }
 
-// runSingleDatasetCycle executes one scaling cycle for a dataset
+// runSingleDatasetCycle executes processing for a dataset
 func (mdc *MultiDatasetController) runSingleDatasetCycle(datasetExec *collector.DatasetExecution, experimentRun *collector.ExperimentRun, processorCount int) error {
 	ctx := mdc.ctx
 	datasetName := experimentRun.DatasetName
 
-	// Step 1: Scale to processor count (shared resource)
-	log.Printf("[%s] Scaling to %d processors...", datasetName, processorCount)
-	err := mdc.scaler.Scale(ctx, int32(processorCount))
-	if err != nil {
-		return fmt.Errorf("failed to scale to %d processors: %w", processorCount, err)
-	}
-
-	// Step 2: Wait for stabilization
-	log.Printf("[%s] Waiting for stabilization (%s)...", datasetName, mdc.config.Scaling.StabilizeTime)
-	time.Sleep(mdc.config.Scaling.StabilizeTime)
-
-	// Step 3: Trigger UC3 processing
-	log.Printf("[%s] Triggering processing...", datasetName)
-	err = mdc.apiClient.TriggerProcessing(datasetName, experimentRun.ProcessorType)
+	// Step 1: Trigger UC3 processing
+	log.Printf("[%s] Triggering", datasetName)
+	err := mdc.apiClient.TriggerProcessing(datasetName, experimentRun.ProcessorType)
 	if err != nil {
 		return fmt.Errorf("failed to trigger processing: %w", err)
 	}
 
-	// Step 4: Wait for S3 completion
+	// Step 2: Wait for S3 completion
 	err = mdc.s3Monitor.WaitForCompletionWithStatus(ctx, experimentRun, datasetExec)
 	if err != nil {
 		return fmt.Errorf("failed waiting for S3 completion: %w", err)
 	}
 
-	// Step 5: Wait for metrics aggregation
-	log.Printf("[%s] Waiting for metrics aggregation cycle...", datasetName)
+	// Step 3: Wait for metrics aggregation
+	log.Printf("[%s] Waiting for metrics", datasetName)
 	err = mdc.waitForMetricsAggregation(ctx, experimentRun, processorCount)
 	if err != nil {
 		return fmt.Errorf("failed waiting for metrics aggregation: %w", err)
 	}
 
-	log.Printf("[%s] Dataset processing completed (S3 files ready, metrics aggregated)", datasetName)
+	log.Printf("[%s] Processing done", datasetName)
 
-	// Step 6: Collect and export data for this dataset
+	// Step 4: Collect and export data for this dataset
 	err = mdc.collectAndExportDatasetData(ctx, processorCount, datasetName)
 	if err != nil {
 		return fmt.Errorf("failed to collect and export data: %w", err)
 	}
 
-	// Step 6b: Sort the dataset's job records CSV by queue_start_time
+	// Step 5: Sort the dataset's job records CSV by queue_start_time
 	jobRecordsPath := fmt.Sprintf("%s/%s_job_records_detailed.csv", mdc.outputDir, datasetName)
 	err = mdc.collector.SortJobRecordsCSV(jobRecordsPath)
 	if err != nil {
@@ -456,24 +424,17 @@ func (mdc *MultiDatasetController) runSingleDatasetCycle(datasetExec *collector.
 	return nil
 }
 
-// waitForMetricsAggregation waits for the 5-minute aggregation cycle (reuse existing logic)
+// waitForMetricsAggregation waits for the aggregation cycle to complete
 func (mdc *MultiDatasetController) waitForMetricsAggregation(ctx context.Context, experimentRun *collector.ExperimentRun, processorCount int) error {
-	// Reuse the existing logic from the single-dataset controller
-	// This is the same 5-minute wait logic we implemented before
-	aggregationInterval := 5 * time.Minute
-	maxWaitTime := 6 * time.Minute
+	// UC3 aggregates every 5 minutes, wait 5m30s to ensure we capture everything
+	waitTime := 5*time.Minute + 30*time.Second
 
-	log.Printf("[%s] Waiting for next aggregation cycle to capture all jobs...", experimentRun.DatasetName)
-	log.Printf("[%s] UC3 aggregates every %v, waiting up to %v", experimentRun.DatasetName, aggregationInterval, maxWaitTime)
+	log.Printf("[%s] Waiting for aggregation (%v)", experimentRun.DatasetName, waitTime)
 
 	waitStartTime := time.Now()
-	minimumWaitTime := aggregationInterval
 
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, maxWaitTime)
-	defer cancel()
 
 	jobRecordsPath := fmt.Sprintf("%s/%s_job_records_detailed.csv", mdc.outputDir, experimentRun.DatasetName)
 
@@ -485,52 +446,31 @@ func (mdc *MultiDatasetController) waitForMetricsAggregation(ctx context.Context
 
 	seenJobIDs := make(map[string]bool)
 
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			log.Printf("[%s] Timeout reached, proceeding with available job records", experimentRun.DatasetName)
-			return nil
-		case <-ticker.C:
-			timeWaited := time.Since(waitStartTime)
+	for range ticker.C {
+		timeWaited := time.Since(waitStartTime)
 
-			newJobCount, err := mdc.collector.AppendJobRecordsToCSV(ctx, experimentRun.DatasetName, jobRecordsPath, seenJobIDs, processorCount)
-			if err != nil {
-				log.Printf("[%s] Warning: failed to append job records: %v", experimentRun.DatasetName, err)
-			} else if newJobCount > 0 {
-				log.Printf("[%s] Appended %d new job records to %s", experimentRun.DatasetName, newJobCount, jobRecordsPath)
-				log.Printf("[%s] Collected %d new job records (total seen: %d)", experimentRun.DatasetName, newJobCount, len(seenJobIDs))
-			}
-
-			summaries, err := mdc.collector.GetBatchSummariesForDataset(ctx, experimentRun.DatasetName)
-			if err != nil {
-				log.Printf("[%s] Warning: failed to get batch summaries: %v", experimentRun.DatasetName, err)
-			}
-
-			totalJobs := 0
-			for _, summary := range summaries {
-				totalJobs += summary.JobCount
-			}
-
-			log.Printf("[%s] Current state: %d total jobs across %d summaries, %d individual records collected (waited %v/%v)",
-				experimentRun.DatasetName, totalJobs, len(summaries),
-				len(seenJobIDs), timeWaited.Round(time.Second), minimumWaitTime)
-
-			if timeWaited >= minimumWaitTime {
-				if len(seenJobIDs) > 0 {
-					log.Printf("[%s] Minimum wait time elapsed and job records collected! (%d individual jobs after %v)",
-						experimentRun.DatasetName, len(seenJobIDs), timeWaited.Round(time.Second))
-					return nil
-				} else {
-					log.Printf("[%s] Minimum wait time elapsed but no job records found - this may indicate an issue", experimentRun.DatasetName)
-					return nil
-				}
-			} else {
-				remainingWait := minimumWaitTime - timeWaited
-				log.Printf("[%s] Must wait at least %v more for next aggregation cycle...",
-					experimentRun.DatasetName, remainingWait.Round(time.Second))
-			}
+		newJobCount, err := mdc.collector.AppendJobRecordsToCSV(ctx, experimentRun.DatasetName, jobRecordsPath, seenJobIDs, processorCount)
+		if err != nil {
+			log.Printf("[%s] Failed to collect job records: %v", experimentRun.DatasetName, err)
+		} else if newJobCount > 0 {
+			log.Printf("[%s] Collected %d new jobs (total: %d)", experimentRun.DatasetName, newJobCount, len(seenJobIDs))
 		}
+
+		// Wait the full time for aggregation
+		if timeWaited >= waitTime {
+			if len(seenJobIDs) > 0 {
+				log.Printf("[%s] Aggregation complete: %d jobs after %v", experimentRun.DatasetName, len(seenJobIDs), timeWaited.Round(time.Second))
+			} else {
+				log.Printf("[%s] No job records found after %v", experimentRun.DatasetName, timeWaited.Round(time.Second))
+			}
+			return nil
+		}
+
+		remainingWait := waitTime - timeWaited
+		log.Printf("[%s] Waiting for aggregation: %d jobs, %v remaining", experimentRun.DatasetName, len(seenJobIDs), remainingWait.Round(time.Second))
 	}
+
+	return nil // Should never reach here, but satisfy return requirement
 }
 
 // initializeJobRecordsCSV creates a job records CSV file with proper headers
@@ -828,8 +768,6 @@ func (mdc *MultiDatasetController) generateExperimentSummary() error {
 		"failed_datasets",
 		"total_duration_seconds",
 		"failure_strategy",
-		"max_concurrent_datasets",
-		"dataset_start_interval_seconds",
 	}
 	if err := writer.Write(header); err != nil {
 		return fmt.Errorf("failed to write header: %w", err)
@@ -871,8 +809,6 @@ func (mdc *MultiDatasetController) generateExperimentSummary() error {
 		fmt.Sprintf("%d", failedDatasets),
 		fmt.Sprintf("%.2f", totalDuration.Seconds()),
 		mdc.config.Workload.GetFailureStrategy(),
-		fmt.Sprintf("%d", mdc.config.Workload.GetMaxConcurrentDatasets()),
-		fmt.Sprintf("%.0f", mdc.config.Workload.GetDatasetStartInterval().Seconds()),
 	}
 
 	if err := writer.Write(record); err != nil {

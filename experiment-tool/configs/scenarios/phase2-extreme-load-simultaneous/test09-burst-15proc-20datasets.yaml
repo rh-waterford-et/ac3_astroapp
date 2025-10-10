@@ -1,9 +1,10 @@
-# Multi-Dataset Test Scenario - Example of concurrent dataset processing
-name: "multi-dataset-test"
-description: "Test concurrent processing of multiple datasets with staggered starts"
+# Test 9: 1:1 Ratio Burst
+# Phase 2: Extreme Load - Simultaneous
+name: "test09-1:1-ratio-burst"
+description: "1:1 ratio - burst load"
 
 scaling:
-  processor_count: 15
+  processor_count: 8
   stabilize_time: "180s"
 
 workload:
@@ -28,12 +29,8 @@ workload:
       processor_type: "starlight"
     - name: "NGC7029"
       processor_type: "starlight"
-    - name: "NGC7030"
-      processor_type: "starlight"
   failure_strategy: "continue"
-  
-  # Stagger dataset starts to prevent overwhelming producer pod with simultaneous HTTP requests
-  dataset_start_interval: "45s"    # Wait 30 seconds between dataset trigger requests   
+  dataset_start_interval: "0s"
 
 metrics:
   output_directory: "/app/experiment-data"
@@ -44,4 +41,4 @@ infrastructure:
   uc3_api_base_url: "http://uc3-backend-service:8080"
   trigger_url: "http://uc3-backend-service:8081"
   redis_host: "redis"
-  redis_port: 6379 
+  redis_port: 6379

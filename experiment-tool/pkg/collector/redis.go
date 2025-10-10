@@ -47,7 +47,7 @@ func (rc *RedisCollector) TestConnection() error {
 
 	err := rc.redisClient.Ping(ctx)
 	if err != nil {
-		return fmt.Errorf("Redis ping failed: %w", err)
+		return fmt.Errorf("redis ping failed: %w", err)
 	}
 
 	return nil
