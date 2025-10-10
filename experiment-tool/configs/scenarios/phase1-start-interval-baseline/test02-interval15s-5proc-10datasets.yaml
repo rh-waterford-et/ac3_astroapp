@@ -1,6 +1,7 @@
 # Test 2: Short Interval
 # Phase 1: Start Interval Baseline
-name: "test02-short-interval"
+# Description: Short interval - 2.5 min to start all
+name: "test02-test02-interval15s-5proc-10datasets"
 description: "Short interval - 2.5 min to start all"
 
 scaling:
@@ -31,6 +32,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "15s"
+  job_size: 5
 
 metrics:
   output_directory: "/app/experiment-data"

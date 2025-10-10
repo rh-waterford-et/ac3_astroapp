@@ -1,7 +1,8 @@
 # Test 31: Medium Interval
 # Phase 7: Start Interval Sensitivity
-name: "test31-medium-interval"
-description: "Medium - 10 min total"
+# Description: Medium - 10 min medium-large jobs
+name: "test31-test31-interval30s-10proc-20datasets"
+description: "Medium - 10 min medium-large jobs"
 
 scaling:
   processor_count: 10
@@ -51,6 +52,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "30s"
+  job_size: 20
 
 metrics:
   output_directory: "/app/experiment-data"

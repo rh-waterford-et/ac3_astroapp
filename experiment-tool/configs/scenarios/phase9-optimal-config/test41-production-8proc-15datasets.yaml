@@ -1,7 +1,8 @@
 # Test 41: Production-Like
 # Phase 9: Optimal Configuration
-name: "test41-production-like"
-description: "Production-like scenario"
+# Description: Production-like - medium-large jobs
+name: "test41-test41-production-8proc-15datasets"
+description: "Production-like - medium-large jobs"
 
 scaling:
   processor_count: 8
@@ -41,6 +42,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "25s"
+  job_size: 20
 
 metrics:
   output_directory: "/app/experiment-data"

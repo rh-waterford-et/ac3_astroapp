@@ -1,7 +1,8 @@
 # Test 9: 1:1 Ratio Burst
 # Phase 2: Extreme Load - Simultaneous
-name: "test09-1:1-ratio-burst"
-description: "1:1 ratio - burst load"
+# Description: Balanced burst - very large jobs
+name: "test09-test09-burst-15proc-20datasets"
+description: "Balanced burst - very large jobs"
 
 scaling:
   processor_count: 8
@@ -31,6 +32,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "0s"
+  job_size: 34
 
 metrics:
   output_directory: "/app/experiment-data"

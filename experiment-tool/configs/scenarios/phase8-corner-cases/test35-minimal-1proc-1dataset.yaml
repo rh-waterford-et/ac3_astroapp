@@ -1,6 +1,7 @@
 # Test 35: Minimal Configuration
 # Phase 8: Corner Cases & Edge
-name: "test35-minimal-configuration"
+# Description: Minimal configuration
+name: "test35-test35-minimal-1proc-1dataset"
 description: "Minimal configuration"
 
 scaling:
@@ -8,8 +9,9 @@ scaling:
   stabilize_time: "180s"
 
 workload:
-  dataset: "/app/datasets/NGC7020"
+  dataset: "NGC7020"
   processor_type: "starlight"
+  job_size: 5
 
 metrics:
   output_directory: "/app/experiment-data"

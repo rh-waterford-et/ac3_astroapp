@@ -1,6 +1,7 @@
 # Test 1: Simultaneous Start
 # Phase 1: Start Interval Baseline
-name: "test01-simultaneous-start"
+# Description: Simultaneous start - burst load test
+name: "test01-test01-burst-5proc-10datasets"
 description: "Simultaneous start - burst load test"
 
 scaling:
@@ -31,6 +32,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "0s"
+  job_size: 5
 
 metrics:
   output_directory: "/app/experiment-data"

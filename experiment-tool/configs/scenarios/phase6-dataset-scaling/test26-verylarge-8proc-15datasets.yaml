@@ -1,6 +1,7 @@
 # Test 26: Very Large Multi-Dataset
 # Phase 6: Dataset Scaling
-name: "test26-very-large-multi-dataset"
+# Description: Very large multi-dataset
+name: "test26-test26-verylarge-8proc-15datasets"
 description: "Very large multi-dataset"
 
 scaling:
@@ -41,6 +42,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "30s"
+  job_size: 5
 
 metrics:
   output_directory: "/app/experiment-data"

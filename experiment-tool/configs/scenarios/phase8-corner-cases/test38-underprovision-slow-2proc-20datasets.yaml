@@ -1,6 +1,7 @@
 # Test 38: Extreme Under-provision Slow Start
 # Phase 8: Corner Cases & Edge
-name: "test38-extreme-under-provision-slow-start"
+# Description: Extreme under-provisioning + very slow starts
+name: "test38-test38-underprovision-slow-2proc-20datasets"
 description: "Extreme under-provisioning + very slow starts"
 
 scaling:
@@ -51,6 +52,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "120s"
+  job_size: 5
 
 metrics:
   output_directory: "/app/experiment-data"

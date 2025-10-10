@@ -1,6 +1,7 @@
 # Test 27: Maximum Multi-Dataset
 # Phase 6: Dataset Scaling
-name: "test27-maximum-multi-dataset"
+# Description: Maximum multi-dataset
+name: "test27-test27-max-8proc-20datasets"
 description: "Maximum multi-dataset"
 
 scaling:
@@ -51,6 +52,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "30s"
+  job_size: 5
 
 metrics:
   output_directory: "/app/experiment-data"

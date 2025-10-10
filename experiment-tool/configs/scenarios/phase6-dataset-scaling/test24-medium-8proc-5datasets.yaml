@@ -1,6 +1,7 @@
 # Test 24: Medium Multi-Dataset
 # Phase 6: Dataset Scaling
-name: "test24-medium-multi-dataset"
+# Description: Medium multi-dataset
+name: "test24-test24-medium-8proc-5datasets"
 description: "Medium multi-dataset"
 
 scaling:
@@ -21,6 +22,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "30s"
+  job_size: 5
 
 metrics:
   output_directory: "/app/experiment-data"

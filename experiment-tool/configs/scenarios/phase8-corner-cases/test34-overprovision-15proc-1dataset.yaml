@@ -1,6 +1,7 @@
 # Test 34: Extreme Over-provisioning
 # Phase 8: Corner Cases & Edge
-name: "test34-extreme-over-provisioning"
+# Description: Extreme over-provisioning
+name: "test34-test34-overprovision-15proc-1dataset"
 description: "Extreme over-provisioning"
 
 scaling:
@@ -8,8 +9,9 @@ scaling:
   stabilize_time: "180s"
 
 workload:
-  dataset: "/app/datasets/NGC7020"
+  dataset: "NGC7020"
   processor_type: "starlight"
+  job_size: 5
 
 metrics:
   output_directory: "/app/experiment-data"

@@ -1,7 +1,8 @@
 # Test 36: Large Jobs Burst Near-Max
 # Phase 8: Corner Cases & Edge
-name: "test36-large-jobs-burst-near-max"
-description: "Large jobs + simultaneous + near-max processors"
+# Description: Very large jobs + simultaneous burst
+name: "test36-test36-largejobs-burst-12proc-20datasets"
+description: "Very large jobs + simultaneous burst"
 
 scaling:
   processor_count: 5
@@ -51,6 +52,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "0s"
+  job_size: 68
 
 metrics:
   output_directory: "/app/experiment-data"

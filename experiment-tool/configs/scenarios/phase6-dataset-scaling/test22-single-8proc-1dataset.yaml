@@ -1,6 +1,7 @@
 # Test 22: Single Dataset
 # Phase 6: Dataset Scaling
-name: "test22-single-dataset"
+# Description: Single dataset baseline
+name: "test22-test22-single-8proc-1dataset"
 description: "Single dataset baseline"
 
 scaling:
@@ -8,8 +9,9 @@ scaling:
   stabilize_time: "180s"
 
 workload:
-  dataset: "/app/datasets/NGC7020"
+  dataset: "NGC7020"
   processor_type: "starlight"
+  job_size: 5
 
 metrics:
   output_directory: "/app/experiment-data"

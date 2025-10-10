@@ -1,6 +1,7 @@
 # Test 14: Single Processor Baseline
 # Phase 4: Processor Scaling Discovery
-name: "test14-single-processor-baseline"
+# Description: Baseline - single processor
+name: "test14-test14-baseline-1proc-10datasets"
 description: "Baseline - single processor"
 
 scaling:
@@ -31,6 +32,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "30s"
+  job_size: 5
 
 metrics:
   output_directory: "/app/experiment-data"

@@ -1,7 +1,8 @@
 # Test 8: Moderate Provisioning
 # Phase 2: Extreme Load - Simultaneous
-name: "test08-moderate-provisioning"
-description: "Moderate provisioning"
+# Description: Moderate provisioning - large jobs
+name: "test08-test08-moderate-8proc-20datasets"
+description: "Moderate provisioning - large jobs"
 
 scaling:
   processor_count: 5
@@ -51,6 +52,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "0s"
+  job_size: 20
 
 metrics:
   output_directory: "/app/experiment-data"

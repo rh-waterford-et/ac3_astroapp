@@ -1,6 +1,7 @@
 # Test 16: 2:1 Dataset Ratio
 # Phase 4: Processor Scaling Discovery
-name: "test16-2:1-dataset-ratio"
+# Description: 2:1 ratio
+name: "test16-test16-ratio2to1-5proc-10datasets"
 description: "2:1 ratio"
 
 scaling:
@@ -31,6 +32,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "30s"
+  job_size: 5
 
 metrics:
   output_directory: "/app/experiment-data"

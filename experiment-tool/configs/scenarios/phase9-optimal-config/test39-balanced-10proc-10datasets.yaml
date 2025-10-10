@@ -1,6 +1,7 @@
 # Test 39: Balanced 1:1 Short Stagger
 # Phase 9: Optimal Configuration
-name: "test39-balanced-1:1-short-stagger"
+# Description: Balanced - 1:1 ratio short stagger medium jobs
+name: "test39-test39-balanced-10proc-10datasets"
 description: "Balanced - 1:1 ratio short stagger medium jobs"
 
 scaling:
@@ -31,6 +32,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "20s"
+  job_size: 10
 
 metrics:
   output_directory: "/app/experiment-data"

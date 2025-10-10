@@ -1,7 +1,8 @@
 # Test 13: 1:1 Ratio Staggered
 # Phase 3: Gradual Load - Staggered
-name: "test13-1:1-ratio-staggered"
-description: "1:1 ratio - staggered"
+# Description: Well-provisioned - very large jobs
+name: "test13-test13-perfect-15proc-20datasets-60s"
+description: "Well-provisioned - very large jobs"
 
 scaling:
   processor_count: 10
@@ -51,6 +52,7 @@ workload:
       processor_type: "starlight"
   failure_strategy: "continue"
   dataset_start_interval: "60s"
+  job_size: 68
 
 metrics:
   output_directory: "/app/experiment-data"
