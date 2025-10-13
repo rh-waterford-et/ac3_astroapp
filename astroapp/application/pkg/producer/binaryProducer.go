@@ -38,7 +38,12 @@ func NewBinaryProducer(jobSize int, fileSource FileSource, batchQueue chan api.B
 
 // CreateBinaryBatch handles binary batch processing for PPXF
 func (bp *BinaryProducer) CreateBinaryBatch(appName string, side string, queue queue.QueueInterface, batchQueue chan api.BinaryBatch) {
+	// Channel to signal when sender goroutine is done
+	done := make(chan struct{})
+
 	go func() {
+		defer close(done) // Signal completion
+
 		for batch := range batchQueue {
 			log.Printf("Sending binary batch (ID: %s, JobID: %s) with %d files\n", batch.ID, batch.JobID, len(batch.Files))
 			bp.SendBinaryBatch(batch, appName, side, queue)
@@ -46,6 +51,13 @@ func (bp *BinaryProducer) CreateBinaryBatch(appName string, side string, queue q
 	}()
 
 	bp.ProcessBinaryFiles(appName)
+
+	// Close channel to signal no more batches
+	close(batchQueue)
+
+	// Wait for sender goroutine to finish processing all batches
+	<-done
+	log.Printf("Completed processing for binary job: %s", bp.BatchID)
 }
 
 // SendBinaryBatch sends binary batchs via RabbitMQ (handles .fits files safely)

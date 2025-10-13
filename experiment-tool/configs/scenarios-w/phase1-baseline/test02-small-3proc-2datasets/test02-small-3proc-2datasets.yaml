@@ -1,0 +1,30 @@
+# Test 2: Small Scale
+# Phase 1: Baseline Discovery
+# Description: Small scale - low resource
+name: "test02-test02-small-3proc-2datasets"
+description: "Small scale - low resource"
+
+scaling:
+  processor_count: 3
+  stabilize_time: "180s"
+
+workload:
+  datasets:
+    - name: "NGC7020"
+      processor_type: "starlight"
+    - name: "NGC7021"
+      processor_type: "starlight"
+  failure_strategy: "continue"
+  dataset_start_interval: "30s"
+  job_size: 8
+
+metrics:
+  output_directory: "/app/experiment-data"
+
+infrastructure:
+  namespace: "uc3-applications"
+  deployment_name: "ucm-processor-deployment"
+  uc3_api_base_url: "http://uc3-backend-service:8080"
+  trigger_url: "http://uc3-backend-service:8081"
+  redis_host: "redis"
+  redis_port: 6379

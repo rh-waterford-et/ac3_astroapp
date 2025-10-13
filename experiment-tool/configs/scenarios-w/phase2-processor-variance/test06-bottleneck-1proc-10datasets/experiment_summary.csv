@@ -1,0 +1,2 @@
+experiment_name,total_datasets,completed_datasets,failed_datasets,total_duration_seconds,failure_strategy
+test06-test06-bottleneck-1proc-10datasets,10,10,0,9965.10,continue

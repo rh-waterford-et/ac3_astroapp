@@ -77,6 +77,9 @@ func (p *Producer) CreateBatch(appName string, side string, q queue.QueueInterfa
 		log.Printf("WARNING: Batches will be processed but not sent to RabbitMQ - jobs will be lost!")
 	}
 
+	// Channel to signal when sender goroutine is done
+	done := make(chan struct{})
+
 	go func() {
 		// Panic recovery to prevent pod crashes
 		defer func() {
@@ -85,6 +88,7 @@ func (p *Producer) CreateBatch(appName string, side string, q queue.QueueInterfa
 				log.Printf("Stack trace available in container logs")
 				// Don't exit - allow the watcher to continue processing other datasets
 			}
+			close(done) // Signal completion
 		}()
 
 		for batch := range p.BatchQueue {
@@ -105,6 +109,13 @@ func (p *Producer) CreateBatch(appName string, side string, q queue.QueueInterfa
 	}()
 
 	p.ProcessFiles(appName)
+
+	// Close channel to signal no more batches
+	close(p.BatchQueue)
+
+	// Wait for sender goroutine to finish processing all batches
+	<-done
+	log.Printf("Completed processing for job: %s", p.BatchID)
 }
 
 func (p *Producer) AddFile(file api.DataFile, appName string) {

@@ -1,0 +1,1 @@
+batch_id,job_id,queue_start_time,queue_receive_time,job_end_time,queue_duration_seconds,processing_duration_seconds,total_duration_seconds,job_size_mb,processor_count,queue_ahead_length

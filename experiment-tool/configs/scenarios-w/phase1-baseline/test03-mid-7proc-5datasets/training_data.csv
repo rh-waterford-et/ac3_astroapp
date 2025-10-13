@@ -1,0 +1,6 @@
+processors,dataset,batch_count,job_count,avg_queue_time_seconds,avg_processing_time_seconds
+7,NGC7020,1,5,256.457026,95.769542
+7,NGC7024,1,3,284.922603,82.726196
+7,NGC7021,1,1,323.417692,119.658071
+7,NGC7022,1,4,337.403536,77.675461
+7,NGC7023,1,9,238.871700,75.350576

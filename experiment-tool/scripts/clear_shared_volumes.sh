@@ -2,7 +2,8 @@
 
 # Script to clear UC3 shared volume directories for fresh experiment runs
 # Assumes you're already logged into OpenShift
-# Preserves processlist.txt and mask.txt files
+# Deletes: batch_info dirs, processlist files, .in files, all data files
+# Preserves: mask.txt only (processlist files are recreated by active pods)
 
 set -e  # Exit on any error
 
@@ -64,14 +65,38 @@ echo "🚀 Starting cleanup..."
 
 # Clear batch_info files (including per-pod directories)
 echo "🗑️  Clearing batch_info files (including per-pod directories)..."
-batch_info_count=$(oc exec $POD_NAME -n $NAMESPACE -c starlight -- find "/processing_data/" -type d -name "batch_info*" -exec find {} -name "*.txt" \; 2>/dev/null | wc -l)
+batch_info_count=$(oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'find /processing_data -type d -name "batch_info*" 2>/dev/null | wc -l')
 
 if [ "$batch_info_count" -eq 0 ]; then
-    echo "   ✅ batch_info files already empty"
+    echo "   ✅ batch_info directories already empty"
 else
-    echo "   📁 Found $batch_info_count files to delete"
-    oc exec $POD_NAME -n $NAMESPACE -c starlight -- find "/processing_data/" -type d -name "batch_info*" -exec find {} -name "*.txt" -delete \;
-    echo "   ✅ Cleared $batch_info_count files from batch_info directories"
+    echo "   📁 Found $batch_info_count batch_info directories"
+    oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'rm -rf /processing_data/batch_info* 2>/dev/null'
+    echo "   ✅ Cleared all batch_info directories"
+fi
+
+# Clear processlist files (from old pods)
+echo "🗑️  Clearing old processlist files..."
+processlist_count=$(oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'find /processing_data -name "processlist*.txt" 2>/dev/null | wc -l')
+
+if [ "$processlist_count" -eq 0 ]; then
+    echo "   ✅ No processlist files to clear"
+else
+    echo "   📁 Found $processlist_count processlist files to delete"
+    oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'find /processing_data -name "processlist*.txt" -delete'
+    echo "   ✅ Cleared $processlist_count processlist files (will be recreated by active pods)"
+fi
+
+# Clear .in files (job input files)
+echo "🗑️  Clearing old .in files..."
+infile_count=$(oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'find /processing_data/starlight/runtime/infiles -name "*.in" 2>/dev/null | wc -l')
+
+if [ "$infile_count" -eq 0 ]; then
+    echo "   ✅ No .in files to clear"
+else
+    echo "   📁 Found $infile_count .in files to delete"
+    oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'rm -f /processing_data/starlight/runtime/infiles/*.in'
+    echo "   ✅ Cleared $infile_count .in files"
 fi
 
 # Clear starlight directories
@@ -99,19 +124,16 @@ clear_directory_with_exclusions "/processing_data/ppxf/data/processed/" "ppxf pr
 echo ""
 echo "🔍 Verifying cleanup..."
 
-# Count remaining files (excluding protected files: processlist.txt, processlist-*.txt, mask.txt)
-total_remaining=$(oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'find /processing_data/ -name "*.txt" | grep -v -E "(processlist.*\.txt|mask\.txt)"' 2>/dev/null | wc -l)
-protected_files=$(oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'find /processing_data/ -name "*.txt" | grep -E "(processlist.*\.txt|mask\.txt)"' 2>/dev/null | wc -l)
+# Count remaining files (excluding only mask.txt)
+total_remaining=$(oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'find /processing_data/ -name "*.txt" ! -name "mask.txt" 2>/dev/null | wc -l')
 
 if [ "$total_remaining" -eq 0 ]; then
     echo "✅ SUCCESS: All experiment files cleared! (0 files remaining)"
-    if [ "$protected_files" -gt 0 ]; then
-        echo "   📋 Protected files preserved: $protected_files (processlist*.txt, mask.txt)"
-    fi
+    echo "   📋 Protected: mask.txt only"
 else
-    echo "⚠️  WARNING: $total_remaining experiment files still remain"
-    echo "   Listing remaining files (excluding protected files):"
-    oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'find /processing_data/ -name "*.txt" | grep -v -E "(processlist.*\.txt|mask\.txt)"' 2>/dev/null | head -20
+    echo "⚠️  WARNING: $total_remaining files still remain"
+    echo "   Listing remaining files:"
+    oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'find /processing_data/ -name "*.txt" ! -name "mask.txt"' 2>/dev/null | head -20
     if [ "$total_remaining" -gt 20 ]; then
         echo "   ... and $((total_remaining - 20)) more files"
     fi
@@ -120,5 +142,5 @@ fi
 echo ""
 echo "🎉 Shared volume cleanup completed!"
 echo "   Pod used: $POD_NAME"
-echo "   Protected files: processlist*.txt, mask.txt (preserved)"
-echo "   Ready for fresh experiment run" 
+echo "   Protected: mask.txt only"
+echo "   Note: Active pods will recreate their processlist files automatically" 

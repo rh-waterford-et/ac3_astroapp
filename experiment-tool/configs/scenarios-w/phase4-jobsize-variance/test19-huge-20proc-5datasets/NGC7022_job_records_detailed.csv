@@ -1,0 +1,3 @@
+batch_id,job_id,queue_start_time,queue_receive_time,job_end_time,queue_duration_seconds,processing_duration_seconds,total_duration_seconds,job_size_mb,processor_count,queue_ahead_length
+NGC7022,6a0c0014-d786-465b-9661-5d28dde5c4e4,2025-10-12T13:23:10.284829866Z,2025-10-12T13:23:10.365507296Z,2025-10-12T13:28:09.852062521Z,0.080677,299.486555,299.567233,8.14,20,0
+NGC7022,bb3efc4f-c3b8-4ea5-bfb9-94364a0305a1,2025-10-12T13:23:34.981558638Z,2025-10-12T13:23:35.232359328Z,2025-10-12T13:28:36.492782039Z,0.250801,301.260423,301.511223,8.13,20,0

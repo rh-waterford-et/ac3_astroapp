@@ -1,0 +1,28 @@
+# Test 11: Single Dataset Stress
+# Phase 3: Dataset Variance
+# Description: All processors - 1 dataset
+name: "test11-test11-single-20proc-1dataset"
+description: "All processors - 1 dataset"
+
+scaling:
+  processor_count: 20
+  stabilize_time: "180s"
+
+workload:
+  datasets:
+    - name: "NGC7020"
+      processor_type: "starlight"
+  failure_strategy: "continue"
+  dataset_start_interval: "0s"
+  job_size: 68
+
+metrics:
+  output_directory: "/app/experiment-data"
+
+infrastructure:
+  namespace: "uc3-applications"
+  deployment_name: "ucm-processor-deployment"
+  uc3_api_base_url: "http://uc3-backend-service:8080"
+  trigger_url: "http://uc3-backend-service:8081"
+  redis_host: "redis"
+  redis_port: 6379

@@ -1,0 +1,2 @@
+dataset,processor_type,start_time,completion_time,duration_seconds,status,processor_count,error_message
+NGC7020,starlight,2025-10-11T21:33:38.50075017Z,2025-10-11T22:01:33.086879735Z,1674.59,COMPLETED,20,

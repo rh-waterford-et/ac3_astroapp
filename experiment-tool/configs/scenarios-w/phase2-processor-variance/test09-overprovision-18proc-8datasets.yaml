@@ -1,0 +1,42 @@
+# Test 9: Over-provisioned
+# Phase 2: Processor Variance
+# Description: Over-provisioned - fast completion
+name: "test09-test09-overprovision-18proc-8datasets"
+description: "Over-provisioned - fast completion"
+
+scaling:
+  processor_count: 18
+  stabilize_time: "180s"
+
+workload:
+  datasets:
+    - name: "NGC7020"
+      processor_type: "starlight"
+    - name: "NGC7021"
+      processor_type: "starlight"
+    - name: "NGC7022"
+      processor_type: "starlight"
+    - name: "NGC7023"
+      processor_type: "starlight"
+    - name: "NGC7024"
+      processor_type: "starlight"
+    - name: "NGC7025"
+      processor_type: "starlight"
+    - name: "NGC7026"
+      processor_type: "starlight"
+    - name: "NGC7027"
+      processor_type: "starlight"
+  failure_strategy: "continue"
+  dataset_start_interval: "20s"
+  job_size: 34
+
+metrics:
+  output_directory: "/app/experiment-data"
+
+infrastructure:
+  namespace: "uc3-applications"
+  deployment_name: "ucm-processor-deployment"
+  uc3_api_base_url: "http://uc3-backend-service:8080"
+  trigger_url: "http://uc3-backend-service:8081"
+  redis_host: "redis"
+  redis_port: 6379

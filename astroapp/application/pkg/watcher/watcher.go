@@ -117,12 +117,12 @@ func (w *Watcher) RunProducer(appName string, jobName string, side string, utils
 		// Check if this app needs binary processing (PPXF)
 		if api.IsAppBinary(appName) {
 			log.Printf("Using binary processing for %s (prbatchs .fits corruption)", appName)
-			binaryBatchQueue := make(chan api.BinaryBatch, 10)
+			binaryBatchQueue := make(chan api.BinaryBatch, 100)
 			binaryProducer := producer.NewBinaryProducer(jobSize, fileSource, binaryBatchQueue, utils, side, batchID)
 			binaryProducer.CreateBinaryBatch(appName, side, queue, binaryBatchQueue)
 		} else {
 			log.Printf("Using standard text processing for %s", appName)
-			batchQueue := make(chan api.Batch, 10)
+			batchQueue := make(chan api.Batch, 100)
 			standardProducer := producer.NewProducer(jobSize, fileSource, batchQueue, utils, side, batchID, redisClient)
 			standardProducer.CreateBatch(appName, side, queue)
 		}
@@ -336,12 +336,12 @@ func (w *Watcher) ProcessJob(appName string, side string, utils common.UtilsInte
 	// Check if this app needs binary processing (PPXF)
 	if api.IsAppBinary(appName) {
 		log.Printf("Using binary processing for %s (prbatchs .fits corruption)", appName)
-		binaryBatchQueue := make(chan api.BinaryBatch, 10)
+		binaryBatchQueue := make(chan api.BinaryBatch, 100)
 		binaryProducer := producer.NewBinaryProducer(jobSize, fileSource, binaryBatchQueue, utils, side, batchID)
 		binaryProducer.CreateBinaryBatch(appName, side, queue, binaryBatchQueue)
 	} else {
 		log.Printf("Using standard text processing for %s", appName)
-		batchQueue := make(chan api.Batch, 10)
+		batchQueue := make(chan api.Batch, 100)
 		standardProducer := producer.NewProducer(jobSize, fileSource, batchQueue, utils, side, batchID, redisClient)
 		standardProducer.CreateBatch(appName, side, queue)
 	}
