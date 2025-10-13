@@ -241,6 +241,14 @@ func LaunchAggregator() {
 	metricsStore := metrics.NewMetricsStore(redisClient, 168*time.Hour)
 	aggregationService := metrics.NewAggregationService(metricsStore, 5*time.Minute)
 
+	log.Printf("🔄 Starting Prometheus /metrics endpoint")
+	go func() {
+		if err := metrics.StartMetricsServer(":9090", metricsStore); err != nil {
+			log.Fatalf("Metrics server failed: %v", err)
+		}
+	}()
+	time.Sleep(1 * time.Second) // Give server time to start
+	log.Printf("🔄 Started Prometheus /metrics endpoint on :9090")
 	// Start aggregation service in background (only on processor side to avoid duplication)
 	if aggregationService != nil {
 		ctx := context.Background()

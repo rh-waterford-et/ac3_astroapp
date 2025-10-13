@@ -24,8 +24,7 @@ type MetricRecord struct {
 
 	JobSizeMB float64 `json:"job_size_mb"` // Size of job in MB
 
-	JobQueueAheadLength int     `json:"job_queue_ahead_length"`
-
+	JobQueueAheadLength int `json:"job_queue_ahead_length"`
 }
 
 type MetricsStore struct {
@@ -59,7 +58,7 @@ func (ms *MetricsStore) getBatchPattern(batchID string) string {
 	return fmt.Sprintf("%s:%s:*", ms.keyPrefix, batchID)
 }
 
-func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) error {
+/*func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) error {
 	ms.calculateDurations(metric)
 	key := ms.GetJobKey(metric.BatchID, metric.JobID)
 
@@ -94,7 +93,7 @@ func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) 
 	}
 
 	return nil
-}
+}*/
 
 func (ms *MetricsStore) calculateDurations(metric *MetricRecord) {
 	metric.IsComplete = false
@@ -232,7 +231,7 @@ func (ms *MetricsStore) UpdateMetricField(ctx context.Context, batchID, field, j
 	switch v := value.(type) {
 	case time.Time:
 		log.Printf("DEBUG: UpdateMetricField - key: %s, field: %s, value: %s", key, field, v.Format(time.RFC3339Nano))
-		
+
 		// Read current value to enforce monotonic policy for time fields
 		currentMap, err := ms.redis.HGetAll(ctx, key)
 		if err != nil {
@@ -272,7 +271,7 @@ func (ms *MetricsStore) UpdateMetricField(ctx context.Context, batchID, field, j
 
 	case float64:
 		log.Printf("DEBUG: UpdateMetricField - key: %s, field: %s, value: %.2f", key, field, v)
-		
+
 		// For job_size_mb field, just set the value directly
 		if field == "job_size_mb" {
 			err = ms.redis.HSet(ctx, key, field, v)
@@ -285,7 +284,7 @@ func (ms *MetricsStore) UpdateMetricField(ctx context.Context, batchID, field, j
 
 	case int:
 		log.Printf("DEBUG: UpdateMetricField - key: %s, field: %s, value: %d", key, field, v)
-		
+
 		// For job_queue_ahead_length field, set the integer value
 		if field == "job_queue_ahead_length" {
 			err = ms.redis.HSet(ctx, key, field, v)

@@ -22,20 +22,20 @@ type ReceiverInterface interface {
 }
 
 type Receiver struct {
-	Queue       queue.QueueInterface
-	Utils       common.UtilsInterface
-	Bucket      s3bucket.S3BucketInterface
-	RedisClient *metrics.RedisClient
-	ProcessingMessage  bool
+	Queue             queue.QueueInterface
+	Utils             common.UtilsInterface
+	Bucket            s3bucket.S3BucketInterface
+	RedisClient       *metrics.RedisClient
+	ProcessingMessage bool
 }
 
 func NewReceiver(queue queue.QueueInterface, utils common.UtilsInterface, bucket s3bucket.S3BucketInterface, redisClient *metrics.RedisClient) *Receiver {
 	return &Receiver{
-		Queue:       queue,
-		Utils:       utils,
-		Bucket:      bucket,
-		RedisClient: redisClient,
-		ProcessingMessage:  false,
+		Queue:             queue,
+		Utils:             utils,
+		Bucket:            bucket,
+		RedisClient:       redisClient,
+		ProcessingMessage: false,
 	}
 }
 
@@ -108,14 +108,13 @@ func (r *Receiver) ProcessMessages(queueName string, side string) {
 
 	log.Printf("PROCESSING QUEUE: %s (%d messages)", queueName, queueInfo.Messages)
 
-
-	d, ok, err := r.Queue.GetOne(queueName) 
+	d, ok, err := r.Queue.GetOne(queueName)
 	if err != nil {
 		log.Printf("GET ERROR: %v", err)
 		return
 	}
 	if !ok {
-		return 
+		return
 	}
 	r.ProcessingMessage = true
 	r.ProcessMessage(d, side)
@@ -146,15 +145,16 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	r.processStandardMessage(d, side, appName, batchID, jobID)
 }
 
-func (r *Receiver) finalizeBatchProcessing(d amqp.Delivery, side, appName, batchID, jobID string, successCount int, batchSize int32) {
-	if successCount == int(batchSize) {
+func (r *Receiver) finalizeJobProcessing(d amqp.Delivery, side, appName, batchID, jobID string, successCount int, jobSize int32) {
+	if successCount == int(jobSize) {
 		err := d.Ack(false)
 		if err != nil {
 			log.Printf("│ ERROR ack: %v", err)
 		}
-		log.Printf("│ ✔ Successfully processed all %d files", batchSize)
+		log.Printf("│ ✔ Successfully processed all %d files", jobSize)
 
 		if side == "producer" && r.RedisClient != nil {
+			log.Printf("Recording Job End Time")
 			r.recordJobEndTime(batchID, jobID)
 		}
 		if side == "processor" {
@@ -166,7 +166,7 @@ func (r *Receiver) finalizeBatchProcessing(d amqp.Delivery, side, appName, batch
 		}
 		r.updateProgress(appName, jobID, api.StageComplete, 100.0)
 	} else {
-		log.Printf("│ ⚠ Processed %d/%d files successfully", successCount, batchSize)
+		log.Printf("│ ⚠ Processed %d/%d files successfully", successCount, jobSize)
 		err := d.Nack(false, true)
 		if err != nil {
 			log.Printf("│ ERROR nack: %v", err)
