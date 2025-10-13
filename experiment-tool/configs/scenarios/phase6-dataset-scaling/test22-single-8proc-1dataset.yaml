@@ -1,0 +1,25 @@
+# Test 22: Single Dataset
+# Phase 6: Dataset Scaling
+# Description: Single dataset baseline
+name: "test22-test22-single-8proc-1dataset"
+description: "Single dataset baseline"
+
+scaling:
+  processor_count: 8
+  stabilize_time: "180s"
+
+workload:
+  dataset: "NGC7020"
+  processor_type: "starlight"
+  job_size: 5
+
+metrics:
+  output_directory: "/app/experiment-data"
+
+infrastructure:
+  namespace: "uc3-applications"
+  deployment_name: "ucm-processor-deployment"
+  uc3_api_base_url: "http://uc3-backend-service:8080"
+  trigger_url: "http://uc3-backend-service:8081"
+  redis_host: "redis"
+  redis_port: 6379

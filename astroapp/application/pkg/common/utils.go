@@ -22,6 +22,23 @@ type UtilsInterface interface {
 
 type Utils struct{}
 
+// GetBatchInfoDir returns the per-pod batch_info directory path
+func GetBatchInfoDir() string {
+	baseDir := os.Getenv("BATCH_INFO_DIR")
+	podName := os.Getenv("POD_NAME")
+	
+	if baseDir == "" {
+		baseDir = "/processing_data/batch_info"
+	}
+	
+	// If POD_NAME is set, use per-pod directory
+	if podName != "" {
+		return fmt.Sprintf("%s-%s", baseDir, podName)
+	}
+	
+	return baseDir
+}
+
 func (u *Utils) GenerateUUID() string {
 	return uuid.New().String()
 }
@@ -66,7 +83,7 @@ func (u *Utils) EnsureDirectoriesExist() error {
 		os.Getenv("PROCESSED_STECKMAP"),
 		os.Getenv("PROCESSED_STARLIGHT"),
 		os.Getenv("PROCESSED_PPXF"),
-		os.Getenv("BATCH_INFO_DIR"),
+		GetBatchInfoDir(), // Use per-pod batch_info directory
 		os.Getenv("PROCESS_LIST_STARLIGHT_PATH"),
 		os.Getenv("PROCESS_LIST_PPXF_PATH"),
 	}

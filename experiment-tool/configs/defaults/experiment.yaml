@@ -1,0 +1,39 @@
+# UC3 Autoscaling Experiment Configuration
+# This file demonstrates all available configuration options
+
+# Experiment metadata
+name: "uc3-autoscaling-experiment"
+description: "UC3 autoscaling training data generation experiment"
+
+# Processor scaling configuration
+scaling:
+  processor_count: 3        # Number of processor pods to run
+  stabilize_time: "0s"      # Time to wait after scaling before triggering processing
+
+# Workload generation configuration
+workload:
+  dataset: "NGC7025"                # Dataset to process (single-dataset mode)
+  processor_type: "starlight"      # "starlight" or "ppxf"
+  
+  # Multi-dataset staggering (for multi-dataset mode only)
+  dataset_start_interval: "30s"    # Delay between starting each dataset (prevents overwhelming producer pod)
+
+# Metrics collection configuration
+metrics:
+  output_directory: "./experiment-data"
+
+# Infrastructure connection details
+infrastructure:
+  # Kubernetes configuration
+  kube_config: ""                  # Path to kubeconfig file (empty = in-cluster)
+  namespace: "uc3-applications"
+  deployment_name: "ucm-processor-deployment"
+
+  # UC3 API endpoints
+  uc3_api_base_url: "http://localhost:8080"
+  trigger_url: "http://localhost:8081"
+
+  # Redis connection
+  redis_host: "localhost"
+  redis_port: 6379
+  redis_password: "" 

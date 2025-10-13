@@ -1,0 +1,56 @@
+# Test 27: Imbalanced Load
+# Phase 6: Mixed Stress Tests
+# Description: Severe under-provision
+name: "test27-test27-imbalanced-3proc-15datasets"
+description: "Severe under-provision"
+
+scaling:
+  processor_count: 3
+  stabilize_time: "180s"
+
+workload:
+  datasets:
+    - name: "NGC7020"
+      processor_type: "starlight"
+    - name: "NGC7021"
+      processor_type: "starlight"
+    - name: "NGC7022"
+      processor_type: "starlight"
+    - name: "NGC7023"
+      processor_type: "starlight"
+    - name: "NGC7024"
+      processor_type: "starlight"
+    - name: "NGC7025"
+      processor_type: "starlight"
+    - name: "NGC7026"
+      processor_type: "starlight"
+    - name: "NGC7027"
+      processor_type: "starlight"
+    - name: "NGC7028"
+      processor_type: "starlight"
+    - name: "NGC7029"
+      processor_type: "starlight"
+    - name: "NGC7030"
+      processor_type: "starlight"
+    - name: "NGC7031"
+      processor_type: "starlight"
+    - name: "NGC7032"
+      processor_type: "starlight"
+    - name: "NGC7033"
+      processor_type: "starlight"
+    - name: "NGC7034"
+      processor_type: "starlight"
+  failure_strategy: "continue"
+  dataset_start_interval: "45s"
+  job_size: 8
+
+metrics:
+  output_directory: "/app/experiment-data"
+
+infrastructure:
+  namespace: "uc3-applications"
+  deployment_name: "ucm-processor-deployment"
+  uc3_api_base_url: "http://uc3-backend-service:8080"
+  trigger_url: "http://uc3-backend-service:8081"
+  redis_host: "redis"
+  redis_port: 6379

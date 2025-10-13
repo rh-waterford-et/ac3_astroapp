@@ -31,6 +31,13 @@ func NewWatcher() *Watcher {
 }
 
 func (w *Watcher) RunProducer(appName string, jobName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
+	// Add panic recovery to prevent pod crashes
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in RunProducer for app %s, job %s: %v", appName, jobName, r)
+			log.Printf("Processing will continue for other jobs/datasets")
+		}
+	}()
 
 	inputDirEnv := "EXPLORED_" + appName
 	outputDirEnv := "OUTPUT_" + appName
@@ -106,16 +113,16 @@ func (w *Watcher) RunProducer(appName string, jobName string, side string, utils
 
 	if shouldProcess {
 		log.Printf("Processing %s files...\n", appName)
-	
+
 		// Check if this app needs binary processing (PPXF)
 		if api.IsAppBinary(appName) {
 			log.Printf("Using binary processing for %s (prbatchs .fits corruption)", appName)
-			binaryBatchQueue := make(chan api.BinaryBatch, 10)
+			binaryBatchQueue := make(chan api.BinaryBatch, 100)
 			binaryProducer := producer.NewBinaryProducer(jobSize, fileSource, binaryBatchQueue, utils, side, batchID)
 			binaryProducer.CreateBinaryBatch(appName, side, queue, binaryBatchQueue)
 		} else {
 			log.Printf("Using standard text processing for %s", appName)
-			batchQueue := make(chan api.Batch, 10)
+			batchQueue := make(chan api.Batch, 100)
 			standardProducer := producer.NewProducer(jobSize, fileSource, batchQueue, utils, side, batchID, redisClient)
 			standardProducer.CreateBatch(appName, side, queue)
 		}
@@ -123,6 +130,13 @@ func (w *Watcher) RunProducer(appName string, jobName string, side string, utils
 }
 
 func (w *Watcher) RunForSingleFile(appName string, jobName string, fileName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
+	// Add panic recovery to prevent pod crashes
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in RunForSingleFile for app %s, job %s, file %s: %v", appName, jobName, fileName, r)
+			log.Printf("Processing will continue for other files/jobs")
+		}
+	}()
 
 	inputDirEnv := "EXPLORED_" + appName
 	outputDirEnv := "OUTPUT_" + appName
@@ -184,7 +198,15 @@ func (w *Watcher) RunForSingleFile(appName string, jobName string, fileName stri
 }
 
 func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
-	jobInfoDir := os.Getenv("BATCH_INFO_DIR")
+	// Add panic recovery to prevent pod crashes
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in RunProcessor main loop: %v", r)
+			log.Printf("RunProcessor has stopped - this is a critical error")
+		}
+	}()
+
+	jobInfoDir := common.GetBatchInfoDir()
 
 	log.Println("Checking for completed files...")
 
@@ -196,15 +218,25 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 		} else {
 			//log.Printf("DEBUG: Found %d files in %s", len(files), jobInfoDir)
 			for _, file := range files {
-				//log.Printf("DEBUG: Processing file: %s", file.Name())
-				filePath := filepath.Join(jobInfoDir, file.Name())
-				//log.Printf("DEBUG: File path: %s", filePath)
-				if err := w.processJobFile(filePath, side, utils, queue, redisClient); err != nil {
-					log.Printf("Error processing job file %s: %v\n", filePath, err)
-					continue
-				}
-				log.Printf("DEBUG: Successfully processed job file %s, removing file", filePath)
-				os.Remove(filePath)
+				// Wrap each file processing in panic recovery
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							log.Printf("PANIC RECOVERED while processing job file %s: %v", file.Name(), r)
+							log.Printf("Skipping this file and continuing with others")
+						}
+					}()
+
+					//log.Printf("DEBUG: Processing file: %s", file.Name())
+					filePath := filepath.Join(jobInfoDir, file.Name())
+					//log.Printf("DEBUG: File path: %s", filePath)
+					if err := w.processJobFile(filePath, side, utils, queue, redisClient); err != nil {
+						log.Printf("Error processing job file %s: %v\n", filePath, err)
+						return
+					}
+					log.Printf("DEBUG: Successfully processed job file %s, removing file", filePath)
+					os.Remove(filePath)
+				}()
 			}
 		}
 
@@ -260,17 +292,16 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 			sourcePath := filepath.Join(inputDir, fileName)
 			if _, err := os.Stat(sourcePath); err == nil {
 				time.Sleep(2 * time.Second)
-					content, err := os.ReadFile(sourcePath)
-					if err != nil {
-						return fmt.Errorf("failed to read file %s: %w", fileName, err)
-					}
-					job = append(job, api.DataFile{Name: fileName, Content: string(content)})
+				content, err := os.ReadFile(sourcePath)
+				if err != nil {
+					return fmt.Errorf("failed to read file %s: %w", fileName, err)
+				}
+				job = append(job, api.DataFile{Name: fileName, Content: string(content)})
 
-					destPath := filepath.Join(processedDir, fileName)
-					if err := os.Rename(sourcePath, destPath); err != nil {
-						return fmt.Errorf("failed to move file %s: %w", fileName, err)
-					}
-				
+				destPath := filepath.Join(processedDir, fileName)
+				if err := os.Rename(sourcePath, destPath); err != nil {
+					return fmt.Errorf("failed to move file %s: %w", fileName, err)
+				}
 
 			} else {
 				remaining = append(remaining, fileName)
@@ -305,12 +336,12 @@ func (w *Watcher) ProcessJob(appName string, side string, utils common.UtilsInte
 	// Check if this app needs binary processing (PPXF)
 	if api.IsAppBinary(appName) {
 		log.Printf("Using binary processing for %s (prbatchs .fits corruption)", appName)
-		binaryBatchQueue := make(chan api.BinaryBatch, 10)
+		binaryBatchQueue := make(chan api.BinaryBatch, 100)
 		binaryProducer := producer.NewBinaryProducer(jobSize, fileSource, binaryBatchQueue, utils, side, batchID)
 		binaryProducer.CreateBinaryBatch(appName, side, queue, binaryBatchQueue)
 	} else {
 		log.Printf("Using standard text processing for %s", appName)
-		batchQueue := make(chan api.Batch, 10)
+		batchQueue := make(chan api.Batch, 100)
 		standardProducer := producer.NewProducer(jobSize, fileSource, batchQueue, utils, side, batchID, redisClient)
 		standardProducer.CreateBatch(appName, side, queue)
 	}

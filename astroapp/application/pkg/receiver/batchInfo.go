@@ -6,8 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-)
 
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
+)
 
 // clearProcessList removes all entries from the process list file on startup
 // This only runs once per deployment using a lock file mechanism
@@ -76,7 +77,7 @@ func (r *Receiver) clearProcessList(processListPath string) {
 }
 func (r *Receiver) createBatchInfoFile(appName, batchID, jobID, filenamesHeader string) error {
 
-	filePath := filepath.Join(os.Getenv("BATCH_INFO_DIR"), jobID+".txt")
+	filePath := filepath.Join(common.GetBatchInfoDir(), jobID+".txt")
 
 	filenames := strings.Split(filenamesHeader, ",")
 	var cleanFilenames []string
@@ -106,23 +107,22 @@ func (r *Receiver) createBatchInfoFile(appName, batchID, jobID, filenamesHeader 
 
 func (r *Receiver) checkProcessLists() (bool, error) {
 
-	
 	processLists := []string{os.Getenv("PROCESS_LIST_STARLIGHT"), os.Getenv("PROCESS_LIST_PPXF")}
-	
+
 	allEmpty := true
 	for _, processList := range processLists {
-		
+
 		entries, err := r.GetProcessListEntries(processList)
 		if err != nil {
 			return false, err
 		}
-		
+
 		if len(entries) > 0 {
 			//log.Printf("Process list %s has %d entries", processList, len(entries))
-            allEmpty = false
-        }
-    }
-    return allEmpty, nil
+			allEmpty = false
+		}
+	}
+	return allEmpty, nil
 
 }
 func (r *Receiver) GetProcessListEntries(path string) ([]string, error) {

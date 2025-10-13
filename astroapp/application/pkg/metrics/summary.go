@@ -16,8 +16,8 @@ type BatchSummary struct {
 
 	CompleteJobCount int `json:"complete_job_count"`
 
-	AvgJobQueueTime           time.Duration `json:"avg_job_queue_time"`        
-	AvgJobProcessingTime      time.Duration `json:"avg_job_processing_time"`   
+	AvgJobQueueTime      time.Duration `json:"avg_job_queue_time"`
+	AvgJobProcessingTime time.Duration `json:"avg_job_processing_time"`
 }
 
 func (ms *MetricsStore) GetBatchSummaryKey(batchID string) string {
@@ -37,8 +37,8 @@ func (ms *MetricsStore) StoreBatchSummary(ctx context.Context, summary *BatchSum
 
 		"complete_job_count": summary.CompleteJobCount,
 
-		"avg_job_queue_time_s":           summary.AvgJobQueueTime.Seconds(),
-		"avg_job_processing_time_s":      summary.AvgJobProcessingTime.Seconds(),
+		"avg_job_queue_time_s":      summary.AvgJobQueueTime.Seconds(),
+		"avg_job_processing_time_s": summary.AvgJobProcessingTime.Seconds(),
 	}
 
 	err := ms.redis.HSet(ctx, key, values)
@@ -72,6 +72,10 @@ func (ms *MetricsStore) GetBatchSummary(ctx context.Context, batchID string) (*B
 
 	if data["job_count"] != "" {
 		fmt.Sscanf(data["job_count"], "%d", &summary.JobCount)
+	}
+
+	if data["complete_job_count"] != "" {
+		fmt.Sscanf(data["complete_job_count"], "%d", &summary.CompleteJobCount)
 	}
 
 	parseTime := func(field string) (time.Time, error) {

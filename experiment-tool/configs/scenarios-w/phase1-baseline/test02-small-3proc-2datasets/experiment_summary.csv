@@ -1,0 +1,2 @@
+experiment_name,total_datasets,completed_datasets,failed_datasets,total_duration_seconds,failure_strategy
+test02-test02-small-3proc-2datasets,2,2,0,1433.69,continue

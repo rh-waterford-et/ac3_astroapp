@@ -12,6 +12,10 @@ spec:
       app: ucm-processor
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
       labels:
         app: ucm-processor
     spec:
@@ -25,16 +29,21 @@ spec:
         persistentVolumeClaim:
           claimName: ucm-pv-claim
       containers:
-      - image: quay.io/rh-ee-kromashk/ucm-starlight
+      - image: quay.io/bcapper30/starlight
         name: starlight
         workingDir: /docker/starlight/STARLIGHTv04
         command: ["./bash_script2.sh"]
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         volumeMounts:
         - mountPath: /processing_data/
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/bcapper30/uc3-backend:latest
         name: receiver-processor
         workingDir: /processing_data/
         volumeMounts:
@@ -45,6 +54,10 @@ spec:
         command: ["/usr/bin/ucm"]
         args: ["consumer", "processor"]
         env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: RABBITMQ_USER
           value: "guest"
         - name: RABBITMQ_PASSWORD
@@ -62,11 +75,11 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-provider"
+          value: "test-consumer"
         - name: IN_FILE_OUTPUT_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST_STARLIGHT
-          value: "/processing_data/starlight/runtime/processlist.txt"
+          value: "/processing_data/starlight/runtime/processlist-$(POD_NAME).txt"
         - name: PROCESS_LIST_STARLIGHT_PATH
           value: "/processing_data/starlight/runtime" 
         - name: PROCESS_LIST_PPXF
@@ -109,12 +122,16 @@ spec:
           value: ""
         ports:
         - containerPort: 5672  
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/bcapper30/uc3-backend:latest
         name: watcher-processor
         workingDir: /processing_data/
         command: ["/usr/bin/ucm"]
         args: ["watcher", "processor"]
         env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: RABBITMQ_USER
           value: "guest"
         - name: RABBITMQ_PASSWORD
@@ -134,7 +151,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-provider"
+          value: "test-consumer"
         - name: EXPLORED_STARLIGHT
           value: "/processing_data/starlight/data/output"
         - name: OUTPUT_STARLIGHT

@@ -1,0 +1,36 @@
+# Test 29: Production Light
+# Phase 7: Optimal Configs
+# Description: Production-like - light load
+name: "test29-test29-prodlight-10proc-5datasets"
+description: "Production-like - light load"
+
+scaling:
+  processor_count: 10
+  stabilize_time: "180s"
+
+workload:
+  datasets:
+    - name: "NGC7020"
+      processor_type: "starlight"
+    - name: "NGC7021"
+      processor_type: "starlight"
+    - name: "NGC7022"
+      processor_type: "starlight"
+    - name: "NGC7023"
+      processor_type: "starlight"
+    - name: "NGC7024"
+      processor_type: "starlight"
+  failure_strategy: "continue"
+  dataset_start_interval: "30s"
+  job_size: 21
+
+metrics:
+  output_directory: "/app/experiment-data"
+
+infrastructure:
+  namespace: "uc3-applications"
+  deployment_name: "ucm-processor-deployment"
+  uc3_api_base_url: "http://uc3-backend-service:8080"
+  trigger_url: "http://uc3-backend-service:8081"
+  redis_host: "redis"
+  redis_port: 6379

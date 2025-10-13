@@ -2,7 +2,7 @@
 IMAGE_NAME = quay.io/bcapper30/uc3-backend:latest
 DOCKERFILE = containerfile
 PRODUCER_DEPLOYMENT = ucm-producer-deployment
-PROCESSOR_DEPLOYMENT = starlight
+PROCESSOR_DEPLOYMENT = ucm-processor-deployment
 NAMESPACE = uc3-applications
 
 .PHONY: build push deploy rebuild status clean help

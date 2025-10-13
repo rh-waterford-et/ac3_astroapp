@@ -120,23 +120,26 @@ func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, batchI
 	// Process message body
 	msgBody, ok := r.processMessageBody(d, jobID, jobSize)
 	if !ok {
-		return
+		log.Printf("processMessageBody not OK, exiting?")
+		return //THIS IS BAD, Throw Error!!
 	}
 
 	// Determine output path based on side and app
 	outputPath := r.getOutputPath(side, appName)
 	if outputPath == "" {
-		return
+		log.Printf("outputPath could not be determined?")
+		return //THIS IS BAD, Throw Error!!
 	}
 
 	// Process files
+	log.Printf("processFiles")
 	successCount, inFileName, inFileContent, spectrumFiles := r.processFiles(msgBody, side, appName, outputPath)
 
 	// Handle application-specific processing
 	r.handleApplicationProcessing(side, appName, jobID, successCount, jobSize, inFileName, inFileContent, spectrumFiles)
 
 	// Finalize batch processing
-	r.finalizeBatchProcessing(d, side, appName, batchID, jobID, successCount, jobSize)
+	r.finalizeJobProcessing(d, side, appName, batchID, jobID, successCount, jobSize)
 }
 
 // ProcessBinaryMessage handles binary events for PPXF (prevents .fits corruption)
@@ -149,7 +152,7 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 	if !ok {
 		return
 	}
-	
+
 	jobSizeMB := r.calculateBinaryJobSizeMB(d.Body, filenames)
 	if batchID, ok := d.Headers["batch_id"].(string); ok && jobSizeMB > 0 && r.RedisClient != nil && side == "processor" {
 		r.recordJobSize(batchID, jobID, jobSizeMB)

@@ -2,26 +2,18 @@
 
 set -x
 
+# Get pod-specific processlist path
+POD_NAME="${POD_NAME:-default}"
+PROCESS_FILE="/processing_data/starlight/runtime/processlist-${POD_NAME}.txt"
+
+# Ensure processlist file exists
+touch "$PROCESS_FILE"
+
 # Configuration
-BASE_DIR=""
-
 INFILES_DIR="/processing_data/starlight/runtime/infiles"
-PROCESS_FILE=""
-WORK_DIR="$BASE_DIR/workdir"
-
-#!/bin/bash
-
-
-set -x
-
-# Ruta al ejecutable y al archivo de entrada
 EXECUTABLE="/docker/starlight/STARLIGHTv04/StarlightChains_v04.amd64_g77-3.4.6-r1_static.exe"
-#INPUT_FILE="/starlight/config_files_starlight/grid_example.in"
-#DATA_FILE_FLAG="/starlight/start_starlight"
-PROCESS_FILE="/processing_data/starlight/runtime/processlist.txt"
 
-# API server URL for progress updates
-API_URL="http://uc3-backend-service:8080/api/progress/update"
+echo "Using pod-specific processlist: $PROCESS_FILE"
 
 removeInFileFromList(){
     echo "before"
@@ -29,22 +21,6 @@ removeInFileFromList(){
     sed -i '1d' $PROCESS_FILE
     echo "after"
     cat $PROCESS_FILE
-}
-
-# Function to send progress update
-send_progress_update() {
-    local dataset_id="$1"
-    local stage="$2"
-    local progress="$3"
-    
-    curl -s -X POST "$API_URL" \
-        -H "Content-Type: application/json" \
-        -d "{
-            \"dataset_id\": \"$dataset_id\",
-            \"dataset_name\": \"STARLIGHT\",
-            \"stage\": \"$stage\",
-            \"progress\": $progress
-        }" || echo "Failed to send progress update"
 }
 
 # Verificar si el ejecutable existe
@@ -56,9 +32,9 @@ send_progress_update() {
 
 while :
 do
-    echo "Reading Next Line"
-    read -r firstline</processing_data/starlight/runtime/processlist.txt
-    echo "NEXT FILE = "$firstline
+    echo "Reading Next Line from $PROCESS_FILE"
+    read -r firstline<"$PROCESS_FILE"
+    echo "NEXT FILE = $firstline"
 
     if [[ "$firstline" = "" ]]; then # TODO fix this to check for empty values properly
     ##TODO CROSS CHECK FILE IS PRESENT
@@ -66,23 +42,12 @@ do
     else
         echo "Starting Application with input " /processing_data/starlight/runtime/infiles/$firstline
         
-        # Extract dataset ID from filename for progress tracking
-        dataset_id=$(basename "$firstline" .in)
-        
-        # Send progress update: Analysis starting
-        send_progress_update "$dataset_id" "analysis" 70.0
-        
         #./StarlightChains_v04.amd64_g77-3.4.6-r1_static.exe < /processing_data/starlight/grid_example.in
         ./StarlightChains_v04.amd64_g77-3.4.6-r1_static.exe < /processing_data/starlight/runtime/infiles/$firstline
         exit_code=$?
 
         if [ $exit_code -ne 0 ]; then
             echo "Error"
-            # Send progress update: Error
-            send_progress_update "$dataset_id" "error" 0.0
-        else
-            # Send progress update: Analysis complete
-            send_progress_update "$dataset_id" "complete" 100.0
         fi
         
         echo "Removing Start Flag"

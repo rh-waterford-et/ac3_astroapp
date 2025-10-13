@@ -1,0 +1,52 @@
+# Test 34: Odd Ratios
+# Phase 8: Edge Cases
+# Description: Odd numbers - no patterns
+name: "test34-test34-odd-9proc-13datasets"
+description: "Odd numbers - no patterns"
+
+scaling:
+  processor_count: 9
+  stabilize_time: "180s"
+
+workload:
+  datasets:
+    - name: "NGC7020"
+      processor_type: "starlight"
+    - name: "NGC7021"
+      processor_type: "starlight"
+    - name: "NGC7022"
+      processor_type: "starlight"
+    - name: "NGC7023"
+      processor_type: "starlight"
+    - name: "NGC7024"
+      processor_type: "starlight"
+    - name: "NGC7025"
+      processor_type: "starlight"
+    - name: "NGC7026"
+      processor_type: "starlight"
+    - name: "NGC7027"
+      processor_type: "starlight"
+    - name: "NGC7028"
+      processor_type: "starlight"
+    - name: "NGC7029"
+      processor_type: "starlight"
+    - name: "NGC7030"
+      processor_type: "starlight"
+    - name: "NGC7031"
+      processor_type: "starlight"
+    - name: "NGC7032"
+      processor_type: "starlight"
+  failure_strategy: "continue"
+  dataset_start_interval: "37s"
+  job_size: 19
+
+metrics:
+  output_directory: "/app/experiment-data"
+
+infrastructure:
+  namespace: "uc3-applications"
+  deployment_name: "ucm-processor-deployment"
+  uc3_api_base_url: "http://uc3-backend-service:8080"
+  trigger_url: "http://uc3-backend-service:8081"
+  redis_host: "redis"
+  redis_port: 6379

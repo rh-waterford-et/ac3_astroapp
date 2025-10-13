@@ -13,6 +13,7 @@ import (
 type Server struct {
 	fileUploadHandler *api.FileUploadHandler
 	progressTracker   *api.ProgressTracker
+	//prometheusMetrics *metrics.PrometheusMetrics
 }
 
 func NewServer() *Server {
@@ -21,18 +22,24 @@ func NewServer() *Server {
 	// Initialize progress tracker
 	progressTracker := api.NewProgressTracker()
 
+	// Initialize Prometheus metrics
+	//prometheusMetrics := metrics.NewPrometheusMetrics()
+
 	fileUploadHandler := api.NewFileUploadHandler(s3Bucket, progressTracker)
 
 	return &Server{
 		fileUploadHandler: fileUploadHandler,
 		progressTracker:   progressTracker,
+		//prometheusMetrics: prometheusMetrics,
 	}
 }
 
 func (s *Server) setupRoutes() {
+	// Prometheus metrics endpoint
+	//http.Handle("/metrics", promhttp.Handler())
+
 	// File upload endpoint
 	http.HandleFunc("/api/upload", s.fileUploadHandler.UploadFile)
-
 	// List datasets endpoint
 	http.HandleFunc("/api/datasets", s.fileUploadHandler.ListDatasets)
 
@@ -64,7 +71,7 @@ func (s *Server) setupRoutes() {
 	http.HandleFunc("/api/files/delete", s.fileUploadHandler.DeleteFile)
 
 	// Download file endpoint
-	log.Printf("🔧 Registering download endpoint: /api/files/download")
+	log.Printf("�� Registering download endpoint: /api/files/download")
 	http.HandleFunc("/api/files/download", s.fileUploadHandler.DownloadFile)
 	log.Printf("✅ Download endpoint registered successfully")
 
@@ -91,6 +98,7 @@ func (s *Server) Start() {
 	s.setupRoutes()
 
 	log.Printf("Starting HTTP server on port %s", port)
+	log.Printf("Prometheus metrics endpoint: http://localhost:%s/metrics", port)
 	log.Printf("File upload endpoint: http://localhost:%s/api/upload", port)
 	log.Printf("List datasets endpoint: http://localhost:%s/api/datasets", port)
 	log.Printf("List dataset files endpoint: http://localhost:%s/api/datasets/files", port)

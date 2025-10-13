@@ -1,0 +1,2 @@
+batch_id,job_count,complete_job_count,first_job_queue_start_time,last_job_end_time,total_batch_duration_seconds,avg_queue_time_seconds,avg_processing_time_seconds
+NGC7023,4,4,2025-10-12T20:11:22.374357403Z,2025-10-12T20:30:27.33619613Z,1144.961839,903.079503,117.785718

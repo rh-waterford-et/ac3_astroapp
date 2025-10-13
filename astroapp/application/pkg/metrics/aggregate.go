@@ -29,7 +29,7 @@ func (as *AggregationService) Run(ctx context.Context) {
 	ticker := time.NewTicker(as.interval)
 	defer ticker.Stop()
 
-	//log.Printf("Starting metrics aggregation service with interval %v", as.interval)
+	log.Printf("Starting metrics aggregation service with interval %v", as.interval)
 
 	for {
 		select {
@@ -48,7 +48,7 @@ func (as *AggregationService) Run(ctx context.Context) {
 func (ms *MetricsStore) AggregateBatchMetrics(ctx context.Context, batchID string) (*BatchSummary, error) {
 	jobes, err := ms.GetBatchJobes(ctx, batchID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get batch jobes: %w", err)
+		return nil, fmt.Errorf("failed to get batch jobs: %w", err)
 	}
 
 	if len(jobes) == 0 {
@@ -119,9 +119,11 @@ func (ms *MetricsStore) AggregateAndStoreBatchSummary(ctx context.Context, batch
 		return nil, err
 	}
 
-	if err := ms.CleanupJobes(ctx, batchID, timeParam, "complete_only"); err != nil {
-		log.Printf("failed to cleanup jobes for batch %s: %v", batchID, err)
-	}
+	// Removed for now to allow prometheus to read Job details before they are removed, please evaulate if still needed
+	// TODO possibly introduce a timed job to clean down the Redis data
+	// if err := ms.CleanupJobes(ctx, batchID, timeParam, "complete_only"); err != nil {
+	//	log.Printf("failed to cleanup jobes for batch %s: %v", batchID, err)
+	//}
 
 	return summary, nil
 }
@@ -161,7 +163,7 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 	// Gather job records
 	jobes, err := ms.GetBatchJobes(ctx, batchID)
 	if err != nil {
-		return fmt.Errorf("failed to get batch jobes for export: %w", err)
+		return fmt.Errorf("failed to get batch jobs for export: %w", err)
 	}
 	if len(jobes) == 0 {
 		return nil
@@ -184,7 +186,7 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 	}
 
 	if len(filteredJobes) == 0 {
-		log.Printf("No %s jobes found for batch %s", map[bool]string{true: "complete", false: ""}[onlyComplete], batchID)
+		log.Printf("No %s jobs found for batch %s", map[bool]string{true: "complete", false: ""}[onlyComplete], batchID)
 		return nil
 	}
 
@@ -203,7 +205,7 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 
 	// Build text content
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("METRICS: %s (%s jobes)\n", batchID, map[bool]string{true: "COMPLETE", false: "ALL"}[onlyComplete]))
+	b.WriteString(fmt.Sprintf("METRICS: %s (%s jobs)\n", batchID, map[bool]string{true: "COMPLETE", false: "ALL"}[onlyComplete]))
 
 	for idx, rec := range filteredJobes {
 		b.WriteString("----------------------------------------\n")
@@ -214,7 +216,7 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 		if rec.JobQueueAheadLength != 0 {
 			b.WriteString(fmt.Sprintf("\njob_queue_ahead_length: %d\n", rec.JobQueueAheadLength))
 		}
-	
+
 		if !rec.QueueStartTime.IsZero() {
 			b.WriteString(fmt.Sprintf("queue_start_time: %s\n", rec.QueueStartTime.Format(time.RFC3339Nano)))
 		}
@@ -232,6 +234,9 @@ func (ms *MetricsStore) ExportBatchJobesToS3(ctx context.Context, batchID string
 		}
 		if rec.TotalDuration != 0 {
 			b.WriteString(fmt.Sprintf("total_duration: %f\n", rec.TotalDuration))
+		}
+		if rec.JobSizeMB != 0 {
+			b.WriteString(fmt.Sprintf("job_size_mb: %.2f\n", rec.JobSizeMB))
 		}
 	}
 

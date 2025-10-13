@@ -218,7 +218,7 @@ func (r *Receiver) validateJobMetadata(d amqp.Delivery, jobID string) (int32, []
 	return jobSize, filenames, true
 }
 
-func (r *Receiver) processMessageBody(d amqp.Delivery, jobID string, batchSize int32) (api.MessageBody, bool) {
+func (r *Receiver) processMessageBody(d amqp.Delivery, jobID string, jobSize int32) (api.MessageBody, bool) {
 	var msgBody api.MessageBody
 	err := json.Unmarshal(d.Body, &msgBody)
 	if err != nil {
@@ -227,8 +227,8 @@ func (r *Receiver) processMessageBody(d amqp.Delivery, jobID string, batchSize i
 		return api.MessageBody{}, false
 	}
 
-	if len(msgBody.Files) != int(batchSize) {
-		log.Printf("│ ERROR: Files count in body doesn't match batch_size")
+	if len(msgBody.Files) != int(jobSize) {
+		log.Printf("│ ERROR: Files count in body doesn't match job_size")
 		r.requeueWithLog(d, jobID)
 		return api.MessageBody{}, false
 	}

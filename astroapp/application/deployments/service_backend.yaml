@@ -12,6 +12,9 @@ spec:
   - name: api
     port: 8080
     targetPort: 8080
+  - name: metrics
+    port: 9090
+    targetPort: 9090
   type: ClusterIP
 
 ---
