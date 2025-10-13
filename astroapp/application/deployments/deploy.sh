@@ -32,6 +32,7 @@ echo "⚙️ Deploying backend..."
 oc apply -f deployment_producer.yaml
 oc apply -f deployment_processor.yaml
 oc apply -f service_backend.yaml
+oc apply -f service_monitor_metrics.yaml
 
 # Deploy frontend
 echo "🌐 Deploying frontend..."
