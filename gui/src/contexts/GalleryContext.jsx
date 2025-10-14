@@ -36,6 +36,31 @@ export const GalleryProvider = ({ children, galleryOperations }) => {
       if (galleryOperations?.clearGallery) {
         galleryOperations.clearGallery();
       }
+    }, [galleryOperations]),
+
+    // Pagination state
+    currentPage: galleryOperations?.currentPage ?? 0,
+    totalPages: galleryOperations?.totalPages ?? 1,
+    itemsPerPage: galleryOperations?.itemsPerPage ?? 50,
+    galleryItems: galleryOperations?.galleryItems ?? [],
+
+    // Pagination functions
+    goToNextPage: useCallback(() => {
+      if (galleryOperations?.goToNextPage) {
+        galleryOperations.goToNextPage();
+      }
+    }, [galleryOperations]),
+
+    goToPrevPage: useCallback(() => {
+      if (galleryOperations?.goToPrevPage) {
+        galleryOperations.goToPrevPage();
+      }
+    }, [galleryOperations]),
+
+    goToPage: useCallback((page) => {
+      if (galleryOperations?.goToPage) {
+        galleryOperations.goToPage(page);
+      }
     }, [galleryOperations])
   };
 

@@ -1,15 +1,27 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { isAtObjectCoordinates } from '../../utils/gallery/galleryUtils';
+
+const ITEMS_PER_PAGE = 50;
 
 export const useGalleryState = (checkboxStates, onStatusUpdate) => {
   const [galleryItems, setGalleryItems] = useState([]);
   const [galleryState, setGalleryStateInternal] = useState('empty');
   const [currentObjectName, setCurrentObjectName] = useState(null);
+  const [currentPage, setCurrentPage] = useState(0);
 
   // Wrapper to log state changes  
   const setGalleryState = useCallback((newState) => {
     setGalleryStateInternal(newState);
   }, []);
+
+  // Calculate pagination
+  const totalPages = Math.ceil(galleryItems.length / ITEMS_PER_PAGE);
+  const paginatedItems = useMemo(() => {
+    return galleryItems.slice(
+      currentPage * ITEMS_PER_PAGE,
+      (currentPage + 1) * ITEMS_PER_PAGE
+    );
+  }, [galleryItems, currentPage]);
 
   // Set loading state for an object
   const setLoadingState = useCallback((objectName) => {
@@ -127,6 +139,7 @@ export const useGalleryState = (checkboxStates, onStatusUpdate) => {
     setGalleryItems([]);
     setCurrentObjectName(null);
     setGalleryState('empty');
+    setCurrentPage(0); // Reset pagination
     
     // Clear the current loaded object
     window.currentLoadedObject = null;
@@ -166,6 +179,30 @@ export const useGalleryState = (checkboxStates, onStatusUpdate) => {
     }
   }, [onStatusUpdate]);
 
+  // Pagination navigation functions
+  const goToNextPage = useCallback(() => {
+    setCurrentPage(prev => Math.min(prev + 1, totalPages - 1));
+  }, [totalPages]);
+
+  const goToPrevPage = useCallback(() => {
+    setCurrentPage(prev => Math.max(prev - 1, 0));
+  }, []);
+
+  const goToPage = useCallback((page) => {
+    setCurrentPage(Math.max(0, Math.min(page, totalPages - 1)));
+  }, [totalPages]);
+
+  // Auto-switch to page containing specific item index
+  const goToItemIndex = useCallback((itemIndex) => {
+    const targetPage = Math.floor(itemIndex / ITEMS_PER_PAGE);
+    setCurrentPage(targetPage);
+  }, []);
+
+  // Reset to first page when items change significantly
+  const resetPagination = useCallback(() => {
+    setCurrentPage(0);
+  }, []);
+
   return {
     // State
     galleryItems,
@@ -184,6 +221,17 @@ export const useGalleryState = (checkboxStates, onStatusUpdate) => {
     addPlaceholderItem,
     removeItemByMapType,
     clearGallery,
+    
+    // Pagination
+    paginatedItems,
+    currentPage,
+    totalPages,
+    itemsPerPage: ITEMS_PER_PAGE,
+    goToNextPage,
+    goToPrevPage,
+    goToPage,
+    goToItemIndex,
+    resetPagination,
     
     // Utility actions
     updateStatus

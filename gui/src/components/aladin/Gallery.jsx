@@ -31,7 +31,15 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
     addPlaceholderItem,
     removeItemByMapType,
     clearGallery,
-    updateStatus
+    updateStatus,
+    // Pagination
+    paginatedItems,
+    currentPage,
+    totalPages,
+    itemsPerPage,
+    goToNextPage,
+    goToPrevPage,
+    goToPage
   } = useGalleryState(checkboxStates, onStatusUpdate);
 
   // Set up PDF loader hook
@@ -51,9 +59,21 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
   useEffect(() => {
     if (!aladinInstance) return;
     
-    // TEMPORARILY DISABLED to test H4 flashing issue
-    // setupViewChangeMonitoring(aladinInstance);
+    setupViewChangeMonitoring(aladinInstance);
   }, [aladinInstance]);
+
+  // Scroll gallery to start when page changes
+  useEffect(() => {
+    // Try scrolling multiple containers to ensure we catch the right one
+    const galleryItems = document.getElementById('gallery-items');
+    const galleryContent = document.querySelector('.gallery-content');
+    const bottomGallery = document.querySelector('.bottom-gallery');
+    
+    // Scroll all potential containers to the left
+    if (galleryItems) galleryItems.scrollLeft = 0;
+    if (galleryContent) galleryContent.scrollLeft = 0;
+    if (bottomGallery) bottomGallery.scrollLeft = 0;
+  }, [currentPage]);
 
   // Set up view change monitoring inside the component
   const setupViewChangeMonitoring = (aladin) => {
@@ -88,41 +108,67 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
       case 'navigate-to-object':
         return <EmptyGalleryMessage type="navigate-to-object" objectName={currentObjectName} />;
       case 'loaded':
-        return galleryItems.map(item => {
-          switch (item.type) {
-            case 'image':
-              return (
-                <ImageGalleryItem
-                  key={item.id}
-                  imageSrc={item.imageSrc}
-                  mapType={item.mapType}
-                  objectName={item.objectName}
-                  onStatusUpdate={updateStatus}
-                />
-              );
-            case 'pdf':
-              return (
-                <PDFGalleryItem
-                  key={item.id}
-                  pdfFile={item.pdfFile}
-                  objectName={item.objectName}
-                  onStatusUpdate={updateStatus}
-                />
-              );
-            case 'placeholder':
-              return (
-                <PlaceholderGalleryItem
-                  key={item.id}
-                  mapType={item.mapType}
-                  label={item.label}
-                  icon={item.icon}
-                  onStatusUpdate={updateStatus}
-                />
-              );
-            default:
-              return null;
-          }
-        });
+        return (
+          <>
+            {/* Left pagination arrow - shown when not on first page */}
+            {galleryItems.length > itemsPerPage && currentPage > 0 && (
+              <button 
+                className="pagination-arrow pagination-arrow-left"
+                onClick={goToPrevPage}
+                title="Previous page"
+              >
+                ‹
+              </button>
+            )}
+            
+            {paginatedItems.map(item => {
+              switch (item.type) {
+                case 'image':
+                  return (
+                    <ImageGalleryItem
+                      key={item.id}
+                      imageSrc={item.imageSrc}
+                      mapType={item.mapType}
+                      objectName={item.objectName}
+                      onStatusUpdate={updateStatus}
+                    />
+                  );
+                case 'pdf':
+                  return (
+                    <PDFGalleryItem
+                      key={item.id}
+                      pdfFile={item.pdfFile}
+                      objectName={item.objectName}
+                      onStatusUpdate={updateStatus}
+                    />
+                  );
+                case 'placeholder':
+                  return (
+                    <PlaceholderGalleryItem
+                      key={item.id}
+                      mapType={item.mapType}
+                      label={item.label}
+                      icon={item.icon}
+                      onStatusUpdate={updateStatus}
+                    />
+                  );
+                default:
+                  return null;
+              }
+            })}
+            
+            {/* Right pagination arrow - shown when not on last page */}
+            {galleryItems.length > itemsPerPage && currentPage < totalPages - 1 && (
+              <button 
+                className="pagination-arrow pagination-arrow-right"
+                onClick={goToNextPage}
+                title="Next page"
+              >
+                ›
+              </button>
+            )}
+          </>
+        );
       default:
         return <EmptyGalleryMessage type="empty" />;
     }
@@ -135,11 +181,19 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
         addMapToGallery: addPlaceholderItem,
         removeMapFromGallery: removeItemByMapType,
         clearGallery: clearGallery,
-        loadObjectImages: loadObjectImages
+        loadObjectImages: loadObjectImages,
+        // Pagination
+        currentPage,
+        totalPages,
+        itemsPerPage,
+        galleryItems,
+        goToNextPage,
+        goToPrevPage,
+        goToPage
       };
       onGalleryOperationsReady(operations);
     }
-  }, [onGalleryOperationsReady, addPlaceholderItem, removeItemByMapType, clearGallery, loadObjectImages]);
+  }, [onGalleryOperationsReady, addPlaceholderItem, removeItemByMapType, clearGallery, loadObjectImages, currentPage, totalPages, itemsPerPage, galleryItems, goToNextPage, goToPrevPage, goToPage]);
 
   return (
     <div className="bottom-gallery">

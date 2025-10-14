@@ -1,11 +1,17 @@
 // Modal navigation hook - manages modal state and navigation
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useGallery } from '../../contexts/GalleryContext';
+import { createPdfModalUrl } from '../../utils/gallery/pdfUtils';
+import { extractCellNumber, generatePdfDisplayName } from '../../utils/gallery/galleryUtils';
 
 export const useModalNavigation = () => {
+  const gallery = useGallery();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [currentImageIndex, setCurrentImageIndex] = useState(-1);
-  const [galleryItems, setGalleryItems] = useState([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(-1); // Global index across all pages
   const [currentImage, setCurrentImage] = useState(null);
+
+  // Get total items from gallery context
+  const totalItems = gallery.galleryItems?.length || 0;
 
   /**
    * Set up navigation state when modal opens
@@ -27,15 +33,14 @@ export const useModalNavigation = () => {
       // Include items with images OR PDF items (which don't have .thumbnail-image)
       return (img && img.src && !isPlaceholder) || isPdfItem;
     });
-    setGalleryItems(items);
 
-    // Find the current image index
-    let index = -1;
+    // Find the current image index IN THE CURRENT PAGE
+    let localIndex = -1;
     if (clickedItem) {
-      index = items.indexOf(clickedItem);
+      localIndex = items.indexOf(clickedItem);
     } else {
       // Fallback: find by image source (for regular images) or by PDF key (for PDFs)
-      index = items.findIndex(item => {
+      localIndex = items.findIndex(item => {
         const img = item.querySelector('.thumbnail-image');
         if (img && img.src === imageSrc) {
           return true;
@@ -50,38 +55,72 @@ export const useModalNavigation = () => {
     }
 
     // Ensure valid index
-    if (index === -1 && items.length > 0) {
-      index = 0;
+    if (localIndex === -1 && items.length > 0) {
+      localIndex = 0;
     }
 
-    setCurrentImageIndex(index);
+    // Calculate GLOBAL index based on current page
+    const globalIndex = (gallery.currentPage * gallery.itemsPerPage) + localIndex;
+    setCurrentImageIndex(globalIndex);
     
-    return { items, index };
-  }, []);
+    return { index: globalIndex };
+  }, [gallery]);
 
   /**
-   * Navigate to previous image (with cycling)
+   * Update the displayed image based on current global index
+   */
+  useEffect(() => {
+    if (isModalOpen && currentImageIndex >= 0 && currentImageIndex < totalItems) {
+      const item = gallery.galleryItems[currentImageIndex];
+      if (item) {
+        // Update the current image based on item type
+        if (item.type === 'image') {
+          setCurrentImage({
+            src: item.imageSrc,
+            title: item.mapType.label || 'Image',
+            objectName: item.objectName,
+            isPdf: false
+          });
+        } else if (item.type === 'pdf') {
+          // For PDFs, construct the URL using the same utility as PDFGalleryItem
+          const cellNumber = extractCellNumber(item.pdfFile.name);
+          const displayName = generatePdfDisplayName(cellNumber);
+          const pdfUrl = createPdfModalUrl(item.pdfFile.key);
+          
+          setCurrentImage({
+            src: pdfUrl,
+            title: displayName,
+            objectName: item.objectName,
+            isPdf: true
+          });
+        }
+      }
+    }
+  }, [currentImageIndex, isModalOpen, totalItems, gallery.galleryItems]);
+
+  /**
+   * Navigate to previous image
    */
   const navigateToPrevious = useCallback(() => {
-    if (galleryItems.length > 1) {
+    if (totalItems > 1) {
       setCurrentImageIndex(prev => {
         const newIndex = prev - 1;
-        return newIndex < 0 ? galleryItems.length - 1 : newIndex; // Cycle to last image
+        return newIndex < 0 ? totalItems - 1 : newIndex; // Cycle to last image
       });
     }
-  }, [galleryItems.length]);
+  }, [totalItems]);
 
   /**
-   * Navigate to next image (with cycling)
+   * Navigate to next image
    */
   const navigateToNext = useCallback(() => {
-    if (galleryItems.length > 1) {
+    if (totalItems > 1) {
       setCurrentImageIndex(prev => {
         const newIndex = prev + 1;
-        return newIndex >= galleryItems.length ? 0 : newIndex; // Cycle to first image
+        return newIndex >= totalItems ? 0 : newIndex; // Cycle to first image
       });
     }
-  }, [galleryItems.length]);
+  }, [totalItems]);
 
   /**
    * Open modal with image/PDF
@@ -107,7 +146,6 @@ export const useModalNavigation = () => {
     setIsModalOpen(false);
     setCurrentImage(null);
     setCurrentImageIndex(-1);
-    setGalleryItems([]);
     
     // Restore scrolling
     document.body.style.overflow = '';
@@ -115,26 +153,15 @@ export const useModalNavigation = () => {
   }, []);
 
   /**
-   * Get current item from gallery items
-   */
-  const getCurrentItem = useCallback(() => {
-    if (currentImageIndex >= 0 && currentImageIndex < galleryItems.length) {
-      return galleryItems[currentImageIndex];
-    }
-    return null;
-  }, [currentImageIndex, galleryItems]);
-
-  /**
    * Check if navigation buttons should be enabled
    */
-  const hasMultipleImages = galleryItems.length > 1;
+  const hasMultipleImages = totalItems > 1;
 
   return {
     // State
     isModalOpen,
     currentImage,
     currentImageIndex,
-    galleryItems,
     hasMultipleImages,
     
     // Actions
@@ -143,7 +170,6 @@ export const useModalNavigation = () => {
     navigateToPrevious,
     navigateToNext,
     setupNavigationState,
-    getCurrentItem,
     
     // Internal state setters (for direct updates when navigating)
     setCurrentImage

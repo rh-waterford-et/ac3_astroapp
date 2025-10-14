@@ -5,84 +5,33 @@ import { Rnd } from 'react-rnd';
 import ModalNavigation from './ModalNavigation';
 import ModalImageViewer from './ModalImageViewer';
 import { useModalNavigation } from '../../../../hooks/modal/useModalNavigation';
+import { useGallery } from '../../../../contexts/GalleryContext';
 import { MODAL_DIMENSIONS } from '../../../../utils/constants/constants';
 
 const GalleryModal = ({ modalRndRef, onStatusUpdate }) => {
   const [transparency, setTransparency] = useState(95);
   const galleryContainerRef = useRef(null);
+  const gallery = useGallery();
   
   const {
     isModalOpen,
     currentImage,
     currentImageIndex,
-    galleryItems,
     hasMultipleImages,
     openModal,
     closeModal,
     navigateToPrevious,
     navigateToNext,
-    getCurrentItem,
     setCurrentImage
   } = useModalNavigation();
+  
+  // Get total items count from gallery context
+  const totalItems = gallery.galleryItems?.length || 0;
 
   // Update gallery container ref to find gallery items
   useEffect(() => {
     galleryContainerRef.current = document.getElementById('gallery-items');
   }, []);
-
-  // Handle navigation to update current image when index changes
-  useEffect(() => {
-    if (currentImageIndex >= 0 && galleryItems.length > 0) {
-      const currentItem = getCurrentItem();
-      if (currentItem && currentImage) {
-        // Extract data from current item
-        const isPdfItem = currentItem.classList.contains('pdf-item');
-        
-        if (isPdfItem) {
-          // Handle PDF navigation
-          const pdfKey = currentItem.dataset.pdfKey;
-          const cellNumber = currentItem.dataset.cellNumber;
-          const objectName = currentItem.dataset.objectName || 'Unknown';
-          const label = currentItem.querySelector('.gallery-label');
-          
-          const pdfUrl = `/api/files/download?key=${encodeURIComponent(pdfKey)}#zoom=100&toolbar=0&navpanes=0`;
-          const title = label ? label.textContent : `Cell ${cellNumber} H4`;
-          
-          setCurrentImage({
-            src: pdfUrl,
-            title: title,
-            objectName: objectName,
-            isPdf: true
-          });
-          
-          // Update status
-          if (onStatusUpdate) {
-            onStatusUpdate(`Viewing ${objectName} H4 PDF: ${title} (${currentImageIndex + 1}/${galleryItems.length})`);
-          }
-        } else {
-          // Handle regular image navigation
-          const img = currentItem.querySelector('.thumbnail-image');
-          if (img) {
-            const label = currentItem.querySelector('.gallery-label');
-            const objectName = currentItem.dataset.objectName || 'Unknown';
-            const title = label ? label.textContent : 'Unknown Map';
-            
-            setCurrentImage({
-              src: img.src,
-              title: title,
-              objectName: objectName,
-              isPdf: false
-            });
-            
-            // Update status
-            if (onStatusUpdate) {
-              onStatusUpdate(`Viewing ${objectName} map: ${title} (${currentImageIndex + 1}/${galleryItems.length})`);
-            }
-          }
-        }
-      }
-    }
-  }, [currentImageIndex, galleryItems, getCurrentItem, setCurrentImage, onStatusUpdate, currentImage]);
 
   // Handle modal close
   const handleClose = useCallback(() => {
@@ -202,7 +151,7 @@ const GalleryModal = ({ modalRndRef, onStatusUpdate }) => {
               onClose={handleClose}
               hasMultipleImages={hasMultipleImages}
               currentIndex={currentImageIndex}
-              totalImages={galleryItems.length}
+              totalImages={totalItems}
               isModalOpen={isModalOpen}
             />
             
