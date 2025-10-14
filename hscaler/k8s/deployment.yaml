@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: predictor-client
+  namespace: uc3-applications
+  labels:
+    app: predictor-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: predictor-client
+  template:
+    metadata:
+      labels:
+        app: predictor-client
+    spec:
+      containers:
+      - name: predictor-client
+        image: quay.io/rcarroll/ac3_uc3/hautoscaler:latest
+        imagePullPolicy: Always
+        ports:
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        volumeMounts:
+        - name: config
+          mountPath: /app/config.yaml
+          subPath: config.yaml
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      serviceAccountName: uc3-monitoring
+      volumes:
+      - name: config
+        configMap:
+          name: predictor-client-config
