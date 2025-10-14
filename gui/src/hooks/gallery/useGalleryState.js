@@ -28,6 +28,7 @@ export const useGalleryState = (checkboxStates, onStatusUpdate) => {
     setCurrentObjectName(objectName);
     setGalleryState('loading');
     setGalleryItems([]); // Clear existing items
+    setCurrentPage(0); // Reset to first page when loading new object
   }, []);
 
   // Set navigate to object state

@@ -100,8 +100,12 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
           const stillAtObject = isAtObjectCoordinates(loadedObject, aladin);
           
           if (stillAtObject) {
-            // Still at object - reload images (handles zoom changes, etc.)
-            loadObjectImages(loadedObject);
+            // Still at object - but only reload if gallery is empty
+            // This prevents unnecessary reloads when just panning within object radius
+            if (galleryItems.length === 0) {
+              loadObjectImages(loadedObject);
+            }
+            // If gallery already has items, do nothing (keep current state)
           } else {
             // User moved away from object - clear gallery but KEEP currentLoadedObject
             // so we can reload if they come back
@@ -125,7 +129,7 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
             // Silent error handling for coordinate lookup
           }
         }
-      }, 500); // Wait 500ms after view stops changing
+      }, 200); // Wait 200ms after view stops changing
     };
     
     // Register the event listener

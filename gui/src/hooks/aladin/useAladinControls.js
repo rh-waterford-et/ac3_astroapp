@@ -88,9 +88,13 @@ export const useAladinControls = (aladinInstance, gallery = null) => {
             // Update status
             updateStatus(format, survey);
 
-            // Load gallery images if gallery hook available
-            // Pass skipCoordinateCheck=true to bypass coordinate check during navigation
-            if (gallery?.loadObjectImages) {
+            // Only load gallery if we're searching for a different object
+            // or if gallery is currently empty
+            const isNewObject = window.currentLoadedObject !== searchValue;
+            const galleryIsEmpty = gallery?.galleryItems?.length === 0;
+            
+            if (gallery?.loadObjectImages && (isNewObject || galleryIsEmpty)) {
+              // Pass skipCoordinateCheck=true to bypass coordinate check during navigation
               gallery.loadObjectImages(searchValue, null, true);
             }
           }
