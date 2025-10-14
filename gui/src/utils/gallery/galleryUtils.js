@@ -72,7 +72,6 @@ export const isAtObjectCoordinates = (objectName, aladinInstance) => {
     const objectCoords = window.currentObjectCoords;
     
     // Validate coordinate data
-    // Validate coordinates
     if (!currentPos || !objectCoords || currentPos.length < 2 || objectCoords.length < 2) {
       return false;
     }

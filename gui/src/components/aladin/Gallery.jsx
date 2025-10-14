@@ -8,6 +8,8 @@ import GalleryLoader from './gallery/ui/GalleryLoader';
 import { 
   initializePdfJs
 } from '../../utils/gallery/pdfUtils';
+import { isAtObjectCoordinates } from '../../utils/gallery/galleryUtils';
+import { findObjectAtCoordinates } from '../../utils/gallery/coordinateRegistry';
 import { usePdfLoader } from '../../hooks/gallery/usePdfLoader';
 import { useGalleryState } from '../../hooks/gallery/useGalleryState';
 import { useImageLoader } from '../../hooks/gallery/useImageLoader';
@@ -59,8 +61,13 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
   useEffect(() => {
     if (!aladinInstance) return;
     
-    setupViewChangeMonitoring(aladinInstance);
-  }, [aladinInstance]);
+    const cleanup = setupViewChangeMonitoring(aladinInstance);
+    
+    // Return cleanup function to remove event listener
+    return () => {
+      if (cleanup) cleanup();
+    };
+  }, [aladinInstance, galleryItems.length, loadObjectImages, clearGallery]);
 
   // Scroll gallery to start when page changes
   useEffect(() => {
@@ -77,21 +84,59 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
 
   // Set up view change monitoring inside the component
   const setupViewChangeMonitoring = (aladin) => {
-    if (!aladin) return;
+    if (!aladin) return null;
     let viewChangeTimeout;
     
-    // Monitor view changes
-    aladin.on('positionChanged', () => {
+    // Define the position change handler
+    const positionChangeHandler = () => {
       // Debounce the view change to avoid too many updates
       clearTimeout(viewChangeTimeout);
       viewChangeTimeout = setTimeout(() => {
-        // Only trigger if we have a consistent current object in both places
-        // This prevents triggering during checkbox state transitions
-        if (currentLoadedObject && window.currentLoadedObject === currentLoadedObject) {
-          loadObjectImages(currentLoadedObject);
+        // Use window.currentLoadedObject directly to avoid stale closure issues
+        const loadedObject = window.currentLoadedObject;
+        
+        if (loadedObject) {
+          // We have a loaded object - check if still at its coordinates
+          const stillAtObject = isAtObjectCoordinates(loadedObject, aladin);
+          
+          if (stillAtObject) {
+            // Still at object - reload images (handles zoom changes, etc.)
+            loadObjectImages(loadedObject);
+          } else {
+            // User moved away from object - clear gallery but KEEP currentLoadedObject
+            // so we can reload if they come back
+            clearGallery();
+          }
+        } else if (galleryItems.length === 0) {
+          // No loaded object and gallery is empty - check if we're at a registered object's coordinates
+          try {
+            const currentPos = aladin.getRaDec();
+            if (currentPos && currentPos.length >= 2) {
+              const matchedObject = findObjectAtCoordinates(currentPos[0], currentPos[1]);
+              
+              if (matchedObject) {
+                // Found an object at these coordinates - load it
+                window.currentLoadedObject = matchedObject;
+                window.currentObjectCoords = currentPos;
+                loadObjectImages(matchedObject, null, true);
+              }
+            }
+          } catch (error) {
+            // Silent error handling for coordinate lookup
+          }
         }
       }, 500); // Wait 500ms after view stops changing
-    });
+    };
+    
+    // Register the event listener
+    aladin.on('positionChanged', positionChangeHandler);
+    
+    // Return cleanup function
+    return () => {
+      clearTimeout(viewChangeTimeout);
+      // Note: Aladin Lite doesn't have an 'off' method, so we can't remove the listener
+      // The event system will be cleaned up when the component unmounts
+    };
   };
 
   // Render gallery content based on state

@@ -20,12 +20,12 @@ export const useImageLoader = ({
   const { aladinInstance: contextAladinInstance } = useAppState();
 
   // Main image loading orchestration
-  const loadObjectImages = useCallback(async (objectName, overrideCheckboxStates = null) => {
+  const loadObjectImages = useCallback(async (objectName, overrideCheckboxStates = null, skipCoordinateCheck = false) => {
     // Use context aladinInstance with fallback to prop and window (for backward compatibility)
     const currentAladinInstance = contextAladinInstance || aladinInstance || window.aladinInstance;
     
-    // Check if we're at the correct coordinates for this object
-    if (!isAtObjectCoordinates(objectName, currentAladinInstance)) {
+    // Check if we're at the correct coordinates for this object (skip during search navigation)
+    if (!skipCoordinateCheck && !isAtObjectCoordinates(objectName, currentAladinInstance)) {
       setNavigateToObjectState(objectName);
       return;
     }

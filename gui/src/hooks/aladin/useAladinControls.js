@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { DEFAULTS } from '../../utils/constants/constants';
+import { registerObjectCoordinates } from '../../utils/gallery/coordinateRegistry';
 
 export const useAladinControls = (aladinInstance, gallery = null) => {
   // Centralized state - NO MORE DOM QUERIES
@@ -75,22 +76,22 @@ export const useAladinControls = (aladinInstance, gallery = null) => {
       // Use Aladin's gotoObject method
       aladinInstance.gotoObject(searchValue, {
         success: (coords) => {
-          // Only block if currentLoadedObject is set to a DIFFERENT object
-          if (window.currentLoadedObject && window.currentLoadedObject !== searchValue) {
-            return;
-          }
-          
           if (coords && coords.length >= 2) {
             // Store coordinates globally for compatibility
             window.currentObjectCoords = coords;
             window.currentLoadedObject = searchValue;
-            
+
+            // Register object coordinates in the coordinate registry
+            // This allows reverse lookup: coordinates -> object name
+            registerObjectCoordinates(searchValue, coords[0], coords[1]);
+
             // Update status
             updateStatus(format, survey);
-            
+
             // Load gallery images if gallery hook available
+            // Pass skipCoordinateCheck=true to bypass coordinate check during navigation
             if (gallery?.loadObjectImages) {
-              gallery.loadObjectImages(searchValue);
+              gallery.loadObjectImages(searchValue, null, true);
             }
           }
         },

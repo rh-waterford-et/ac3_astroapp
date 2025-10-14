@@ -141,8 +141,8 @@ export const useGalleryState = (checkboxStates, onStatusUpdate) => {
     setGalleryState('empty');
     setCurrentPage(0); // Reset pagination
     
-    // Clear the current loaded object
-    window.currentLoadedObject = null;
+    // NOTE: We don't clear window.currentLoadedObject here anymore
+    // This allows the view monitoring to reload images if user returns to the object
     
     // Update status using callback
     if (onStatusUpdate) {
