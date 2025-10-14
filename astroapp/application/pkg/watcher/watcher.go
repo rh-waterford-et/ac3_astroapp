@@ -30,6 +30,156 @@ func NewWatcher() *Watcher {
 	return &Watcher{}
 }
 
+// readProcessList reads files from a processlist file
+func (w *Watcher) readProcessList(path string) []string {
+	if path == "" {
+		return []string{}
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}
+		}
+		log.Printf("Error reading processlist %s: %v", path, err)
+		return []string{}
+	}
+
+	var files []string
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "#") {
+			files = append(files, line)
+		}
+	}
+	return files
+}
+
+// findCompletedFiles returns files that were in previous but not in current (completed)
+func findCompletedFiles(previous, current []string) []string {
+	currentMap := make(map[string]bool)
+	for _, f := range current {
+		currentMap[f] = true
+	}
+
+	var completed []string
+	for _, f := range previous {
+		if !currentMap[f] {
+			completed = append(completed, f)
+		}
+	}
+	return completed
+}
+
+// extractDatasetFromFilename extracts dataset name from pPXF filename
+// e.g., NGC7025_LR-V_final_cube_voronoi_cell_0.fits -> NGC7025
+func extractDatasetFromFilename(filename string) string {
+	parts := strings.Split(filename, "_")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return "unknown"
+}
+
+// handleCompletedPPXFFile collects and sends back output files for a completed pPXF input
+func (w *Watcher) handleCompletedPPXFFile(inputFilename, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) error {
+	outputDir := os.Getenv("OUTPUT_DIR_PPXF")
+	if outputDir == "" {
+		outputDir = "/processing_data/ppxf/data/output"
+	}
+
+	log.Printf("│ Collecting pPXF outputs for: %s", inputFilename)
+
+	// Extract base name (remove .fits extension)
+	baseName := strings.TrimSuffix(inputFilename, ".fits")
+
+	// Expected pPXF output file suffixes (5 files per input)
+	expectedSuffixes := []string{
+		"_kinematics_and_stellar_pops_info.txt",
+		"_pPXF_fitting.pdf",
+		"_residuals.fits",
+		"_bestfit.fits",
+		"_galaxy.fits",
+	}
+
+	// Collect output files
+	var binaryFiles []api.BinaryDataFile
+	for _, suffix := range expectedSuffixes {
+		outputFilename := baseName + suffix
+		outputPath := filepath.Join(outputDir, outputFilename)
+
+		// Check if file exists
+		if _, err := os.Stat(outputPath); os.IsNotExist(err) {
+			log.Printf("│ ⚠ Expected pPXF output not found: %s", outputFilename)
+			continue
+		}
+
+		// Read file content (binary-safe for .fits and .pdf)
+		content, err := os.ReadFile(outputPath)
+		if err != nil {
+			log.Printf("│ ✗ Error reading pPXF output %s: %v", outputFilename, err)
+			continue
+		}
+
+		binaryFiles = append(binaryFiles, api.BinaryDataFile{
+			Name:    outputFilename,
+			Content: content,
+		})
+
+		log.Printf("│ ✓ Collected: %s (%d bytes)", outputFilename, len(content))
+	}
+
+	if len(binaryFiles) == 0 {
+		return fmt.Errorf("no pPXF output files found for: %s", inputFilename)
+	}
+
+	log.Printf("│ Collected %d/%d expected pPXF output files", len(binaryFiles), len(expectedSuffixes))
+
+	// Extract dataset name for batch organization
+	dataset := extractDatasetFromFilename(inputFilename)
+
+	// Create binary batch
+	batchID := dataset
+	jobID := fmt.Sprintf("ppxf-%s-%d", baseName, time.Now().Unix())
+
+	binaryBatch := api.BinaryBatch{
+		ID:    batchID,
+		JobID: jobID,
+		Files: binaryFiles,
+	}
+
+	// Send batch back to producer via queue (use binary sender for .fits integrity)
+	binarySender := &sender.BinaryRabbitMQSender{
+		Queue: queue,
+		Utils: utils,
+	}
+	binarySender.SendBinaryBatch(binaryBatch, "PPXF", side, queue)
+
+	log.Printf("│ ✓ Sent pPXF batch with %d files to producer (batch: %s)", len(binaryFiles), batchID)
+
+	// Move processed files to processed directory
+	processedDir := strings.Replace(outputDir, "/output", "/processed", 1)
+	err := os.MkdirAll(processedDir, 0755)
+	if err != nil {
+		log.Printf("│ ⚠ Failed to create processed directory: %v", err)
+		return nil // Don't fail the send operation
+	}
+
+	for _, file := range binaryFiles {
+		oldPath := filepath.Join(outputDir, file.Name)
+		newPath := filepath.Join(processedDir, file.Name)
+
+		if err := os.Rename(oldPath, newPath); err != nil {
+			log.Printf("│ ⚠ Failed to move %s to processed: %v", file.Name, err)
+		} else {
+			log.Printf("│ ✓ Moved %s to processed directory", file.Name)
+		}
+	}
+
+	return nil
+}
+
 func (w *Watcher) RunProducer(appName string, jobName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
 	// Add panic recovery to prevent pod crashes
 	defer func() {
@@ -208,15 +358,26 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 
 	jobInfoDir := common.GetBatchInfoDir()
 
+	// Track previous pPXF processlist state to detect completions
+	var previousPPXFList []string
+	processListPath := os.Getenv("PROCESS_LIST_PPXF")
+
+	// Make pod-specific if POD_NAME is set
+	if podName := os.Getenv("POD_NAME"); podName != "" && processListPath != "" {
+		dir := filepath.Dir(processListPath)
+		processListPath = filepath.Join(dir, fmt.Sprintf("processlist-%s.txt", podName))
+		log.Printf("Monitoring pod-specific pPXF processlist: %s", processListPath)
+	}
+
 	log.Println("Checking for completed files...")
+	log.Println("Starting pPXF processlist monitoring...")
 
 	for {
-
+		// Process Starlight batch_info files (existing system)
 		files, err := os.ReadDir(jobInfoDir)
 		if err != nil {
 			fmt.Printf("Error reading directory: %v\n", err)
 		} else {
-			//log.Printf("DEBUG: Found %d files in %s", len(files), jobInfoDir)
 			for _, file := range files {
 				// Wrap each file processing in panic recovery
 				func() {
@@ -227,9 +388,7 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 						}
 					}()
 
-					//log.Printf("DEBUG: Processing file: %s", file.Name())
 					filePath := filepath.Join(jobInfoDir, file.Name())
-					//log.Printf("DEBUG: File path: %s", filePath)
 					if err := w.processJobFile(filePath, side, utils, queue, redisClient); err != nil {
 						log.Printf("Error processing job file %s: %v\n", filePath, err)
 						return
@@ -240,8 +399,29 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 			}
 		}
 
-		// Check for pPXF output files (existing system)
-		//w.RunForJob("PPXF", "NGC7025", side, utils, queue, redisClient)
+		// NEW: Monitor pPXF processlist for completed files
+		if processListPath != "" {
+			currentPPXFList := w.readProcessList(processListPath)
+
+			// Only check for completions after first iteration (when we have previous state)
+			if previousPPXFList != nil {
+				completedFiles := findCompletedFiles(previousPPXFList, currentPPXFList)
+
+				for _, filename := range completedFiles {
+					log.Printf("✓ pPXF completed processing: %s", filename)
+
+					err := w.handleCompletedPPXFFile(filename, side, utils, queue, redisClient)
+					if err != nil {
+						log.Printf("✗ Error handling pPXF completion for %s: %v", filename, err)
+					} else {
+						log.Printf("✓ Successfully sent pPXF outputs for: %s", filename)
+					}
+				}
+			}
+
+			// Update previous state
+			previousPPXFList = currentPPXFList
+		}
 
 		// Sleep for 10 seconds before next iteration
 		time.Sleep(10 * time.Second)

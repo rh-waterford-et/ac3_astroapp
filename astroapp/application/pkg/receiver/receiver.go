@@ -79,7 +79,14 @@ func (r *Receiver) ProcessMessages(queueName string, side string) {
 	if side == "processor" {
 		//log.Printf("ProcessingMessage: %t", r.ProcessingMessage)
 		if r.ProcessingMessage {
-			return
+			// Check if processlists are now empty - if so, reset flag
+			status, err := r.checkProcessLists()
+			if err == nil && status {
+				log.Printf("│ ✓ All processlists empty - resetting ProcessingMessage flag")
+				r.ProcessingMessage = false
+			} else {
+				return
+			}
 		}
 		status, err := r.checkProcessLists()
 		if err != nil {

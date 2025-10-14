@@ -83,7 +83,7 @@ spec:
         - name: PROCESS_LIST_STARLIGHT_PATH
           value: "/processing_data/starlight/runtime" 
         - name: PROCESS_LIST_PPXF
-          value: "/processing_data/ppxf/runtime/processlist.txt"
+          value: "/processing_data/ppxf/runtime/processlist-$(POD_NAME).txt"
         - name: PROCESS_LIST_PPXF_PATH
           value: "/processing_data/ppxf/runtime"
         - name: INPUT_DIR_STARLIGHT
@@ -132,6 +132,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        - name: PROCESS_LIST_PPXF
+          value: "/processing_data/ppxf/runtime/processlist-$(POD_NAME).txt"
         - name: RABBITMQ_USER
           value: "guest"
         - name: RABBITMQ_PASSWORD
@@ -203,12 +205,13 @@ spec:
         securityContext:
           privileged: true
         env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: PPXF_INPUT_DIR
           value: "/processing_data/ppxf/data/input"
         - name: PPXF_OUTPUT_DIR
           value: "/processing_data/ppxf/data/output"
-        - name: PROCESS_FILE
-          value: "/processing_data/ppxf/runtime/processlist.txt"
-
         - name: API_URL
           value: "http://uc3-backend-service:8080/api/progress/update"

@@ -25,9 +25,13 @@ type BinaryProducer struct {
 }
 
 func NewBinaryProducer(jobSize int, fileSource FileSource, batchQueue chan api.BinaryBatch, utils common.UtilsInterface, side string, batchID string) *BinaryProducer {
+	// For binary processing (pPXF), always use jobSize=1
+	// pPXF processes files individually, not in batches like Starlight
+	binaryJobSize := 1
+
 	return &BinaryProducer{
-		JobSize:          jobSize,
-		BinaryJob:        make([]api.BinaryDataFile, 0, jobSize),
+		JobSize:          binaryJobSize,
+		BinaryJob:        make([]api.BinaryDataFile, 0, binaryJobSize),
 		BinaryBatchQueue: batchQueue,
 		FileSource:       fileSource,
 		Utils:            utils,
