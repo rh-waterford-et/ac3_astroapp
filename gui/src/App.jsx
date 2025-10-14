@@ -23,6 +23,9 @@ function AppContent({ onGalleryOperationsReady }) {
   // Aladin instance and loading state
   const { aladinInstance, isLoading, error, retry } = useAladinInstance();
 
+  // Modal ref for centering
+  const modalRndRef = React.useRef(null);
+
   // Use gallery context with proper hook
   const gallery = useGallery();
 
@@ -149,7 +152,7 @@ function AppContent({ onGalleryOperationsReady }) {
       <AladinInteractions aladinInstance={aladinInstance} />
       
       {/* Modal Components - Rendered at top level for full-screen display */}
-      <GalleryModal />
+      <GalleryModal modalRndRef={modalRndRef} />
     </div>
   );
 }

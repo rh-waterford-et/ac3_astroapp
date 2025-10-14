@@ -17,13 +17,16 @@ export const useModalNavigation = () => {
     if (!galleryContainer) return;
 
     // Get all gallery items that have actual content (images or PDFs, not placeholders)
-    const items = Array.from(galleryContainer.querySelectorAll('.gallery-item')).filter(item => {
+    const allGalleryItems = galleryContainer.querySelectorAll('.gallery-item');
+    
+    const items = Array.from(allGalleryItems).filter(item => {
       const img = item.querySelector('.thumbnail-image');
       const isPdfItem = item.classList.contains('pdf-item');
+      const isPlaceholder = item.classList.contains('placeholder-item');
+      
       // Include items with images OR PDF items (which don't have .thumbnail-image)
-      return (img && img.src && !item.classList.contains('placeholder-item')) || isPdfItem;
+      return (img && img.src && !isPlaceholder) || isPdfItem;
     });
-
     setGalleryItems(items);
 
     // Find the current image index

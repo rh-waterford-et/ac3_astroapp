@@ -21,7 +21,7 @@ export const useTabManager = (aladinInstance, sidebarState, gallery) => {
         const currentObject = window.currentLoadedObject;
         const currentCoords = window.currentObjectCoords;
         
-        // Clear existing gallery items using React hook method
+        // Clear gallery and reload based on context
         if (galleryRef.current?.clearGallery) {
           galleryRef.current.clearGallery();
         }
@@ -29,18 +29,23 @@ export const useTabManager = (aladinInstance, sidebarState, gallery) => {
         // Restore object state if it existed
         if (currentObject) { 
           window.currentLoadedObject = currentObject; 
-          window.currentObjectCoords = currentCoords; 
-        }
-        
-        // Restore map gallery items based on sidebar state (only if no current object)
-        if (!currentObject && galleryRef.current?.addMapToGallery) {
-          Object.entries(MAP_CONTROLS).forEach(([checkboxId, config]) => {
-            const isChecked = sidebarState[checkboxId];
-            if (isChecked) {
-              const mapType = checkboxId.replace('map-', '');
-              galleryRef.current.addMapToGallery(mapType, config.label, config.icon);
-            }
-          });
+          window.currentObjectCoords = currentCoords;
+          
+          // Reload object images if we have a current object
+          if (galleryRef.current?.loadObjectImages) {
+            galleryRef.current.loadObjectImages(currentObject);
+          }
+        } else {
+          // Restore map gallery items based on sidebar state (only if no current object)
+          if (galleryRef.current?.addMapToGallery) {
+            Object.entries(MAP_CONTROLS).forEach(([checkboxId, config]) => {
+              const isChecked = sidebarState[checkboxId];
+              if (isChecked) {
+                const mapType = checkboxId.replace('map-', '');
+                galleryRef.current.addMapToGallery(mapType, config.label, config.icon);
+              }
+            });
+          }
         }
       }, TIMEOUTS.restoreGalleryMs);
     }

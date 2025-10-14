@@ -40,7 +40,6 @@ export const useGalleryState = (checkboxStates, onStatusUpdate) => {
 
   // Add PDF item to gallery (called by PDF loader hook)
   const addPdfItem = useCallback((pdfItem) => {
-    
     // Check if this PDF already exists
     const existingPdf = galleryItems.find(item => 
       item.type === 'pdf' && item.pdfFile.key === pdfItem.pdfFile.key

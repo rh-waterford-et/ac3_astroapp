@@ -113,6 +113,13 @@ const GalleryModal = ({ modalRndRef, onStatusUpdate }) => {
     
     // Expose openImageModal for backward compatibility
     window.openImageModal = (imageSrc, title, objectName, clickedItem = null, isPdf = false) => {
+      // Re-query the gallery container to ensure we have the latest reference
+      // This is important because the gallery may remount during tab switching
+      const freshGalleryContainer = document.getElementById('gallery-items');
+      
+      // Update the ref
+      galleryContainerRef.current = freshGalleryContainer;
+      
       const imageData = {
         src: imageSrc,
         title: title,
@@ -120,7 +127,7 @@ const GalleryModal = ({ modalRndRef, onStatusUpdate }) => {
         isPdf: isPdf
       };
       
-      openModal(imageData, clickedItem, galleryContainerRef.current);
+      openModal(imageData, clickedItem, freshGalleryContainer);
       
       // Center the modal
       setTimeout(centerModal, 50);
