@@ -1966,6 +1966,7 @@ func (h *FileUploadHandler) ProcessDataset(w http.ResponseWriter, r *http.Reques
 	log.Printf("Successfully triggered processing for batch: %s", req.Dataset)
 
 	response := ProcessDatasetResponse{
+		Success: true,
 		Message: fmt.Sprintf("Processing started for dataset %s", req.Dataset),
 	}
 

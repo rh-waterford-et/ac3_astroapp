@@ -46,7 +46,7 @@ func (r *Receiver) getOutputPath(side, appName string) string {
 		case "STARLIGHT":
 			outputPath = os.Getenv("INPUT_DIR_STARLIGHT")
 		case "PPXF":
-			outputPath = os.Getenv("EXPLORED_DIR_PPXF")
+			outputPath = os.Getenv("INPUT_DIR_PPXF")
 		case "STECKMAP":
 			outputPath = os.Getenv("EXPLORED_DIR_STECKMAP")
 		default:

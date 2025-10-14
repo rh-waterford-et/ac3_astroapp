@@ -269,8 +269,22 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 				// For pPXF, add each .fits file to the process list immediately
 				if appName == "PPXF" && strings.HasSuffix(file.Name, ".fits") {
 					ppxf := app.NewPPXF(r.Utils)
-					ppxf.AddToProcessList(filename)
+					err := ppxf.AddToProcessList(filename)
+					if err != nil {
+						// Processlist not empty - requeue message for later
+						log.Printf("│ ⚠ Cannot add to processlist (list not empty): %s", filename)
+						log.Printf("│ ⚠ Message will be requeued for later processing")
+						processDuration := time.Since(processStart)
+						log.Printf("\n■■■ BINARY BATCH REQUEUED [%s] ■■■ Duration: %v\n", jobID, processDuration)
+						// NACK with requeue - message goes back to queue
+						d.Nack(false, true) // requeue=true
+						// Keep flag TRUE - prevents immediate re-pull of same message
+						// Flag will be reset when processlist becomes empty
+						return
+					}
 					log.Printf("│ ✓ Added pPXF binary file to process list: %s", filename)
+					// Keep ProcessingMessage = true
+					// Will be reset by receiver when processlist becomes empty
 				}
 			}
 		}
@@ -280,6 +294,7 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 		log.Printf("│ ✓ Successfully processed all %d binary files", successCount)
 		// Update progress to analysis stage for pPXF
 		r.updateProgress(appName, jobID, api.StageAnalysis, 70.0)
+		log.Printf("│ ✓ Files added to pPXF processlist")
 	} else {
 		log.Printf("│ ⚠ Processed %d of %d binary files", successCount, jobSize)
 	}

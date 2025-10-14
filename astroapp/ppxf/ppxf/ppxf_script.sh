@@ -5,7 +5,8 @@ set -x
 # Configuration
 PPXF_INPUT_DIR="/processing_data/ppxf/data/input"
 PPXF_OUTPUT_DIR="/processing_data/ppxf/data/output"
-PROCESS_FILE="/processing_data/ppxf/runtime/processlist.txt"
+POD_NAME="${POD_NAME:-default}"
+PROCESS_FILE="/processing_data/ppxf/runtime/processlist-${POD_NAME}.txt"
 PPXF_SCRIPT="/home/ppxf/run_ppxf/ppxf_individual.py"
 MASK_FILE="/processing_data/ppxf/data/input/mask.txt"
 
@@ -124,9 +125,10 @@ EOF
 # Main processing loop
 main() {
     echo "Starting pPXF processing script..."
+    echo "Pod name: $POD_NAME"
+    echo "Process file: $PROCESS_FILE"
     echo "Input directory: $PPXF_INPUT_DIR"
     echo "Output directory: $PPXF_OUTPUT_DIR"
-    echo "Process file: $PROCESS_FILE"
     
     # Load configuration (either from user config file or environment variables)
     load_ppxf_config
