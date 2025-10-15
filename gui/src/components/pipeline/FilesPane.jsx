@@ -4,6 +4,8 @@ import VirtualizedFileList from './VirtualizedFileList';
 import { truncateFileName } from '../../utils/file/fileUtils';
 import { getFileStatusColor } from '../../utils/ui/styleUtils';
 import RefreshIcon from '../ui/RefreshIcon';
+import DownloadIcon from '../ui/DownloadIcon';
+import { getDownloadAllUrl } from '../../services/api';
 
 const FilesPane = ({
   title,
@@ -14,6 +16,35 @@ const FilesPane = ({
   processorType
 }) => {
   const { files, loading, error, pagination, refresh, loadMoreFiles } = filesData;
+  
+  const isOutputPane = title.toLowerCase().includes('output');
+
+  const handleDownloadAll = () => {
+    if (!selectedDataset || files.length === 0) return;
+    
+    const totalFiles = pagination.total > 0 ? pagination.total : files.length;
+    
+    const confirmed = window.confirm(
+      `Download all ${totalFiles} output files from ${selectedDataset} as a zip file?`
+    );
+    
+    if (!confirmed) return;
+    
+    console.log(`[FilesPane] Initiating bulk zip download for dataset="${selectedDataset}", processor="${processorType}"`);
+    
+    // Create download URL
+    const downloadUrl = getDownloadAllUrl(selectedDataset, processorType, 'output');
+    
+    // Trigger download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    console.log(`[FilesPane] Zip download initiated for dataset="${selectedDataset}"`);
+  };
 
   return (
     <div className="pipeline-pane files-pane">
@@ -22,6 +53,16 @@ const FilesPane = ({
           <h3>{title}</h3>
         </div>
         <div className="pane-header-right">
+          {isOutputPane && (
+            <button 
+              className="download-btn" 
+              onClick={handleDownloadAll}
+              disabled={loading || !selectedDataset || pagination.total === 0}
+              title={`Download all ${title.toLowerCase()} as zip`}
+            >
+              <DownloadIcon />
+            </button>
+          )}
           <button 
             className="refresh-btn" 
             onClick={refresh}

@@ -199,19 +199,34 @@ export const uploadFiles = async (files, dataset, onFileProgress = null, onOvera
 
 /**
  * Get list of existing datasets
+ * @param {string} processorType - The processor type (starlight, ppxf, etc.)
+ * @param {AbortSignal} signal - Optional AbortSignal for request cancellation
  * @returns {Promise<Array>} - Array of dataset names
  */
-export const getDatasets = async (processorType) => {
+export const getDatasets = async (processorType, signal = null) => {
   if (!processorType) {
     throw new Error('getDatasets: processorType is required');
   }
   
-  const data = await apiRequest('datasets', { 
-    params: { app: processorType },
-    context: 'fetch datasets'
-  });
+  console.log(`[API] getDatasets: Starting request for processor="${processorType}"`);
   
-  return data.datasets || [];
+  try {
+    const data = await apiRequest('datasets', { 
+      params: { app: processorType },
+      signal,
+      context: 'fetch datasets'
+    });
+    
+    console.log(`[API] getDatasets: Success for processor="${processorType}", found ${data.datasets?.length || 0} datasets`);
+    return data.datasets || [];
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      console.log(`[API] getDatasets: Aborted for processor="${processorType}"`);
+    } else {
+      console.error(`[API] getDatasets: Error for processor="${processorType}":`, error);
+    }
+    throw error;
+  }
 };
 
 /**
@@ -265,6 +280,22 @@ export const deleteFile = async (fileKey, processorType) => {
     params: { key: fileKey, app: processorType },
     context: 'delete file'
   });
+};
+
+/**
+ * Get download URL for bulk downloading all files from a dataset as a zip
+ * @param {string} datasetName - The dataset name
+ * @param {string} processorType - The processor type (starlight, ppxf, etc.)
+ * @param {string} fileType - The file type (input, processed, output)
+ * @returns {string} - Download URL
+ */
+export const getDownloadAllUrl = (datasetName, processorType, fileType = 'output') => {
+  const params = new URLSearchParams({
+    dataset: datasetName,
+    app: processorType,
+    type: fileType
+  });
+  return `${API_BASE_URL}/files/download-all?${params.toString()}`;
 };
 
 /**
