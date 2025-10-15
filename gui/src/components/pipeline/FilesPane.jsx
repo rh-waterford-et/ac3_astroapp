@@ -46,6 +46,24 @@ const FilesPane = ({
     console.log(`[FilesPane] Zip download initiated for dataset="${selectedDataset}"`);
   };
 
+  const handleDownloadFile = (fileKey, fileName) => {
+    console.log(`[FilesPane] Downloading file: ${fileName}, key: ${fileKey}`);
+    
+    // Create download URL for single file
+    const downloadUrl = `/api/files/download?key=${encodeURIComponent(fileKey)}`;
+    
+    // Trigger download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = fileName;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    console.log(`[FilesPane] Download initiated for file: ${fileName}`);
+  };
+
   return (
     <div className="pipeline-pane files-pane">
       <div className="pane-header">
@@ -107,6 +125,7 @@ const FilesPane = ({
             selectedDataset={selectedDataset}
             onDelete={onDeleteFile}
             onProcessFile={title.includes('Input') ? onProcessFile : undefined}
+            onDownloadFile={isOutputPane ? handleDownloadFile : undefined}
             loadingMessage={`Loading ${title.toLowerCase()}...`}
             onLoadMore={loadMoreFiles}
             hasNextPage={pagination.hasMore}

@@ -82,7 +82,8 @@
   z-index: 2;
 }
 
-.file-item-container:hover .file-process-btn {
+.file-item-container:hover .file-process-btn,
+.file-item-container:hover .file-download-btn {
   transform: translateX(0);
   opacity: 1;
 }
@@ -96,11 +97,12 @@
   margin-right: 2rem;
 }
 
-.file-item-container:has(.file-process-btn):hover .file-item {
+.file-item-container:has(.file-process-btn):hover .file-item,
+.file-item-container:has(.file-download-btn):hover .file-item {
   margin-right: 4rem;
 }
 
-.file-item-container:not(:has(.file-process-btn)):not(:has(.file-delete-btn)):hover .file-item {
+.file-item-container:not(:has(.file-process-btn)):not(:has(.file-download-btn)):not(:has(.file-delete-btn)):hover .file-item {
   margin-right: 0;
 }
 
@@ -187,20 +189,17 @@
   width: 100%;
 }
 
-.file-process-btn {
+.file-process-btn,
+.file-download-btn {
   position: absolute;
   right: 2rem;
   top: 0;
   bottom: 0;
   width: 2rem;
   height: 100%;
-  background: linear-gradient(135deg, rgba(159, 122, 234, 0.25) 0%, rgba(139, 105, 220, 0.2) 100%);
   backdrop-filter: blur(8px);
   border: none;
-  border-left: 1px solid rgba(159, 122, 234, 0.2);
-  border-right: 1px solid rgba(159, 122, 234, 0.2);
   border-radius: 0;
-  color: #9F7AEA;
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
@@ -213,6 +212,20 @@
   z-index: 2;
 }
 
+.file-process-btn {
+  background: linear-gradient(135deg, rgba(159, 122, 234, 0.25) 0%, rgba(139, 105, 220, 0.2) 100%);
+  border-left: 1px solid rgba(159, 122, 234, 0.2);
+  border-right: 1px solid rgba(159, 122, 234, 0.2);
+  color: #9F7AEA;
+}
+
+.file-download-btn {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.25) 0%, rgba(56, 178, 172, 0.2) 100%);
+  border-left: 1px solid rgba(79, 209, 197, 0.2);
+  border-right: 1px solid rgba(79, 209, 197, 0.2);
+  color: #4FD1C5;
+}
+
 .file-process-btn:hover:not(:disabled) {
   background: linear-gradient(135deg, rgba(159, 122, 234, 0.4) 0%, rgba(139, 105, 220, 0.3) 100%);
   transform: translateX(0) scale(1.05);
@@ -220,7 +233,15 @@
   color: #ffffff;
 }
 
-.file-process-btn:disabled {
+.file-download-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.4) 0%, rgba(56, 178, 172, 0.3) 100%);
+  transform: translateX(0) scale(1.05);
+  box-shadow: 0 0 0 1px rgba(79, 209, 197, 0.3), 0 0 8px rgba(79, 209, 197, 0.2);
+  color: #ffffff;
+}
+
+.file-process-btn:disabled,
+.file-download-btn:disabled {
   cursor: not-allowed !important;
   opacity: 0.6 !important;
   transform: translateX(0) !important;
