@@ -208,8 +208,6 @@ export const getDatasets = async (processorType, signal = null) => {
     throw new Error('getDatasets: processorType is required');
   }
   
-  console.log(`[API] getDatasets: Starting request for processor="${processorType}"`);
-  
   try {
     const data = await apiRequest('datasets', { 
       params: { app: processorType },
@@ -217,14 +215,8 @@ export const getDatasets = async (processorType, signal = null) => {
       context: 'fetch datasets'
     });
     
-    console.log(`[API] getDatasets: Success for processor="${processorType}", found ${data.datasets?.length || 0} datasets`);
     return data.datasets || [];
   } catch (error) {
-    if (error.name === 'AbortError') {
-      console.log(`[API] getDatasets: Aborted for processor="${processorType}"`);
-    } else {
-      console.error(`[API] getDatasets: Error for processor="${processorType}":`, error);
-    }
     throw error;
   }
 };
