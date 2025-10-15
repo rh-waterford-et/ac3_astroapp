@@ -327,20 +327,43 @@ func (h *FileUploadHandler) ListDatasets(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Use the new GetBatchDirectories method to get all batch directories
+	// Check both input and output directories to find all datasets
+	// A dataset exists if it has either an input or output directory
 	inputPrefix := fmt.Sprintf("%s/input", appType)
-	batchDirectories, err := h.S3Bucket.GetBatchDirectories(inputPrefix)
+	outputPrefix := fmt.Sprintf("%s/output", appType)
+	
+	// Get datasets from input directory
+	inputDatasets, err := h.S3Bucket.GetBatchDirectories(inputPrefix)
 	if err != nil {
-		log.Printf("Error listing batch directories for %s: %v", appType, err)
-		response := ListDatasetsResponse{
-			Success:  false,
-			Datasets: []string{},
-		}
-		json.NewEncoder(w).Encode(response)
-		return
+		log.Printf("Error listing input directories for %s: %v", appType, err)
+		inputDatasets = []string{} // Continue with empty list if input fails
 	}
+	
+	// Get datasets from output directory
+	outputDatasets, err := h.S3Bucket.GetBatchDirectories(outputPrefix)
+	if err != nil {
+		log.Printf("Error listing output directories for %s: %v", appType, err)
+		outputDatasets = []string{} // Continue with empty list if output fails
+	}
+	
+	// Merge both lists and remove duplicates using a map
+	datasetMap := make(map[string]bool)
+	for _, dataset := range inputDatasets {
+		datasetMap[dataset] = true
+	}
+	for _, dataset := range outputDatasets {
+		datasetMap[dataset] = true
+	}
+	
+	// Convert map to sorted slice
+	var batchDirectories []string
+	for dataset := range datasetMap {
+		batchDirectories = append(batchDirectories, dataset)
+	}
+	sort.Strings(batchDirectories)
 
-	log.Printf("Found %d batch directories for %s: %v", len(batchDirectories), appType, batchDirectories)
+	log.Printf("Found %d batch directories for %s (from %d input + %d output): %v", 
+		len(batchDirectories), appType, len(inputDatasets), len(outputDatasets), batchDirectories)
 
 	response := ListDatasetsResponse{
 		Success:  true,
