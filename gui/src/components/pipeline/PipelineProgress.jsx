@@ -5,20 +5,30 @@ import { useTimeEstimation } from '../../hooks/data/useTimeEstimation';
 import { useFileTracking } from '../../hooks/data/useFileTracking';
 import { useProgressCalculation } from '../../hooks/data/useProgressCalculation';
 
-function PipelineProgress({ datasets, inputFiles, inputFilesTotalCount, outputFiles, outputFilesTotalCount, processorType, isCollapsed = false, onToggleCollapse }) {
+function PipelineProgress({ 
+  datasets, 
+  selectedDataset,
+  selectedInputFiles, 
+  selectedInputCount, 
+  selectedOutputFiles, 
+  selectedOutputCount, 
+  datasetFileCounts,
+  processorType, 
+  isCollapsed = false, 
+  onToggleCollapse 
+}) {
   // Time estimation hook
   const { getEstimatedTime, getProcessingStats } = useTimeEstimation(processorType);
   
-  // File tracking hook (replaces manual state management)
-  const { processingHistory, fileProcessingTimes } = useFileTracking(inputFiles, outputFiles, datasets);
+  // File tracking hook (replaces manual state management) - only for selected dataset
+  const { processingHistory, fileProcessingTimes } = useFileTracking(selectedInputFiles, selectedOutputFiles, datasets);
   
   // Progress calculation hook (replaces manual progress state and calculation)
+  // Now completely independent from dataset management pane - uses only datasetFileCounts
   const { progressData } = useProgressCalculation(
     datasets, 
-    inputFiles, 
-    inputFilesTotalCount, 
-    outputFiles, 
-    outputFilesTotalCount, 
+    selectedDataset,
+    datasetFileCounts,
     processingHistory, 
     processorType
   );
@@ -92,10 +102,12 @@ PipelineProgress.propTypes = {
       stage: PropTypes.string,
     })
   ).isRequired,
-  inputFiles: PropTypes.array.isRequired,
-  inputFilesTotalCount: PropTypes.number,
-  outputFiles: PropTypes.array.isRequired,
-  outputFilesTotalCount: PropTypes.number,
+  selectedDataset: PropTypes.string,
+  selectedInputFiles: PropTypes.array.isRequired,
+  selectedInputCount: PropTypes.number,
+  selectedOutputFiles: PropTypes.array.isRequired,
+  selectedOutputCount: PropTypes.number,
+  datasetFileCounts: PropTypes.object,
   processorType: PropTypes.string,
   isCollapsed: PropTypes.bool,
   onToggleCollapse: PropTypes.func.isRequired,

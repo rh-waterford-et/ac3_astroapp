@@ -8,6 +8,7 @@ import DatasetsPane from './DatasetsPane';
 import { useDatasetOperations } from '../../hooks/data/useDatasetOperations';
 import { usePaginatedFiles } from '../../hooks/data/usePaginatedFiles';
 import { useAutoRefresh } from '../../hooks/data/useAutoRefresh';
+import { useDatasetFileCounts } from '../../hooks/data/useDatasetFileCounts';
 
 
 function DatasetsList({ processorType }) {
@@ -36,10 +37,21 @@ function DatasetsList({ processorType }) {
     setCollapseState(prev => ({ ...prev, [section]: !prev[section] }));
   }, []);
 
+  // Get file counts for all datasets (for progress calculation)
+  const datasetFileCounts = useDatasetFileCounts(
+    datasetOps.datasets,
+    datasetOps.selectedDataset,
+    processorType
+  );
+
   // Auto-refresh for file counts (respect input→output sequencing)
   const refreshCallbacks = [inputFilesData.refreshFilesCount];
   if (inputFilesData.filesLoaded) {
     refreshCallbacks.push(outputFilesData.refreshFilesCount);
+  }
+  // Add refresh for dataset counts
+  if (datasetFileCounts.refresh) {
+    refreshCallbacks.push(datasetFileCounts.refresh);
   }
   
   useAutoRefresh(datasetOps.selectedDataset, refreshCallbacks, 60000); // 60 seconds - standard for file management
@@ -155,10 +167,12 @@ function DatasetsList({ processorType }) {
       {/* Pipeline Progress Monitor */}
       <PipelineProgress 
         datasets={datasetOps.datasets} 
-        inputFiles={inputFilesData.files}
-        inputFilesTotalCount={inputFilesData.pagination.total}
-        outputFiles={outputFilesData.files}
-        outputFilesTotalCount={outputFilesData.pagination.total}
+        selectedDataset={datasetOps.selectedDataset}
+        selectedInputFiles={inputFilesData.files}
+        selectedInputCount={inputFilesData.pagination.total}
+        selectedOutputFiles={outputFilesData.files}
+        selectedOutputCount={outputFilesData.pagination.total}
+        datasetFileCounts={datasetFileCounts.counts}
         processorType={processorType}
         isCollapsed={collapseState.progress}
         onToggleCollapse={() => toggleSection('progress')}
