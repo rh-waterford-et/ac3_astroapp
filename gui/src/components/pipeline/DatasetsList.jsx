@@ -16,16 +16,23 @@ function DatasetsList({ processorType }) {
   const datasetOps = useDatasetOperations(processorType);
   const inputFilesData = usePaginatedFiles(datasetOps.selectedDataset, 'input', processorType);
   
-  // Output files should only load after input files have completed (prevents backend overload)
-  // Check that input files are loaded AND they belong to the currently selected dataset
+  // Output files loading: Load immediately if no inputs exist, otherwise sequence after inputs
+  // This allows viewing outputs even when all input files have been processed/deleted
+  const shouldLoadOutputs = datasetOps.selectedDataset && (
+    // Load immediately if input files loaded and there are none
+    (inputFilesData.filesLoaded && 
+     inputFilesData.loadedDataset === datasetOps.selectedDataset &&
+     inputFilesData.files.length === 0) ||
+    // Or load after inputs are loaded and ready (with inputs present)
+    (inputFilesData.filesLoaded && 
+     inputFilesData.loadedDataset === datasetOps.selectedDataset &&
+     inputFilesData.files.length > 0 && 
+     !inputFilesData.loading)
+  );
+
   const outputFilesData = usePaginatedFiles(
-    inputFilesData.filesLoaded && 
-    inputFilesData.loadedDataset === datasetOps.selectedDataset &&
-    inputFilesData.files.length > 0 && 
-    !inputFilesData.loading
-      ? datasetOps.selectedDataset 
-      : null, 
-    'output', 
+    shouldLoadOutputs ? datasetOps.selectedDataset : null,
+    'output',
     processorType
   );
   

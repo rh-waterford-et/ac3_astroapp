@@ -37,18 +37,18 @@ const PDFGalleryItem = ({ pdfFile, objectName, onStatusUpdate }) => {
     // Update status
     const statusElement = document.getElementById('current-status');
     if (statusElement) {
-      statusElement.textContent = `Viewing ${objectName} H4 PDF: Cell ${cellNumber}`;
+      statusElement.textContent = `Viewing ${objectName} pPXF Fitting: Cell ${cellNumber}`;
     }
     
     if (onStatusUpdate) {
-      onStatusUpdate(`Viewing ${objectName} H4 PDF: Cell ${cellNumber}`);
+      onStatusUpdate(`Viewing ${objectName} pPXF Fitting: Cell ${cellNumber}`);
     }
   };
 
   return (
     <GalleryItem
       className="object-map-item pdf-item"
-      mapType="h4"
+      mapType="ppxf-fitting"
       objectName={objectName}
       cellNumber={cellNumber}
       pdfKey={pdfFile.key}

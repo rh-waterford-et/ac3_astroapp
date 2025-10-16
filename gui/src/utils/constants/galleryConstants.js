@@ -36,7 +36,8 @@ export const MAP_TYPES = [
   { key: 'h4', suffix: 'h4', label: 'H4', checkboxId: 'map-h4' },
   { key: 'age-lum-weighted', suffix: 'age', label: 'Age (Lum. Weighted)', checkboxId: 'map-age-weighted' },
   { key: 'age-mass-weighted', suffix: 'age_mass_weighted', label: 'Age (Mass Weighted)', checkboxId: 'map-age-mass-weighted' },
-  { key: 'metallicity', suffix: 'metallicity', label: 'Metallicity', checkboxId: 'map-metallicity' }
+  { key: 'metallicity', suffix: 'metallicity', label: 'Metallicity', checkboxId: 'map-metallicity' },
+  { key: 'ppxf-fitting', suffix: 'ppxf', label: 'pPXF Fitting', checkboxId: 'map-ppxf-fitting' }
 ];
 
 // PDF configuration

@@ -64,8 +64,8 @@ export const useImageLoader = ({
       const isChecked = activeCheckboxStates[mapType.checkboxId] || false;
       
       if (isChecked) {
-        // Special handling for H4: load dynamic PDF files from S3
-        if (mapType.key === 'h4') {
+        // Special handling for pPXF Fitting: load dynamic PDF files from S3
+        if (mapType.key === 'ppxf-fitting') {
           if (!tryLoadPpxfPdfFiles) {
             continue;
           }
@@ -76,7 +76,7 @@ export const useImageLoader = ({
               imagesLoaded += pdfsLoaded;
             }
           } catch (error) {
-            // Silent error handling for H4 processing
+            // Silent error handling for pPXF processing
           }
         } else {
           // Use existing static image logic for other map types

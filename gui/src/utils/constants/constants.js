@@ -7,7 +7,8 @@ export const MAP_CONTROLS = {
     'map-h4': { label: 'h4', icon: 'H₄' },
     'map-age-weighted': { label: 'Age (lum. weighted)', icon: '⏳' },
     'map-age-mass-weighted': { label: 'Age (Mass Weighted)', icon: '⚖️' },
-    'map-metallicity': { label: 'Metallicity', icon: '⚛️' }
+    'map-metallicity': { label: 'Metallicity', icon: '⚛️' },
+    'map-ppxf-fitting': { label: 'pPXF Fitting', icon: '📐' }
   };
 
 export const MAP_CHECKBOX_IDS = [
@@ -19,7 +20,8 @@ export const MAP_CHECKBOX_IDS = [
   'map-h4',
   'map-age-weighted',
   'map-age-mass-weighted',
-  'map-metallicity'
+  'map-metallicity',
+  'map-ppxf-fitting'
 ];
 
 export const KINEMATICS_CHECKBOXES = [
@@ -35,6 +37,10 @@ export const POPULATION_CHECKBOXES = [
   { id: 'map-age-weighted', label: 'Age (lum. weighted)' },
   { id: 'map-age-mass-weighted', label: 'Age (Mass Weighted)' },
   { id: 'map-metallicity', label: 'Metallicity' }
+];
+
+export const PPXF_CHECKBOXES = [
+  { id: 'map-ppxf-fitting', label: 'pPXF Fitting' }
 ];
 
 export const DISPLAY_CHECKBOXES = [

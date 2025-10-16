@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { isAtObjectCoordinates } from '../../utils/gallery/galleryUtils';
-import { MAP_CHECKBOX_IDS, KINEMATICS_CHECKBOXES, POPULATION_CHECKBOXES } from '../../utils/constants/constants';
+import { MAP_CHECKBOX_IDS, KINEMATICS_CHECKBOXES, POPULATION_CHECKBOXES, PPXF_CHECKBOXES } from '../../utils/constants/constants';
 
 // Build map of checkbox IDs to their labels and order for sorting
 const MAP_TYPE_CONFIG = {};
@@ -11,6 +11,10 @@ KINEMATICS_CHECKBOXES.forEach(({ id, label }) => {
 });
 
 POPULATION_CHECKBOXES.forEach(({ id, label }) => {
+  MAP_TYPE_CONFIG[id] = { label, order: orderIndex++ };
+});
+
+PPXF_CHECKBOXES.forEach(({ id, label }) => {
   MAP_TYPE_CONFIG[id] = { label, order: orderIndex++ };
 });
 
@@ -115,24 +119,24 @@ export const useGalleryState = (checkboxStates, onStatusUpdate) => {
     setGalleryState('loaded');
   }, [getOrCreateGroup]);
 
-  // Add PDF item to gallery (map to H4 group as example of processing results)
+  // Add PDF item to gallery (map to pPXF Fitting group for processing results)
   const addPdfItem = useCallback((pdfItem) => {
-    const h4MapType = 'h4';
-    const h4Label = 'h4';
+    const ppxfMapType = 'ppxf-fitting';
+    const ppxfLabel = 'pPXF Fitting';
     
     setGalleryGroups(prev => {
-      // Check if this PDF already exists in H4 group
-      const h4Group = prev.find(g => g.mapType === h4MapType);
-      if (h4Group?.items.some(item => item.type === 'pdf' && item.pdfFile.key === pdfItem.pdfFile.key)) {
+      // Check if this PDF already exists in pPXF Fitting group
+      const ppxfGroup = prev.find(g => g.mapType === ppxfMapType);
+      if (ppxfGroup?.items.some(item => item.type === 'pdf' && item.pdfFile.key === pdfItem.pdfFile.key)) {
         return prev; // Already exists
       }
       
-      // Ensure H4 group exists
-      let groups = getOrCreateGroup(h4MapType, h4Label)(prev);
+      // Ensure pPXF Fitting group exists
+      let groups = getOrCreateGroup(ppxfMapType, ppxfLabel)(prev);
       
-      // Add PDF to H4 group (preserve currentPage explicitly)
+      // Add PDF to pPXF Fitting group (preserve currentPage explicitly)
       groups = groups.map(group => 
-        group.mapType === h4MapType
+        group.mapType === ppxfMapType
           ? { 
               ...group, 
               items: [...group.items, pdfItem],
@@ -148,11 +152,11 @@ export const useGalleryState = (checkboxStates, onStatusUpdate) => {
     return true;
   }, [getOrCreateGroup]);
 
-  // Clear PDF items from H4 group
+  // Clear PDF items from pPXF Fitting group
   const clearPdfItems = useCallback(() => {
     setGalleryGroups(prev => 
       prev.map(group => 
-        group.mapType === 'h4'
+        group.mapType === 'ppxf-fitting'
           ? { ...group, items: group.items.filter(item => item.type !== 'pdf') }
           : group
       )

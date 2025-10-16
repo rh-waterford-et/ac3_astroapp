@@ -162,6 +162,17 @@
   margin-top: 0.5rem;
 }
 
+/* Extra spacing for pPXF section */
+.subsection.subsection-spaced {
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+}
+
+/* Extra spacing for control sections */
+.control-section.control-section-spaced {
+  margin-top: 2rem;
+}
+
 .subsection h5 {
   margin: 0 0 0.25rem 0;
   font-size: 0.6875rem;
