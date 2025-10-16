@@ -21,6 +21,16 @@
   pointer-events: auto;
 }
 
+/* Single row gallery - compact height */
+.bottom-gallery.single-row-gallery {
+  max-height: 12rem;
+}
+
+/* Multiple rows gallery - expand to show 2 rows */
+.bottom-gallery.multi-row-gallery {
+  max-height: 24rem;
+}
+
 .bottom-gallery::-webkit-scrollbar {
   width: 4px;
   transition: width 0.3s ease;
@@ -1118,5 +1128,163 @@
 .pagination-arrow-right {
   margin-left: 0.5rem;
   margin-right: 0.5rem;
+}
+
+/* Gallery Rows Layout */
+.gallery-rows-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 0.75rem;
+  overflow-x: hidden;
+}
+
+/* Single row - compact height */
+.gallery-rows-container.single-row {
+  max-height: none;
+  overflow-y: visible;
+}
+
+/* Multiple rows - allow for 2 rows before scrolling */
+.gallery-rows-container.multi-row {
+  max-height: calc(150px * 2 + 1.5rem + 1.5rem); /* 2 rows + gap + padding */
+  overflow-y: auto;
+}
+
+/* Gallery content wrapper - controls the scrolling for rows */
+.gallery-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-x: hidden;
+}
+
+/* Single row content - fit to content */
+.gallery-content.single-row-content {
+  max-height: none;
+  overflow-y: visible;
+}
+
+/* Multiple rows content - set max height for 2 rows */
+.gallery-content.multi-row-content {
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+/* Fallback using :has() for when classes aren't applied to content wrapper */
+.gallery-content:has(.single-row) {
+  max-height: none;
+  overflow-y: visible;
+}
+
+.gallery-content:has(.multi-row) {
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+/* Individual Gallery Row */
+.gallery-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid rgba(79, 209, 197, 0.3);
+  border-radius: 6px;
+  padding: 0.75rem;
+  background: rgba(45, 55, 72, 0.2);
+  transition: border-color 0.2s ease;
+}
+
+.gallery-row:hover {
+  border-color: rgba(79, 209, 197, 0.5);
+}
+
+.gallery-row-header {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--blue-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-left: 0.5rem;
+  text-shadow: 0 0 8px rgba(79, 209, 197, 0.3);
+}
+
+/* Row content with pagination arrows */
+.gallery-row-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.gallery-row-items {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+  overflow: hidden;
+  flex-wrap: nowrap;
+}
+
+/* Empty row message */
+.gallery-row-empty {
+  padding: 1rem;
+  text-align: center;
+  color: #888;
+  font-style: italic;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+/* Row-specific pagination arrows */
+.gallery-row-arrow {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.2), rgba(79, 209, 197, 0.4));
+  border: 1px solid rgba(79, 209, 197, 0.3);
+  color: #fff;
+  font-size: 1.5rem;
+  width: 2.25rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  font-weight: bold;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  align-self: center;
+  margin-top: -1rem;
+}
+
+.gallery-row-arrow:hover {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.4), rgba(79, 209, 197, 0.6));
+  border-color: rgba(79, 209, 197, 0.5);
+  box-shadow: 0 0 10px rgba(79, 209, 197, 0.3);
+  transform: scale(1.05);
+}
+
+.gallery-row-arrow:active {
+  transform: scale(0.95);
+}
+
+/* Scrollbar for rows container */
+.gallery-rows-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.gallery-rows-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.gallery-rows-container::-webkit-scrollbar-thumb {
+  background: rgba(79, 209, 197, 0.3);
+  border-radius: 3px;
+}
+
+.gallery-rows-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(79, 209, 197, 0.5);
 }
   

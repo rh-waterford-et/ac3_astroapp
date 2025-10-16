@@ -18,19 +18,17 @@ const GalleryModal = ({ modalRndRef, onStatusUpdate }) => {
     currentImage,
     currentImageIndex,
     hasMultipleImages,
+    totalItems,  // Now from the hook (row-specific count)
     openModal,
     closeModal,
     navigateToPrevious,
     navigateToNext,
     setCurrentImage
   } = useModalNavigation();
-  
-  // Get total items count from gallery context
-  const totalItems = gallery.galleryItems?.length || 0;
 
-  // Update gallery container ref to find gallery items
+  // Update gallery container ref to find gallery items (now in rows container)
   useEffect(() => {
-    galleryContainerRef.current = document.getElementById('gallery-items');
+    galleryContainerRef.current = document.querySelector('.gallery-rows-container') || document.querySelector('.gallery-content');
   }, []);
 
   // Handle modal close
@@ -64,7 +62,7 @@ const GalleryModal = ({ modalRndRef, onStatusUpdate }) => {
     window.openImageModal = (imageSrc, title, objectName, clickedItem = null, isPdf = false) => {
       // Re-query the gallery container to ensure we have the latest reference
       // This is important because the gallery may remount during tab switching
-      const freshGalleryContainer = document.getElementById('gallery-items');
+      const freshGalleryContainer = document.querySelector('.gallery-rows-container') || document.querySelector('.gallery-content');
       
       // Update the ref
       galleryContainerRef.current = freshGalleryContainer;

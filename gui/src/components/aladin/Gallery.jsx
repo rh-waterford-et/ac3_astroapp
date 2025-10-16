@@ -1,8 +1,6 @@
 import React, { useEffect } from 'react';
 import PropTypes from 'prop-types';
-import ImageGalleryItem from './gallery/items/ImageGalleryItem';
-import PDFGalleryItem from './gallery/items/PDFGalleryItem';
-import PlaceholderGalleryItem from './gallery/items/PlaceholderGalleryItem';
+import GalleryRow from './gallery/GalleryRow';
 import EmptyGalleryMessage from './gallery/ui/EmptyGalleryMessage';
 import GalleryLoader from './gallery/ui/GalleryLoader';
 import { 
@@ -21,9 +19,10 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
 
   // Gallery state management hook
   const {
-    galleryItems,
+    galleryGroups,
     galleryState,
     currentObjectName,
+    totalItemsCount,
     setLoadingState,
     setNavigateToObjectState,
     updateLoadingStatus,
@@ -33,15 +32,8 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
     addPlaceholderItem,
     removeItemByMapType,
     clearGallery,
+    changeGroupPage,
     updateStatus,
-    // Pagination
-    paginatedItems,
-    currentPage,
-    totalPages,
-    itemsPerPage,
-    goToNextPage,
-    goToPrevPage,
-    goToPage
   } = useGalleryState(checkboxStates, onStatusUpdate);
 
   // Set up PDF loader hook
@@ -67,20 +59,9 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
     return () => {
       if (cleanup) cleanup();
     };
-  }, [aladinInstance, galleryItems.length, loadObjectImages, clearGallery]);
+  }, [aladinInstance, totalItemsCount, loadObjectImages, clearGallery]);
 
-  // Scroll gallery to start when page changes
-  useEffect(() => {
-    // Try scrolling multiple containers to ensure we catch the right one
-    const galleryItems = document.getElementById('gallery-items');
-    const galleryContent = document.querySelector('.gallery-content');
-    const bottomGallery = document.querySelector('.bottom-gallery');
-    
-    // Scroll all potential containers to the left
-    if (galleryItems) galleryItems.scrollLeft = 0;
-    if (galleryContent) galleryContent.scrollLeft = 0;
-    if (bottomGallery) bottomGallery.scrollLeft = 0;
-  }, [currentPage]);
+  // Note: Scroll effect removed - pagination is now per-row, not global
 
   // Set up view change monitoring inside the component
   const setupViewChangeMonitoring = (aladin) => {
@@ -102,7 +83,7 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
           if (stillAtObject) {
             // Still at object - but only reload if gallery is empty
             // This prevents unnecessary reloads when just panning within object radius
-            if (galleryItems.length === 0) {
+            if (totalItemsCount === 0) {
               loadObjectImages(loadedObject);
             }
             // If gallery already has items, do nothing (keep current state)
@@ -111,7 +92,7 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
             // so we can reload if they come back
             clearGallery();
           }
-        } else if (galleryItems.length === 0) {
+        } else if (totalItemsCount === 0) {
           // No loaded object and gallery is empty - check if we're at a registered object's coordinates
           try {
             const currentPos = aladin.getRaDec();
@@ -157,66 +138,22 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
       case 'navigate-to-object':
         return <EmptyGalleryMessage type="navigate-to-object" objectName={currentObjectName} />;
       case 'loaded':
+        const rowCount = galleryGroups.length;
+        const containerClass = rowCount === 1 
+          ? 'gallery-rows-container single-row' 
+          : 'gallery-rows-container multi-row';
+        
         return (
-          <>
-            {/* Left pagination arrow - shown when not on first page */}
-            {galleryItems.length > itemsPerPage && currentPage > 0 && (
-              <button 
-                className="pagination-arrow pagination-arrow-left"
-                onClick={goToPrevPage}
-                title="Previous page"
-              >
-                ‹
-              </button>
-            )}
-            
-            {paginatedItems.map(item => {
-              switch (item.type) {
-                case 'image':
-                  return (
-                    <ImageGalleryItem
-                      key={item.id}
-                      imageSrc={item.imageSrc}
-                      mapType={item.mapType}
-                      objectName={item.objectName}
-                      onStatusUpdate={updateStatus}
-                    />
-                  );
-                case 'pdf':
-                  return (
-                    <PDFGalleryItem
-                      key={item.id}
-                      pdfFile={item.pdfFile}
-                      objectName={item.objectName}
-                      onStatusUpdate={updateStatus}
-                    />
-                  );
-                case 'placeholder':
-                  return (
-                    <PlaceholderGalleryItem
-                      key={item.id}
-                      mapType={item.mapType}
-                      label={item.label}
-                      icon={item.icon}
-                      onStatusUpdate={updateStatus}
-                    />
-                  );
-                default:
-                  return null;
-              }
-            })}
-            
-            {/* Right pagination arrow - shown when not on last page */}
-            {galleryItems.length > itemsPerPage && currentPage < totalPages - 1 && (
-              <button 
-                className="pagination-arrow pagination-arrow-right"
-                onClick={goToNextPage}
-                title="Next page"
-              >
-                ›
-              </button>
-            )}
-          </>
+          <div className={containerClass}>
+            {galleryGroups.map(group => (
+              <GalleryRow
+                key={group.mapType}
+                group={group}
+                onPageChange={changeGroupPage}
+                onStatusUpdate={updateStatus}
+              />
+            ))}
+          </div>
         );
       default:
         return <EmptyGalleryMessage type="empty" />;
@@ -231,25 +168,27 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
         removeMapFromGallery: removeItemByMapType,
         clearGallery: clearGallery,
         loadObjectImages: loadObjectImages,
-        // Pagination
-        currentPage,
-        totalPages,
-        itemsPerPage,
-        galleryItems,
-        goToNextPage,
-        goToPrevPage,
-        goToPage
+        // New grouped structure
+        galleryGroups,
+        totalItemsCount,
       };
       onGalleryOperationsReady(operations);
     }
-  }, [onGalleryOperationsReady, addPlaceholderItem, removeItemByMapType, clearGallery, loadObjectImages, currentPage, totalPages, itemsPerPage, galleryItems, goToNextPage, goToPrevPage, goToPage]);
+  }, [onGalleryOperationsReady, addPlaceholderItem, removeItemByMapType, clearGallery, loadObjectImages, galleryGroups, totalItemsCount]);
 
+  // Determine content class based on number of rows
+  const contentClass = galleryGroups.length === 1 
+    ? 'gallery-content single-row-content' 
+    : 'gallery-content multi-row-content';
+  
+  const galleryClass = galleryGroups.length === 1
+    ? 'bottom-gallery single-row-gallery'
+    : 'bottom-gallery multi-row-gallery';
+  
   return (
-    <div className="bottom-gallery">
-      <div className="gallery-content">
-        <div className="gallery-items" id="gallery-items">
-          {renderGalleryContent()}
-        </div>
+    <div className={galleryClass}>
+      <div className={contentClass}>
+        {renderGalleryContent()}
       </div>
     </div>
   );

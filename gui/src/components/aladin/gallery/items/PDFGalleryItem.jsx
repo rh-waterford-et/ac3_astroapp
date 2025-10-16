@@ -29,8 +29,8 @@ const PDFGalleryItem = ({ pdfFile, objectName, onStatusUpdate }) => {
     // Open PDF in modal using existing modal system
     if (window.openImageModal) {
       // Find the actual DOM element for compatibility with existing modal system
-      const galleryItems = document.getElementById('gallery-items');
-      const clickedItem = galleryItems?.querySelector(`[data-cell-number="${cellNumber}"]`);
+      const galleryContainer = document.querySelector('.gallery-rows-container') || document.querySelector('.gallery-content');
+      const clickedItem = galleryContainer?.querySelector(`[data-cell-number="${cellNumber}"]`);
       window.openImageModal(pdfUrl, `${displayName} PDF`, objectName, clickedItem, true);
     }
     
