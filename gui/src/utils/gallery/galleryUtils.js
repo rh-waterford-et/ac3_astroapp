@@ -108,7 +108,7 @@ export const checkImageExists = (imagePath) => {
  * @param {Object} mapType - Map type configuration object
  * @param {string} objectName - The original object name for display
  * @param {Object} imageMap - Mapping of object names to their image assets
- * @returns {Object|null} - Image data if found, null otherwise
+ * @returns {Object|null} - Image or PDF data if found, null otherwise
  */
 export const tryGetObjectImage = (mapType, objectName, imageMap) => {
   // Normalize object name to match image map keys
@@ -119,18 +119,32 @@ export const tryGetObjectImage = (mapType, objectName, imageMap) => {
     return null;
   }
   
-  // Get the image source for this map type
+  // Check for PDF variant first (with _pdf suffix)
+  const pdfKey = `${mapType.suffix}_pdf`;
+  const pdfs = imageMap[normalizedName][pdfKey];
+  
+  if (pdfs && Array.isArray(pdfs) && pdfs.length > 0) {
+    return {
+      type: 'pdf',
+      pdfs: pdfs,  // Array of PDF import paths
+      mapType,
+      objectName
+    };
+  }
+  
+  // Fall back to image (existing logic)
   const imageSrc = imageMap[normalizedName][mapType.suffix];
   
   if (imageSrc) {
     return {
+      type: 'image',
       imageSrc,
       mapType,
       objectName
     };
-  } else {
-    return null;
   }
+  
+  return null;
 };
 
 /**

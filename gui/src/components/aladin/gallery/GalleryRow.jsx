@@ -70,6 +70,7 @@ const GalleryRow = ({ group, onPageChange, onStatusUpdate }) => {
                       key={item.id}
                       pdfFile={item.pdfFile}
                       objectName={item.objectName}
+                      mapType={label}
                       onStatusUpdate={onStatusUpdate}
                     />
                   );

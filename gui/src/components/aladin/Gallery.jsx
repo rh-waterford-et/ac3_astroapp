@@ -47,6 +47,7 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
     setLoadingState,
     updateLoadingStatus,
     addImageItem,
+    addPdfItem,
     tryLoadPpxfPdfFiles
   });
 

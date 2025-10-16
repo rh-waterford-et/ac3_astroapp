@@ -80,12 +80,66 @@ export const generatePdfThumbnail = async (pdfUrl, cellNumber) => {
 };
 
 /**
+ * Generate a PDF thumbnail from a static asset URL
+ * @param {string} pdfUrl - URL/path of the static PDF asset
+ * @param {string} uniqueId - Unique ID for the thumbnail container
+ * @returns {Promise} - Promise that resolves when thumbnail is generated
+ */
+export const generateStaticPdfThumbnail = async (pdfUrl, uniqueId) => {
+  try {
+    // Check if PDF.js is available
+    if (typeof window.pdfjsLib === 'undefined') {
+      return;
+    }
+
+    const pdf = await window.pdfjsLib.getDocument(pdfUrl).promise;
+    const page = await pdf.getPage(1); // Get first page
+    
+    const container = document.getElementById(`static-pdf-thumb-${uniqueId}`);
+    if (!container) return;
+    
+    const canvas = container.querySelector('.pdf-thumbnail-canvas');
+    const loadingIndicator = container.querySelector('.pdf-loading-indicator');
+    
+    if (!canvas || !loadingIndicator) return;
+    
+    const context = canvas.getContext('2d');
+    const viewport = page.getViewport({ scale: PDF_CONFIG.THUMBNAIL_SCALE });
+    
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    
+    await page.render({
+      canvasContext: context,
+      viewport: viewport
+    }).promise;
+    
+    // Show canvas, hide loading indicator (same as S3 PDFs)
+    canvas.style.display = 'block';
+    loadingIndicator.style.display = 'none';
+    
+  } catch (error) {
+    console.error('Failed to generate static PDF thumbnail:', error);
+    // Show error state in the loading indicator
+    const container = document.getElementById(`static-pdf-thumb-${uniqueId}`);
+    if (container) {
+      const loadingIndicator = container.querySelector('.pdf-loading-indicator');
+      if (loadingIndicator) {
+        loadingIndicator.innerHTML = `
+          <div class="loading-text" style="color: #ff6b6b;">Preview failed</div>
+        `;
+      }
+    }
+  }
+};
+
+/**
  * Create PDF URL for modal display
  * @param {string} pdfKey - S3 key for the PDF file
  * @returns {string} - PDF URL with viewer settings
  */
 export const createPdfModalUrl = (pdfKey) => {
-  return `/api/files/download?key=${encodeURIComponent(pdfKey)}#zoom=100&toolbar=0&navpanes=0`;
+  return `/api/files/download?key=${encodeURIComponent(pdfKey)}#toolbar=0`;
 };
 
 /**

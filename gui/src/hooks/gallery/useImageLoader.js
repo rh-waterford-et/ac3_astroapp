@@ -14,6 +14,7 @@ export const useImageLoader = ({
   setLoadingState,
   updateLoadingStatus,
   addImageItem,
+  addPdfItem,
   tryLoadPpxfPdfFiles
 }) => {
   // App state hook for shared values
@@ -52,6 +53,7 @@ export const useImageLoader = ({
     updateLoadingStatus,
     checkboxStates,
     addImageItem,
+    addPdfItem,
     tryLoadPpxfPdfFiles
   ]);
 
@@ -89,19 +91,38 @@ export const useImageLoader = ({
     }
     
     return imagesLoaded;
-  }, [checkboxStates, tryLoadPpxfPdfFiles, addImageItem]);
+  }, [checkboxStates, tryLoadPpxfPdfFiles, addImageItem, addPdfItem]);
 
-  // Try to load a single object image
+  // Try to load a single object image or PDF
   const tryLoadObjectImage = useCallback(async (mapType, objectName, imageMap) => {
-    const imageData = tryGetObjectImage(mapType, objectName, imageMap);
+    const data = tryGetObjectImage(mapType, objectName, imageMap);
     
-    if (imageData) {
-      addImageItem(imageData.imageSrc, imageData.mapType, imageData.objectName);
-      return true;
-    } else {
+    if (!data) {
       return false;
     }
-  }, [addImageItem]);
+    
+    if (data.type === 'pdf') {
+      // Add each PDF in the array
+      data.pdfs.forEach((pdfPath, index) => {
+        addPdfItem({
+          id: `static-pdf-${mapType.key}-${index}-${Date.now()}`,
+          type: 'pdf',
+          pdfFile: {
+            key: pdfPath,  // Asset import path
+            name: `${mapType.label}${index > 0 ? ' Error' : ''}`,
+            isStatic: true
+          },
+          mapType: mapType.key,  // e.g., 'stellar-velocity', 'h3', 'h4'
+          objectName
+        });
+      });
+      return true;
+    } else {
+      // Handle regular images
+      addImageItem(data.imageSrc, data.mapType, data.objectName);
+      return true;
+    }
+  }, [addImageItem, addPdfItem]);
 
   return {
     loadObjectImages,

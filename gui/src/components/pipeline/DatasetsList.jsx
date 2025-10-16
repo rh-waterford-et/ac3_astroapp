@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import FileUpload from './FileUpload';
 import PipelineProgress from './PipelineProgress';
@@ -56,16 +56,33 @@ function DatasetsList({ processorType }) {
   );
 
   // Auto-refresh for file counts (respect input→output sequencing)
-  const refreshCallbacks = [inputFilesData.refreshFilesCount];
-  if (inputFilesData.filesLoaded) {
-    refreshCallbacks.push(outputFilesData.refreshFilesCount);
-  }
-  // Add refresh for dataset counts
-  if (datasetFileCounts.refresh) {
-    refreshCallbacks.push(datasetFileCounts.refresh);
-  }
+  // File count updates are lightweight (only pagination metadata), so we can poll frequently
+  // Memoize the callbacks array to prevent useAutoRefresh from resetting on every render
+  const refreshCallbacks = useMemo(() => {
+    const callbacks = [inputFilesData.refreshFilesCount];
+    if (inputFilesData.filesLoaded) {
+      callbacks.push(outputFilesData.refreshFilesCount);
+    }
+    return callbacks;
+  }, [inputFilesData.refreshFilesCount, inputFilesData.filesLoaded, outputFilesData.refreshFilesCount]);
   
-  useAutoRefresh(datasetOps.selectedDataset, refreshCallbacks, 60000); // 60 seconds - standard for file management
+  useAutoRefresh(datasetOps.selectedDataset, refreshCallbacks, 5000); // 5 seconds - responsive counter updates
+  
+  // Separate auto-refresh for pipeline progress (runs independently of selected dataset)
+  // This ensures progress bars update even when no dataset is selected
+  useEffect(() => {
+    if (!datasetFileCounts.refresh) return;
+    
+    // Initial refresh
+    datasetFileCounts.refresh();
+    
+    // Set up polling - refresh every 5 seconds during active processing
+    const interval = setInterval(() => {
+      datasetFileCounts.refresh();
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [processorType, datasetOps.datasets.length]); // Re-run when datasets or processor type changes
 
   const fileUploadRef = useRef(null);
 

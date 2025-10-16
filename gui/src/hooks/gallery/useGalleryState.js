@@ -119,24 +119,27 @@ export const useGalleryState = (checkboxStates, onStatusUpdate) => {
     setGalleryState('loaded');
   }, [getOrCreateGroup]);
 
-  // Add PDF item to gallery (map to pPXF Fitting group for processing results)
+  // Add PDF item to gallery (route to correct map type group)
   const addPdfItem = useCallback((pdfItem) => {
-    const ppxfMapType = 'ppxf-fitting';
-    const ppxfLabel = 'pPXF Fitting';
+    // Use mapType from item (e.g., 'stellar-velocity', 'h3') or default to 'ppxf-fitting' for S3 PDFs
+    const targetMapType = pdfItem.mapType || 'ppxf-fitting';
+    const checkboxId = `map-${targetMapType}`;
+    const config = MAP_TYPE_CONFIG[checkboxId];
+    const label = config?.label || targetMapType;
     
     setGalleryGroups(prev => {
-      // Check if this PDF already exists in pPXF Fitting group
-      const ppxfGroup = prev.find(g => g.mapType === ppxfMapType);
-      if (ppxfGroup?.items.some(item => item.type === 'pdf' && item.pdfFile.key === pdfItem.pdfFile.key)) {
+      // Check if this PDF already exists in the target group
+      const targetGroup = prev.find(g => g.mapType === targetMapType);
+      if (targetGroup?.items.some(item => item.type === 'pdf' && item.pdfFile.key === pdfItem.pdfFile.key)) {
         return prev; // Already exists
       }
       
-      // Ensure pPXF Fitting group exists
-      let groups = getOrCreateGroup(ppxfMapType, ppxfLabel)(prev);
+      // Ensure target group exists
+      let groups = getOrCreateGroup(targetMapType, label)(prev);
       
-      // Add PDF to pPXF Fitting group (preserve currentPage explicitly)
+      // Add PDF to target group (preserve currentPage explicitly)
       groups = groups.map(group => 
-        group.mapType === ppxfMapType
+        group.mapType === targetMapType
           ? { 
               ...group, 
               items: [...group.items, pdfItem],
