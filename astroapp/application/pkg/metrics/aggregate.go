@@ -121,9 +121,9 @@ func (ms *MetricsStore) AggregateAndStoreBatchSummary(ctx context.Context, batch
 
 	// Removed for now to allow prometheus to read Job details before they are removed, please evaulate if still needed
 	// TODO possibly introduce a timed job to clean down the Redis data
-	// if err := ms.CleanupJobes(ctx, batchID, timeParam, "complete_only"); err != nil {
-	//	log.Printf("failed to cleanup jobes for batch %s: %v", batchID, err)
-	//}
+	 if err := ms.CleanupJobes(ctx, batchID, timeParam, "complete_only"); err != nil {
+		log.Printf("failed to cleanup jobes for batch %s: %v", batchID, err)
+	}
 
 	return summary, nil
 }
