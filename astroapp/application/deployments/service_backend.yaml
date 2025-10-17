@@ -5,6 +5,7 @@ metadata:
   namespace: uc3-applications
   labels:
     app: ucm-producer
+    svc: ucm
 spec:
   selector:
     app: ucm-producer
