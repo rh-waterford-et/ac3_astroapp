@@ -12,10 +12,20 @@ export const useDatasetOperations = (processorType) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const isRefreshing = useRef(false);
+  const abortControllerRef = useRef(null);
 
   // Load datasets with auto-selection logic
   const loadDatasets = useCallback(async (silent = false, forceAutoSelect = false) => {
     if (isRefreshing.current) return;
+    
+    // Cancel any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+    const currentAbortController = abortControllerRef.current;
     
     isRefreshing.current = true;
     
@@ -25,7 +35,12 @@ export const useDatasetOperations = (processorType) => {
     }
     
     try {
-      const datasetNames = await getDatasets(processorType);
+      const datasetNames = await getDatasets(processorType, currentAbortController.signal);
+      
+      // Check if this request was aborted
+      if (currentAbortController.signal.aborted) {
+        return;
+      }
       
       const datasetObjects = datasetNames
         .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
@@ -48,6 +63,11 @@ export const useDatasetOperations = (processorType) => {
         }
       });
     } catch (err) {
+      // Ignore abort errors
+      if (err.name === 'AbortError') {
+        return;
+      }
+      
       // Only show error for user actions
       if (!silent) {
         setError(err.message || 'Failed to load datasets');
@@ -175,6 +195,11 @@ export const useDatasetOperations = (processorType) => {
 
   // Clear all data when processor type changes
   useEffect(() => {
+    // Abort any in-flight requests from previous processor
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     
     // Clear all state immediately
     setDatasets([]);
@@ -185,7 +210,10 @@ export const useDatasetOperations = (processorType) => {
     
     // Start fresh - force auto-select first dataset on processor switch
     loadDatasets(false, true); // forceAutoSelect = true
-  }, [processorType, loadDatasets]);
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Only depend on processorType (loadDatasets is stable and recreated when processorType changes)
+  }, [processorType]);
 
   return {
     // State

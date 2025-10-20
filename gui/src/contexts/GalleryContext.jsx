@@ -36,7 +36,11 @@ export const GalleryProvider = ({ children, galleryOperations }) => {
       if (galleryOperations?.clearGallery) {
         galleryOperations.clearGallery();
       }
-    }, [galleryOperations])
+    }, [galleryOperations]),
+
+    // New grouped structure
+    galleryGroups: galleryOperations?.galleryGroups ?? [],
+    totalItemsCount: galleryOperations?.totalItemsCount ?? 0,
   };
 
   return (

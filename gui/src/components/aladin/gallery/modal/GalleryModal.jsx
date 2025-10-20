@@ -5,84 +5,31 @@ import { Rnd } from 'react-rnd';
 import ModalNavigation from './ModalNavigation';
 import ModalImageViewer from './ModalImageViewer';
 import { useModalNavigation } from '../../../../hooks/modal/useModalNavigation';
+import { useGallery } from '../../../../contexts/GalleryContext';
 import { MODAL_DIMENSIONS } from '../../../../utils/constants/constants';
 
 const GalleryModal = ({ modalRndRef, onStatusUpdate }) => {
   const [transparency, setTransparency] = useState(95);
   const galleryContainerRef = useRef(null);
+  const gallery = useGallery();
   
   const {
     isModalOpen,
     currentImage,
     currentImageIndex,
-    galleryItems,
     hasMultipleImages,
+    totalItems,  // Now from the hook (row-specific count)
     openModal,
     closeModal,
     navigateToPrevious,
     navigateToNext,
-    getCurrentItem,
     setCurrentImage
   } = useModalNavigation();
 
-  // Update gallery container ref to find gallery items
+  // Update gallery container ref to find gallery items (now in rows container)
   useEffect(() => {
-    galleryContainerRef.current = document.getElementById('gallery-items');
+    galleryContainerRef.current = document.querySelector('.gallery-rows-container') || document.querySelector('.gallery-content');
   }, []);
-
-  // Handle navigation to update current image when index changes
-  useEffect(() => {
-    if (currentImageIndex >= 0 && galleryItems.length > 0) {
-      const currentItem = getCurrentItem();
-      if (currentItem && currentImage) {
-        // Extract data from current item
-        const isPdfItem = currentItem.classList.contains('pdf-item');
-        
-        if (isPdfItem) {
-          // Handle PDF navigation
-          const pdfKey = currentItem.dataset.pdfKey;
-          const cellNumber = currentItem.dataset.cellNumber;
-          const objectName = currentItem.dataset.objectName || 'Unknown';
-          const label = currentItem.querySelector('.gallery-label');
-          
-          const pdfUrl = `/api/files/download?key=${encodeURIComponent(pdfKey)}#zoom=100&toolbar=0&navpanes=0`;
-          const title = label ? label.textContent : `Cell ${cellNumber} H4`;
-          
-          setCurrentImage({
-            src: pdfUrl,
-            title: title,
-            objectName: objectName,
-            isPdf: true
-          });
-          
-          // Update status
-          if (onStatusUpdate) {
-            onStatusUpdate(`Viewing ${objectName} H4 PDF: ${title} (${currentImageIndex + 1}/${galleryItems.length})`);
-          }
-        } else {
-          // Handle regular image navigation
-          const img = currentItem.querySelector('.thumbnail-image');
-          if (img) {
-            const label = currentItem.querySelector('.gallery-label');
-            const objectName = currentItem.dataset.objectName || 'Unknown';
-            const title = label ? label.textContent : 'Unknown Map';
-            
-            setCurrentImage({
-              src: img.src,
-              title: title,
-              objectName: objectName,
-              isPdf: false
-            });
-            
-            // Update status
-            if (onStatusUpdate) {
-              onStatusUpdate(`Viewing ${objectName} map: ${title} (${currentImageIndex + 1}/${galleryItems.length})`);
-            }
-          }
-        }
-      }
-    }
-  }, [currentImageIndex, galleryItems, getCurrentItem, setCurrentImage, onStatusUpdate, currentImage]);
 
   // Handle modal close
   const handleClose = useCallback(() => {
@@ -113,6 +60,13 @@ const GalleryModal = ({ modalRndRef, onStatusUpdate }) => {
     
     // Expose openImageModal for backward compatibility
     window.openImageModal = (imageSrc, title, objectName, clickedItem = null, isPdf = false) => {
+      // Re-query the gallery container to ensure we have the latest reference
+      // This is important because the gallery may remount during tab switching
+      const freshGalleryContainer = document.querySelector('.gallery-rows-container') || document.querySelector('.gallery-content');
+      
+      // Update the ref
+      galleryContainerRef.current = freshGalleryContainer;
+      
       const imageData = {
         src: imageSrc,
         title: title,
@@ -120,7 +74,7 @@ const GalleryModal = ({ modalRndRef, onStatusUpdate }) => {
         isPdf: isPdf
       };
       
-      openModal(imageData, clickedItem, galleryContainerRef.current);
+      openModal(imageData, clickedItem, freshGalleryContainer);
       
       // Center the modal
       setTimeout(centerModal, 50);
@@ -195,7 +149,7 @@ const GalleryModal = ({ modalRndRef, onStatusUpdate }) => {
               onClose={handleClose}
               hasMultipleImages={hasMultipleImages}
               currentIndex={currentImageIndex}
-              totalImages={galleryItems.length}
+              totalImages={totalItems}
               isModalOpen={isModalOpen}
             />
             

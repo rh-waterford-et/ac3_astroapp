@@ -3,11 +3,12 @@ export const MAP_CONTROLS = {
     'map-velocity-dispersion': { label: 'Velocity dispersion', icon: '📊' },
     'map-stellar-velocity-error': { label: 'Stellar velocity Error', icon: '⚠️' },
     'map-velocity-dispersion-error': { label: 'Velocity dispersion Error', icon: '📈' },
-    'map-h3': { label: 'h3', icon: 'H₃' },
-    'map-h4': { label: 'h4', icon: 'H₄' },
+    'map-h3': { label: 'H3', icon: 'H₃' },
+    'map-h4': { label: 'H4', icon: 'H₄' },
     'map-age-weighted': { label: 'Age (lum. weighted)', icon: '⏳' },
     'map-age-mass-weighted': { label: 'Age (Mass Weighted)', icon: '⚖️' },
-    'map-metallicity': { label: 'Metallicity', icon: '⚛️' }
+    'map-metallicity': { label: 'Metallicity', icon: '⚛️' },
+    'map-ppxf-fitting': { label: 'pPXF Fitting', icon: '📐' }
   };
 
 export const MAP_CHECKBOX_IDS = [
@@ -19,7 +20,8 @@ export const MAP_CHECKBOX_IDS = [
   'map-h4',
   'map-age-weighted',
   'map-age-mass-weighted',
-  'map-metallicity'
+  'map-metallicity',
+  'map-ppxf-fitting'
 ];
 
 export const KINEMATICS_CHECKBOXES = [
@@ -27,14 +29,18 @@ export const KINEMATICS_CHECKBOXES = [
   { id: 'map-stellar-velocity-error', label: 'Stellar velocity Error' },
   { id: 'map-velocity-dispersion', label: 'Velocity dispersion' },
   { id: 'map-velocity-dispersion-error', label: 'Velocity dispersion Error' },
-  { id: 'map-h3', label: 'h3' },
-  { id: 'map-h4', label: 'h4' }
+  { id: 'map-h3', label: 'H3' },
+  { id: 'map-h4', label: 'H4' }
 ];
 
 export const POPULATION_CHECKBOXES = [
   { id: 'map-age-weighted', label: 'Age (lum. weighted)' },
   { id: 'map-age-mass-weighted', label: 'Age (Mass Weighted)' },
   { id: 'map-metallicity', label: 'Metallicity' }
+];
+
+export const PPXF_CHECKBOXES = [
+  { id: 'map-ppxf-fitting', label: 'pPXF Fitting' }
 ];
 
 export const DISPLAY_CHECKBOXES = [

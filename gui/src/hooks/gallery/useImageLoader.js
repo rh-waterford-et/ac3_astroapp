@@ -14,18 +14,19 @@ export const useImageLoader = ({
   setLoadingState,
   updateLoadingStatus,
   addImageItem,
+  addPdfItem,
   tryLoadPpxfPdfFiles
 }) => {
   // App state hook for shared values
   const { aladinInstance: contextAladinInstance } = useAppState();
 
   // Main image loading orchestration
-  const loadObjectImages = useCallback(async (objectName, overrideCheckboxStates = null) => {
+  const loadObjectImages = useCallback(async (objectName, overrideCheckboxStates = null, skipCoordinateCheck = false) => {
     // Use context aladinInstance with fallback to prop and window (for backward compatibility)
     const currentAladinInstance = contextAladinInstance || aladinInstance || window.aladinInstance;
     
-    // Check if we're at the correct coordinates for this object
-    if (!isAtObjectCoordinates(objectName, currentAladinInstance)) {
+    // Check if we're at the correct coordinates for this object (skip during search navigation)
+    if (!skipCoordinateCheck && !isAtObjectCoordinates(objectName, currentAladinInstance)) {
       setNavigateToObjectState(objectName);
       return;
     }
@@ -52,6 +53,7 @@ export const useImageLoader = ({
     updateLoadingStatus,
     checkboxStates,
     addImageItem,
+    addPdfItem,
     tryLoadPpxfPdfFiles
   ]);
 
@@ -64,8 +66,8 @@ export const useImageLoader = ({
       const isChecked = activeCheckboxStates[mapType.checkboxId] || false;
       
       if (isChecked) {
-        // Special handling for H4: load dynamic PDF files from S3
-        if (mapType.key === 'h4') {
+        // Special handling for pPXF Fitting: load dynamic PDF files from S3
+        if (mapType.key === 'ppxf-fitting') {
           if (!tryLoadPpxfPdfFiles) {
             continue;
           }
@@ -76,7 +78,7 @@ export const useImageLoader = ({
               imagesLoaded += pdfsLoaded;
             }
           } catch (error) {
-            // Silent error handling for H4 processing
+            // Silent error handling for pPXF processing
           }
         } else {
           // Use existing static image logic for other map types
@@ -89,19 +91,38 @@ export const useImageLoader = ({
     }
     
     return imagesLoaded;
-  }, [checkboxStates, tryLoadPpxfPdfFiles, addImageItem]);
+  }, [checkboxStates, tryLoadPpxfPdfFiles, addImageItem, addPdfItem]);
 
-  // Try to load a single object image
+  // Try to load a single object image or PDF
   const tryLoadObjectImage = useCallback(async (mapType, objectName, imageMap) => {
-    const imageData = tryGetObjectImage(mapType, objectName, imageMap);
+    const data = tryGetObjectImage(mapType, objectName, imageMap);
     
-    if (imageData) {
-      addImageItem(imageData.imageSrc, imageData.mapType, imageData.objectName);
-      return true;
-    } else {
+    if (!data) {
       return false;
     }
-  }, [addImageItem]);
+    
+    if (data.type === 'pdf') {
+      // Add each PDF in the array
+      data.pdfs.forEach((pdfPath, index) => {
+        addPdfItem({
+          id: `static-pdf-${mapType.key}-${index}-${Date.now()}`,
+          type: 'pdf',
+          pdfFile: {
+            key: pdfPath,  // Asset import path
+            name: `${mapType.label}${index > 0 ? ' Error' : ''}`,
+            isStatic: true
+          },
+          mapType: mapType.key,  // e.g., 'stellar-velocity', 'h3', 'h4'
+          objectName
+        });
+      });
+      return true;
+    } else {
+      // Handle regular images
+      addImageItem(data.imageSrc, data.mapType, data.objectName);
+      return true;
+    }
+  }, [addImageItem, addPdfItem]);
 
   return {
     loadObjectImages,

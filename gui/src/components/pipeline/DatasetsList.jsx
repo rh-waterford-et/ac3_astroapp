@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import FileUpload from './FileUpload';
 import PipelineProgress from './PipelineProgress';
@@ -8,6 +8,7 @@ import DatasetsPane from './DatasetsPane';
 import { useDatasetOperations } from '../../hooks/data/useDatasetOperations';
 import { usePaginatedFiles } from '../../hooks/data/usePaginatedFiles';
 import { useAutoRefresh } from '../../hooks/data/useAutoRefresh';
+import { useDatasetFileCounts } from '../../hooks/data/useDatasetFileCounts';
 
 
 function DatasetsList({ processorType }) {
@@ -15,12 +16,23 @@ function DatasetsList({ processorType }) {
   const datasetOps = useDatasetOperations(processorType);
   const inputFilesData = usePaginatedFiles(datasetOps.selectedDataset, 'input', processorType);
   
-  // Output files should only load after input files have completed (prevents backend overload)
+  // Output files loading: Load immediately if no inputs exist, otherwise sequence after inputs
+  // This allows viewing outputs even when all input files have been processed/deleted
+  const shouldLoadOutputs = datasetOps.selectedDataset && (
+    // Load immediately if input files loaded and there are none
+    (inputFilesData.filesLoaded && 
+     inputFilesData.loadedDataset === datasetOps.selectedDataset &&
+     inputFilesData.files.length === 0) ||
+    // Or load after inputs are loaded and ready (with inputs present)
+    (inputFilesData.filesLoaded && 
+     inputFilesData.loadedDataset === datasetOps.selectedDataset &&
+     inputFilesData.files.length > 0 && 
+     !inputFilesData.loading)
+  );
+
   const outputFilesData = usePaginatedFiles(
-    inputFilesData.filesLoaded && inputFilesData.files.length > 0 && !inputFilesData.loading
-      ? datasetOps.selectedDataset 
-      : null, 
-    'output', 
+    shouldLoadOutputs ? datasetOps.selectedDataset : null,
+    'output',
     processorType
   );
   
@@ -36,13 +48,41 @@ function DatasetsList({ processorType }) {
     setCollapseState(prev => ({ ...prev, [section]: !prev[section] }));
   }, []);
 
+  // Get file counts for all datasets (for progress calculation)
+  const datasetFileCounts = useDatasetFileCounts(
+    datasetOps.datasets,
+    datasetOps.selectedDataset,
+    processorType
+  );
+
   // Auto-refresh for file counts (respect input→output sequencing)
-  const refreshCallbacks = [inputFilesData.refreshFilesCount];
-  if (inputFilesData.filesLoaded) {
-    refreshCallbacks.push(outputFilesData.refreshFilesCount);
-  }
+  // File count updates are lightweight (only pagination metadata), so we can poll frequently
+  // Memoize the callbacks array to prevent useAutoRefresh from resetting on every render
+  const refreshCallbacks = useMemo(() => {
+    const callbacks = [inputFilesData.refreshFilesCount];
+    if (inputFilesData.filesLoaded) {
+      callbacks.push(outputFilesData.refreshFilesCount);
+    }
+    return callbacks;
+  }, [inputFilesData.refreshFilesCount, inputFilesData.filesLoaded, outputFilesData.refreshFilesCount]);
   
-  useAutoRefresh(datasetOps.selectedDataset, refreshCallbacks, 60000); // 60 seconds - standard for file management
+  useAutoRefresh(datasetOps.selectedDataset, refreshCallbacks, 5000); // 5 seconds - responsive counter updates
+  
+  // Separate auto-refresh for pipeline progress (runs independently of selected dataset)
+  // This ensures progress bars update even when no dataset is selected
+  useEffect(() => {
+    if (!datasetFileCounts.refresh) return;
+    
+    // Initial refresh
+    datasetFileCounts.refresh();
+    
+    // Set up polling - refresh every 5 seconds during active processing
+    const interval = setInterval(() => {
+      datasetFileCounts.refresh();
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [processorType, datasetOps.datasets.length]); // Re-run when datasets or processor type changes
 
   const fileUploadRef = useRef(null);
 
@@ -155,10 +195,12 @@ function DatasetsList({ processorType }) {
       {/* Pipeline Progress Monitor */}
       <PipelineProgress 
         datasets={datasetOps.datasets} 
-        inputFiles={inputFilesData.files}
-        inputFilesTotalCount={inputFilesData.pagination.total}
-        outputFiles={outputFilesData.files}
-        outputFilesTotalCount={outputFilesData.pagination.total}
+        selectedDataset={datasetOps.selectedDataset}
+        selectedInputFiles={inputFilesData.files}
+        selectedInputCount={inputFilesData.pagination.total}
+        selectedOutputFiles={outputFilesData.files}
+        selectedOutputCount={outputFilesData.pagination.total}
+        datasetFileCounts={datasetFileCounts.counts}
         processorType={processorType}
         isCollapsed={collapseState.progress}
         onToggleCollapse={() => toggleSection('progress')}

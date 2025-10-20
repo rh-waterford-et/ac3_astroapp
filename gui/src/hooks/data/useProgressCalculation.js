@@ -2,10 +2,8 @@ import { useState, useEffect } from 'react';
 
 export const useProgressCalculation = (
   datasets, 
-  inputFiles, 
-  inputFilesTotalCount, 
-  outputFiles, 
-  outputFilesTotalCount, 
+  selectedDataset,
+  datasetFileCounts,
   processingHistory, 
   processorType
 ) => {
@@ -17,30 +15,36 @@ export const useProgressCalculation = (
     const progressMap = {};
     
     datasets.forEach(dataset => {
-      const processedCount = inputFilesTotalCount || inputFiles.length;
-      const outputCount = outputFilesTotalCount || outputFiles.length;
+      // Determine if this is the selected dataset (for processing history only)
+      const isSelectedDataset = dataset.id === selectedDataset;
+      
+      // Get file counts for this dataset
+      // ALWAYS use datasetFileCounts to keep progress bars independent from dataset management pane
+      const counts = datasetFileCounts?.[dataset.id] || { input: 0, output: 0 };
+      const inputCount = counts.input;
+      const outputCount = counts.output;
       
       // Use the dataset status that's already calculated in the parent component
       let progress = dataset.progress || 0;
       let status = dataset.status || 'ready';
       let stage = dataset.stage || 'Ready';
       
-      // Only recalculate if we have input/output files for the selected dataset
-      if (datasets.length === 1 && processedCount > 0) {
+      // Calculate progress if we have input files
+      if (inputCount > 0) {
         // Calculate expected output count based on app type
         let expectedOutputCount;
         if (processorType === 'ppxf') {
           // PPXF: Each input file produces 5 output files
-          expectedOutputCount = processedCount * 5;
+          expectedOutputCount = inputCount * 5;
         } else {
           // Starlight: 1:1 ratio (default)
-          expectedOutputCount = processedCount;
+          expectedOutputCount = inputCount;
         }
         
         progress = Math.min((outputCount / expectedOutputCount) * 100, 100);
         
         
-        // Determine status and stage based on progress only if not already set
+        // Determine status and stage based on progress
         if (progress >= 100) {
           status = 'completed';
           stage = 'Completed';
@@ -51,8 +55,8 @@ export const useProgressCalculation = (
           status = 'queued';
           stage = 'Queued for processing';
         }
-      } else if (datasets.length === 1 && outputCount > 0) {
-        // Edge case: output files exist but no processed files
+      } else if (outputCount > 0) {
+        // Edge case: output files exist but no input files
         progress = 100;
         status = 'completed';
         stage = 'Completed';
@@ -63,17 +67,17 @@ export const useProgressCalculation = (
         status: status,
         stage: stage,
         lastUpdated: new Date(),
-        filesTotal: processedCount,
+        filesTotal: inputCount,
         filesProcessed: outputCount,
         errorMessage: '',
-        // Add processing history reference
-        processingHistory: processingHistory[dataset.id] || []
+        // Add processing history reference (only available for selected dataset)
+        processingHistory: isSelectedDataset ? (processingHistory[dataset.id] || []) : []
       };
     });
     
     setProgressData(progressMap);
     
-  }, [datasets, inputFiles, inputFilesTotalCount, outputFiles, outputFilesTotalCount, processingHistory, processorType]);
+  }, [datasets, selectedDataset, datasetFileCounts, processingHistory, processorType]);
 
   return { progressData };
 }; 

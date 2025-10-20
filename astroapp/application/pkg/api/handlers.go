@@ -1,6 +1,7 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -327,20 +329,43 @@ func (h *FileUploadHandler) ListDatasets(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Use the new GetBatchDirectories method to get all batch directories
+	// Check both input and output directories to find all datasets
+	// A dataset exists if it has either an input or output directory
 	inputPrefix := fmt.Sprintf("%s/input", appType)
-	batchDirectories, err := h.S3Bucket.GetBatchDirectories(inputPrefix)
+	outputPrefix := fmt.Sprintf("%s/output", appType)
+
+	// Get datasets from input directory
+	inputDatasets, err := h.S3Bucket.GetBatchDirectories(inputPrefix)
 	if err != nil {
-		log.Printf("Error listing batch directories for %s: %v", appType, err)
-		response := ListDatasetsResponse{
-			Success:  false,
-			Datasets: []string{},
-		}
-		json.NewEncoder(w).Encode(response)
-		return
+		log.Printf("Error listing input directories for %s: %v", appType, err)
+		inputDatasets = []string{} // Continue with empty list if input fails
 	}
 
-	log.Printf("Found %d batch directories for %s: %v", len(batchDirectories), appType, batchDirectories)
+	// Get datasets from output directory
+	outputDatasets, err := h.S3Bucket.GetBatchDirectories(outputPrefix)
+	if err != nil {
+		log.Printf("Error listing output directories for %s: %v", appType, err)
+		outputDatasets = []string{} // Continue with empty list if output fails
+	}
+
+	// Merge both lists and remove duplicates using a map
+	datasetMap := make(map[string]bool)
+	for _, dataset := range inputDatasets {
+		datasetMap[dataset] = true
+	}
+	for _, dataset := range outputDatasets {
+		datasetMap[dataset] = true
+	}
+
+	// Convert map to sorted slice
+	var batchDirectories []string
+	for dataset := range datasetMap {
+		batchDirectories = append(batchDirectories, dataset)
+	}
+	sort.Strings(batchDirectories)
+
+	log.Printf("Found %d batch directories for %s (from %d input + %d output): %v",
+		len(batchDirectories), appType, len(inputDatasets), len(outputDatasets), batchDirectories)
 
 	response := ListDatasetsResponse{
 		Success:  true,
@@ -1908,6 +1933,178 @@ func (h *FileUploadHandler) DownloadFile(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		log.Printf("Error writing file content: %v", err)
 	}
+}
+
+// DownloadAllFiles handles bulk downloading of all files from a dataset as a zip
+func (h *FileUploadHandler) DownloadAllFiles(w http.ResponseWriter, r *http.Request) {
+	// Enable CORS
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get parameters
+	dataset := r.URL.Query().Get("dataset")
+	appType := r.URL.Query().Get("app")
+	fileType := r.URL.Query().Get("type") // input, processed, or output
+
+	if dataset == "" {
+		http.Error(w, "Missing 'dataset' parameter", http.StatusBadRequest)
+		return
+	}
+
+	if appType == "" {
+		appType = "starlight" // default
+	}
+
+	if fileType == "" {
+		fileType = "output" // default to output files
+	}
+
+	// Validate app type
+	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	isValidApp := false
+	for _, app := range allowedApps {
+		if strings.ToLower(appType) == app {
+			appType = app
+			isValidApp = true
+			break
+		}
+	}
+
+	if !isValidApp {
+		http.Error(w, fmt.Sprintf("Invalid app type. Allowed: %s", strings.Join(allowedApps, ", ")), http.StatusBadRequest)
+		return
+	}
+
+	// Validate file type
+	allowedFileTypes := []string{"input", "processed", "output"}
+	isValidFileType := false
+	for _, ft := range allowedFileTypes {
+		if strings.ToLower(fileType) == ft {
+			fileType = ft
+			isValidFileType = true
+			break
+		}
+	}
+
+	if !isValidFileType {
+		http.Error(w, fmt.Sprintf("Invalid file type. Allowed: %s", strings.Join(allowedFileTypes, ", ")), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Bulk download request - dataset: %s, app: %s, type: %s", dataset, appType, fileType)
+
+	// Construct S3 path
+	var folderPath string
+	switch fileType {
+	case "input":
+		folderPath = fmt.Sprintf("%s/input/%s", appType, dataset)
+	case "processed":
+		folderPath = fmt.Sprintf("%s/processed/%s", appType, dataset)
+	case "output":
+		folderPath = fmt.Sprintf("%s/output/%s", appType, dataset)
+	}
+
+	// Get all files from S3
+	allObjects, err := h.S3Bucket.GetS3Objects(folderPath)
+	if err != nil {
+		log.Printf("Error listing S3 objects for %s %s in app %s: %v", fileType, dataset, appType, err)
+		http.Error(w, "Failed to list files", http.StatusInternalServerError)
+		return
+	}
+
+	// Filter out directory markers and system files
+	var files []string
+	for _, object := range allObjects {
+		if strings.HasSuffix(object, "/") {
+			continue // Skip directory markers
+		}
+		if !isSystemFile(object) {
+			files = append(files, object)
+		}
+	}
+
+	if len(files) == 0 {
+		http.Error(w, "No files found to download", http.StatusNotFound)
+		return
+	}
+
+	log.Printf("Found %d files to zip for dataset %s", len(files), dataset)
+
+	// Create zip file in memory
+	zipBuffer := new(bytes.Buffer)
+	zipWriter := zip.NewWriter(zipBuffer)
+
+	// Download each file from S3 and add to zip
+	filesAdded := 0
+	for _, fileName := range files {
+		fullObjectKey := fmt.Sprintf("%s/%s", folderPath, fileName)
+
+		log.Printf("Downloading file %d/%d: %s", filesAdded+1, len(files), fileName)
+
+		content, err := h.S3Bucket.DownloadFile(fullObjectKey)
+		if err != nil {
+			log.Printf("Warning: Could not download file %s: %v", fileName, err)
+			continue // Skip failed files
+		}
+
+		// Create file in zip
+		fileWriter, err := zipWriter.Create(fileName)
+		if err != nil {
+			log.Printf("Warning: Could not create zip entry for %s: %v", fileName, err)
+			continue
+		}
+
+		// Write content to zip
+		_, err = fileWriter.Write(content)
+		if err != nil {
+			log.Printf("Warning: Could not write content for %s: %v", fileName, err)
+			continue
+		}
+
+		filesAdded++
+	}
+
+	// Close zip writer
+	err = zipWriter.Close()
+	if err != nil {
+		log.Printf("Error closing zip writer: %v", err)
+		http.Error(w, "Failed to create zip file", http.StatusInternalServerError)
+		return
+	}
+
+	if filesAdded == 0 {
+		http.Error(w, "No files could be added to zip", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Successfully created zip with %d/%d files for dataset %s", filesAdded, len(files), dataset)
+
+	// Set headers for zip download
+	timestamp := time.Now().Format("20060102-150405")
+	zipFileName := fmt.Sprintf("%s-%s-%s-%s.zip", appType, dataset, fileType, timestamp)
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", zipFileName))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", zipBuffer.Len()))
+
+	// Write zip to response
+	_, err = w.Write(zipBuffer.Bytes())
+	if err != nil {
+		log.Printf("Error writing zip content: %v", err)
+	}
+
+	log.Printf("Successfully sent zip file %s (%d bytes)", zipFileName, zipBuffer.Len())
 }
 
 type ProcessDatasetRequest struct {

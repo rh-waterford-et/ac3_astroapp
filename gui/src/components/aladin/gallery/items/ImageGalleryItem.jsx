@@ -8,8 +8,8 @@ const ImageGalleryItem = ({ imageSrc, mapType, objectName, onStatusUpdate }) => 
     // Open modal with full-size image
     if (window.openImageModal) {
       // Find the actual DOM element for compatibility with existing modal system
-      const galleryItems = document.getElementById('gallery-items');
-      const clickedItem = galleryItems?.querySelector(`[data-map-type="${mapType.key}"]`);
+      const galleryContainer = document.querySelector('.gallery-rows-container') || document.querySelector('.gallery-content');
+      const clickedItem = galleryContainer?.querySelector(`[data-map-type="${mapType.key}"]`);
       window.openImageModal(imageSrc, mapType.label, objectName, clickedItem);
     }
     

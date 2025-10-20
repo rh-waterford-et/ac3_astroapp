@@ -1,13 +1,13 @@
 import React, { useEffect } from 'react';
 import PropTypes from 'prop-types';
-import ImageGalleryItem from './gallery/items/ImageGalleryItem';
-import PDFGalleryItem from './gallery/items/PDFGalleryItem';
-import PlaceholderGalleryItem from './gallery/items/PlaceholderGalleryItem';
+import GalleryRow from './gallery/GalleryRow';
 import EmptyGalleryMessage from './gallery/ui/EmptyGalleryMessage';
 import GalleryLoader from './gallery/ui/GalleryLoader';
 import { 
   initializePdfJs
 } from '../../utils/gallery/pdfUtils';
+import { isAtObjectCoordinates } from '../../utils/gallery/galleryUtils';
+import { findObjectAtCoordinates } from '../../utils/gallery/coordinateRegistry';
 import { usePdfLoader } from '../../hooks/gallery/usePdfLoader';
 import { useGalleryState } from '../../hooks/gallery/useGalleryState';
 import { useImageLoader } from '../../hooks/gallery/useImageLoader';
@@ -19,9 +19,10 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
 
   // Gallery state management hook
   const {
-    galleryItems,
+    galleryGroups,
     galleryState,
     currentObjectName,
+    totalItemsCount,
     setLoadingState,
     setNavigateToObjectState,
     updateLoadingStatus,
@@ -31,7 +32,8 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
     addPlaceholderItem,
     removeItemByMapType,
     clearGallery,
-    updateStatus
+    changeGroupPage,
+    updateStatus,
   } = useGalleryState(checkboxStates, onStatusUpdate);
 
   // Set up PDF loader hook
@@ -45,33 +47,82 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
     setLoadingState,
     updateLoadingStatus,
     addImageItem,
+    addPdfItem,
     tryLoadPpxfPdfFiles
   });
 
   useEffect(() => {
     if (!aladinInstance) return;
     
-    // TEMPORARILY DISABLED to test H4 flashing issue
-    // setupViewChangeMonitoring(aladinInstance);
-  }, [aladinInstance]);
+    const cleanup = setupViewChangeMonitoring(aladinInstance);
+    
+    // Return cleanup function to remove event listener
+    return () => {
+      if (cleanup) cleanup();
+    };
+  }, [aladinInstance, totalItemsCount, loadObjectImages, clearGallery]);
+
+  // Note: Scroll effect removed - pagination is now per-row, not global
 
   // Set up view change monitoring inside the component
   const setupViewChangeMonitoring = (aladin) => {
-    if (!aladin) return;
+    if (!aladin) return null;
     let viewChangeTimeout;
     
-    // Monitor view changes
-    aladin.on('positionChanged', () => {
+    // Define the position change handler
+    const positionChangeHandler = () => {
       // Debounce the view change to avoid too many updates
       clearTimeout(viewChangeTimeout);
       viewChangeTimeout = setTimeout(() => {
-        // Only trigger if we have a consistent current object in both places
-        // This prevents triggering during checkbox state transitions
-        if (currentLoadedObject && window.currentLoadedObject === currentLoadedObject) {
-          loadObjectImages(currentLoadedObject);
+        // Use window.currentLoadedObject directly to avoid stale closure issues
+        const loadedObject = window.currentLoadedObject;
+        
+        if (loadedObject) {
+          // We have a loaded object - check if still at its coordinates
+          const stillAtObject = isAtObjectCoordinates(loadedObject, aladin);
+          
+          if (stillAtObject) {
+            // Still at object - but only reload if gallery is empty
+            // This prevents unnecessary reloads when just panning within object radius
+            if (totalItemsCount === 0) {
+              loadObjectImages(loadedObject);
+            }
+            // If gallery already has items, do nothing (keep current state)
+          } else {
+            // User moved away from object - clear gallery but KEEP currentLoadedObject
+            // so we can reload if they come back
+            clearGallery();
+          }
+        } else if (totalItemsCount === 0) {
+          // No loaded object and gallery is empty - check if we're at a registered object's coordinates
+          try {
+            const currentPos = aladin.getRaDec();
+            if (currentPos && currentPos.length >= 2) {
+              const matchedObject = findObjectAtCoordinates(currentPos[0], currentPos[1]);
+              
+              if (matchedObject) {
+                // Found an object at these coordinates - load it
+                window.currentLoadedObject = matchedObject;
+                window.currentObjectCoords = currentPos;
+                loadObjectImages(matchedObject, null, true);
+              }
+            }
+          } catch (error) {
+            // Silent error handling for coordinate lookup
+          }
         }
-      }, 500); // Wait 500ms after view stops changing
-    });
+      }, 200); // Wait 200ms after view stops changing
+    };
+    
+    // Register the event listener
+    aladin.on('positionChanged', positionChangeHandler);
+    
+    // Return cleanup function
+    return () => {
+      clearTimeout(viewChangeTimeout);
+      // Note: Aladin Lite doesn't have an 'off' method, so we can't remove the listener
+      // The event system will be cleaned up when the component unmounts
+    };
   };
 
   // Render gallery content based on state
@@ -88,41 +139,23 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
       case 'navigate-to-object':
         return <EmptyGalleryMessage type="navigate-to-object" objectName={currentObjectName} />;
       case 'loaded':
-        return galleryItems.map(item => {
-          switch (item.type) {
-            case 'image':
-              return (
-                <ImageGalleryItem
-                  key={item.id}
-                  imageSrc={item.imageSrc}
-                  mapType={item.mapType}
-                  objectName={item.objectName}
-                  onStatusUpdate={updateStatus}
-                />
-              );
-            case 'pdf':
-              return (
-                <PDFGalleryItem
-                  key={item.id}
-                  pdfFile={item.pdfFile}
-                  objectName={item.objectName}
-                  onStatusUpdate={updateStatus}
-                />
-              );
-            case 'placeholder':
-              return (
-                <PlaceholderGalleryItem
-                  key={item.id}
-                  mapType={item.mapType}
-                  label={item.label}
-                  icon={item.icon}
-                  onStatusUpdate={updateStatus}
-                />
-              );
-            default:
-              return null;
-          }
-        });
+        const rowCount = galleryGroups.length;
+        const containerClass = rowCount === 1 
+          ? 'gallery-rows-container single-row' 
+          : 'gallery-rows-container multi-row';
+        
+        return (
+          <div className={containerClass}>
+            {galleryGroups.map(group => (
+              <GalleryRow
+                key={group.mapType}
+                group={group}
+                onPageChange={changeGroupPage}
+                onStatusUpdate={updateStatus}
+              />
+            ))}
+          </div>
+        );
       default:
         return <EmptyGalleryMessage type="empty" />;
     }
@@ -135,18 +168,28 @@ const Gallery = ({ aladinInstance, onGalleryOperationsReady, checkboxStates = {}
         addMapToGallery: addPlaceholderItem,
         removeMapFromGallery: removeItemByMapType,
         clearGallery: clearGallery,
-        loadObjectImages: loadObjectImages
+        loadObjectImages: loadObjectImages,
+        // New grouped structure
+        galleryGroups,
+        totalItemsCount,
       };
       onGalleryOperationsReady(operations);
     }
-  }, [onGalleryOperationsReady, addPlaceholderItem, removeItemByMapType, clearGallery, loadObjectImages]);
+  }, [onGalleryOperationsReady, addPlaceholderItem, removeItemByMapType, clearGallery, loadObjectImages, galleryGroups, totalItemsCount]);
 
+  // Determine content class based on number of rows
+  const contentClass = galleryGroups.length === 1 
+    ? 'gallery-content single-row-content' 
+    : 'gallery-content multi-row-content';
+  
+  const galleryClass = galleryGroups.length === 1
+    ? 'bottom-gallery single-row-gallery'
+    : 'bottom-gallery multi-row-gallery';
+  
   return (
-    <div className="bottom-gallery">
-      <div className="gallery-content">
-        <div className="gallery-items" id="gallery-items">
-          {renderGalleryContent()}
-        </div>
+    <div className={galleryClass}>
+      <div className={contentClass}>
+        {renderGalleryContent()}
       </div>
     </div>
   );

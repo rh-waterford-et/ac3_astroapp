@@ -26,9 +26,9 @@ const GalleryItem = ({
     event.currentTarget.classList.toggle('selected');
     
     // Remove selection from other items (mimicking original behavior)
-    const galleryItems = document.getElementById('gallery-items');
-    if (galleryItems && mapType) {
-      const otherItems = galleryItems.querySelectorAll(`.gallery-item:not([data-map-type="${mapType}"])`);
+    const galleryContainer = document.querySelector('.gallery-rows-container') || document.querySelector('.gallery-content');
+    if (galleryContainer && mapType) {
+      const otherItems = galleryContainer.querySelectorAll(`.gallery-item:not([data-map-type="${mapType}"])`);
       otherItems.forEach(item => item.classList.remove('selected'));
     }
   };

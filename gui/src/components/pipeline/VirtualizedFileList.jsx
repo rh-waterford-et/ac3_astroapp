@@ -13,6 +13,7 @@ const VirtualizedFileList = ({
   selectedDataset = null,
   onDelete = null,
   onProcessFile = null,
+  onDownloadFile = null,
   loadingMessage = "Loading files...",
   onLoadMore = null,
   hasNextPage = false,
@@ -151,6 +152,20 @@ const VirtualizedFileList = ({
               ▶
             </button>
           )}
+          {onDownloadFile && !isInputFile && (
+            <button 
+              type="button"
+              className="file-download-btn"
+              aria-label={`Download file ${item.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDownloadFile(item.key, item.name);
+              }}
+              title={`Download file "${item.name}"`}
+            >
+              ⬇
+            </button>
+          )}
           {onDelete && !isDatasetMode && (
             <button 
               type="button"
@@ -257,6 +272,7 @@ VirtualizedFileList.propTypes = {
   selectedDataset: PropTypes.string,
   onDelete: PropTypes.func,
   onProcessFile: PropTypes.func,
+  onDownloadFile: PropTypes.func,
   loadingMessage: PropTypes.string,
   onLoadMore: PropTypes.func,
   hasNextPage: PropTypes.bool,

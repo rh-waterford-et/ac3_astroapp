@@ -75,6 +75,9 @@ func (s *Server) setupRoutes() {
 	http.HandleFunc("/api/files/download", s.fileUploadHandler.DownloadFile)
 	log.Printf("✅ Download endpoint registered successfully")
 
+	// Bulk download endpoint (zip all files from dataset)
+	http.HandleFunc("/api/files/download-all", s.fileUploadHandler.DownloadAllFiles)
+
 	// Progress tracking endpoints
 	http.HandleFunc("/api/progress", s.fileUploadHandler.GetDatasetProgress)
 	http.HandleFunc("/api/progress/all", s.fileUploadHandler.GetAllProgress)
@@ -107,6 +110,7 @@ func (s *Server) Start() {
 	log.Printf("Delete dataset endpoint: http://localhost:%s/api/datasets/delete", port)
 	log.Printf("Delete file endpoint: http://localhost:%s/api/files/delete", port)
 	log.Printf("Download file endpoint: http://localhost:%s/api/files/download", port)
+	log.Printf("Bulk download endpoint: http://localhost:%s/api/files/download-all", port)
 	log.Printf("Process dataset endpoint: http://localhost:%s/api/datasets/process", port)
 	log.Printf("Process single file endpoint: http://localhost:%s/api/files/process", port)
 	log.Printf("Progress tracking endpoints: http://localhost:%s/api/progress/*", port)
