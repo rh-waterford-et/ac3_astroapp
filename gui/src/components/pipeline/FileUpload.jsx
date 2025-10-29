@@ -8,7 +8,7 @@ import useDatasets from '../../hooks/data/useDatasets';
 import useUploadQueue from '../../hooks/data/useUploadQueue';
 import { getUploadStatusColor } from '../../utils/ui/statusColors';
 
-const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processorType, onDatasetCreated }, ref) => {
+const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processorType, onDatasetCreated, isConnectorMode = false }, ref) => {
   const {
     availableDatasets,
     currentDataset,
@@ -28,7 +28,7 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
     formatSize,
     totalSize,
     uploadAll,
-  } = useUploadQueue(processorType);
+  } = useUploadQueue(processorType, isConnectorMode);
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const dropdownOpenRef = useRef(false);
@@ -57,7 +57,7 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
     if (!sanitizedName) return;
 
     const configToSend = processorType.toLowerCase() === 'ppxf' ? cfg : null;
-    const result = await createDataset(sanitizedName, configToSend);
+    const result = await createDataset(sanitizedName, configToSend, isConnectorMode);
     if (result.success) {
       setCurrentDataset(sanitizedName);
       setShowCreateForm(false);
@@ -170,6 +170,7 @@ FileUpload.propTypes = {
   onToggleCollapse: PropTypes.func,
   processorType: PropTypes.string.isRequired,
   onDatasetCreated: PropTypes.func,
+  isConnectorMode: PropTypes.bool,
 };
 
 export default FileUpload; 

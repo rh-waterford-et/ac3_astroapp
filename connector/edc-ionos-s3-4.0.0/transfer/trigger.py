@@ -55,7 +55,7 @@ def catalogue_reset(direction_key):
     failure_counts[direction_key] = 0  # Reset counter
 
 def get_s3_objects(bucket, prefix=""):
-    """Retrieve list of object keys from S3 bucket with optional prefix."""
+    """Retrieve list of object keys from S3 bucket with optional prefix, excluding directories."""
     try:
         paginator = s3.get_paginator("list_objects_v2")
         page_iterator = paginator.paginate(Bucket=bucket, Prefix=prefix)
@@ -63,7 +63,8 @@ def get_s3_objects(bucket, prefix=""):
         object_keys = []
         for page in page_iterator:
             if "Contents" in page:
-                object_keys.extend([obj["Key"] for obj in page["Contents"]])
+                # Filter out directories (keys ending with '/') and only include actual files
+                object_keys.extend([obj["Key"] for obj in page["Contents"] if not obj["Key"].endswith('/')])
 
         return object_keys
     except ClientError as e:

@@ -21,7 +21,8 @@ import (
 )
 
 type FileUploadHandler struct {
-	S3Bucket        s3bucket.S3BucketInterface
+	S3Bucket        s3bucket.S3BucketInterface // Consumer bucket (default/current)
+	ProviderBucket  s3bucket.S3BucketInterface // Provider bucket for connector mode
 	ProgressTracker *ProgressTracker
 }
 
@@ -37,9 +38,10 @@ type ListDatasetsResponse struct {
 }
 
 type CreateDatasetRequest struct {
-	DatasetName string      `json:"datasetName"`
-	AppType     string      `json:"appType"`
-	PPXFConfig  *PPXFConfig `json:"ppxfConfig,omitempty"`
+	DatasetName   string      `json:"datasetName"`
+	AppType       string      `json:"appType"`
+	PPXFConfig    *PPXFConfig `json:"ppxfConfig,omitempty"`
+	ConnectorMode bool        `json:"connectorMode,omitempty"`
 }
 
 type PPXFConfig struct {
@@ -93,8 +95,12 @@ type PaginatedDatasetFilesResponse struct {
 }
 
 func NewFileUploadHandler(s3Bucket s3bucket.S3BucketInterface, progressTracker *ProgressTracker) *FileUploadHandler {
+	// Create provider bucket instance for connector mode
+	providerBucket := s3bucket.NewS3BucketWithName("test-provider")
+	
 	return &FileUploadHandler{
-		S3Bucket:        s3Bucket,
+		S3Bucket:        s3Bucket,        // Consumer bucket (test-consumer)
+		ProviderBucket:  providerBucket,  // Provider bucket (test-provider) 
 		ProgressTracker: progressTracker,
 	}
 }
@@ -188,6 +194,9 @@ func (h *FileUploadHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	if appType == "" {
 		appType = "starlight" // default
 	}
+	
+	// Get connector mode from form (default to false)
+	connectorMode := r.FormValue("connectorMode") == "true"
 
 	// Validate application type
 	allowedApps := []string{"starlight", "ppxf", "steckmap"}
@@ -260,9 +269,24 @@ func (h *FileUploadHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Choose bucket based on connector mode
+	var targetBucket s3bucket.S3BucketInterface
+	var bucketType string
+	if connectorMode {
+		// Connector mode: upload to provider bucket
+		targetBucket = h.ProviderBucket
+		bucketType = "provider"
+	} else {
+		// Direct mode: upload to consumer bucket (current behavior)
+		targetBucket = h.S3Bucket
+		bucketType = "consumer"
+	}
+	
+	log.Printf("Uploading file %s to %s bucket (connector mode: %v)", fileName, bucketType, connectorMode)
+	
 	// Upload to S3 using the new batch structure: app/input/batch_name/filename
 	folderPath := fmt.Sprintf("%s/input/%s", appType, batchName)
-	err = h.S3Bucket.UploadFileToBucket(folderPath, fileName, content)
+	err = targetBucket.UploadFileToBucket(folderPath, fileName, content)
 	if err != nil {
 		log.Printf("Error uploading file to S3: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -459,45 +483,66 @@ func (h *FileUploadHandler) CreateDataset(w http.ResponseWriter, r *http.Request
 		fmt.Sprintf("%s/processed/%s/", appType, sanitizedName),
 	}
 
-	// Create each directory in S3
-	for _, dir := range directories {
-		// Check if directory already exists
-		_, err := h.S3Bucket.GetS3Client().HeadObject(&s3.HeadObjectInput{
-			Bucket: aws.String(h.S3Bucket.GetBucketName()),
-			Key:    aws.String(dir),
-		})
+	// Determine which buckets to create directories in
+	bucketsToCreate := []struct {
+		bucket s3bucket.S3BucketInterface
+		name   string
+	}{
+		{h.S3Bucket, "consumer"}, // Always create in consumer bucket
+	}
+	
+	// In connector mode, also create directories in provider bucket  
+	if req.ConnectorMode {
+		bucketsToCreate = append(bucketsToCreate, struct {
+			bucket s3bucket.S3BucketInterface
+			name   string
+		}{h.ProviderBucket, "provider"})
+		log.Printf("Connector mode enabled: creating directories in both provider and consumer buckets")
+	} else {
+		log.Printf("Direct mode: creating directories in consumer bucket only")
+	}
 
-		if err == nil {
-			log.Printf("Directory already exists: %s", dir)
-			continue
-		}
+	// Create directories in the appropriate buckets
+	for _, bucketInfo := range bucketsToCreate {
+		for _, dir := range directories {
+			// Check if directory already exists
+			_, err := bucketInfo.bucket.GetS3Client().HeadObject(&s3.HeadObjectInput{
+				Bucket: aws.String(bucketInfo.bucket.GetBucketName()),
+				Key:    aws.String(dir),
+			})
 
-		// If error is not "Not Found", return error
-		if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != "NotFound" {
-			log.Printf("Error checking directory existence: %v", err)
-			response := CreateDatasetResponse{
-				Success: false,
-				Message: fmt.Sprintf("Failed to check directory %s", dir),
+			if err == nil {
+				log.Printf("Directory already exists in %s bucket: %s", bucketInfo.name, dir)
+				continue
 			}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
 
-		// Create directory by putting an empty object with trailing slash
-		_, err = h.S3Bucket.GetS3Client().PutObject(&s3.PutObjectInput{
-			Bucket: aws.String(h.S3Bucket.GetBucketName()),
-			Key:    aws.String(dir),
-		})
-		if err != nil {
-			log.Printf("Error creating directory: %v", err)
-			response := CreateDatasetResponse{
-				Success: false,
-				Message: fmt.Sprintf("Failed to create directory %s", dir),
+			// If error is not "Not Found", return error
+			if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != "NotFound" {
+				log.Printf("Error checking directory existence in %s bucket: %v", bucketInfo.name, err)
+				response := CreateDatasetResponse{
+					Success: false,
+					Message: fmt.Sprintf("Failed to check directory %s in %s bucket", dir, bucketInfo.name),
+				}
+				json.NewEncoder(w).Encode(response)
+				return
 			}
-			json.NewEncoder(w).Encode(response)
-			return
+
+			// Create directory by putting an empty object with trailing slash
+			_, err = bucketInfo.bucket.GetS3Client().PutObject(&s3.PutObjectInput{
+				Bucket: aws.String(bucketInfo.bucket.GetBucketName()),
+				Key:    aws.String(dir),
+			})
+			if err != nil {
+				log.Printf("Error creating directory in %s bucket: %v", bucketInfo.name, err)
+				response := CreateDatasetResponse{
+					Success: false,
+					Message: fmt.Sprintf("Failed to create directory %s in %s bucket", dir, bucketInfo.name),
+				}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+			log.Printf("Successfully created directory in %s bucket: %s", bucketInfo.name, dir)
 		}
-		log.Printf("Successfully created directory: %s", dir)
 	}
 
 	// Create pPXF config file if this is a pPXF dataset and config is provided
@@ -513,16 +558,28 @@ func (h *FileUploadHandler) CreateDataset(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		// Upload config file to S3
+		// Choose bucket for config file based on connector mode
+		// Config file goes where the input files will be uploaded
+		var configBucket s3bucket.S3BucketInterface
+		var configBucketType string
+		if req.ConnectorMode {
+			configBucket = h.ProviderBucket
+			configBucketType = "provider"
+		} else {
+			configBucket = h.S3Bucket
+			configBucketType = "consumer"
+		}
+
+		// Upload config file to the appropriate bucket
 		configKey := fmt.Sprintf("%s/input/%s/ppxf_config.json", appType, sanitizedName)
-		_, err = h.S3Bucket.GetS3Client().PutObject(&s3.PutObjectInput{
-			Bucket:      aws.String(h.S3Bucket.GetBucketName()),
+		_, err = configBucket.GetS3Client().PutObject(&s3.PutObjectInput{
+			Bucket:      aws.String(configBucket.GetBucketName()),
 			Key:         aws.String(configKey),
 			Body:        bytes.NewReader(configJSON),
 			ContentType: aws.String("application/json"),
 		})
 		if err != nil {
-			log.Printf("Error uploading pPXF config file: %v", err)
+			log.Printf("Error uploading pPXF config file to %s bucket: %v", configBucketType, err)
 			response := CreateDatasetResponse{
 				Success: false,
 				Message: "Failed to upload pPXF configuration file",
@@ -530,16 +587,23 @@ func (h *FileUploadHandler) CreateDataset(w http.ResponseWriter, r *http.Request
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		log.Printf("Successfully created pPXF config file: %s", configKey)
+		log.Printf("Successfully created pPXF config file in %s bucket: %s", configBucketType, configKey)
 	}
 
-	// Success response
+	// Success response with connector mode info
+	var bucketInfo string
+	if req.ConnectorMode {
+		bucketInfo = " (directories created in both provider and consumer buckets)"
+	} else {
+		bucketInfo = " (directories created in consumer bucket)"
+	}
+	
 	response := CreateDatasetResponse{
 		Success: true,
-		Message: fmt.Sprintf("Dataset '%s' created successfully for application '%s'", sanitizedName, appType),
+		Message: fmt.Sprintf("Dataset '%s' created successfully for application '%s'%s", sanitizedName, appType, bucketInfo),
 	}
 	json.NewEncoder(w).Encode(response)
-	log.Printf("Successfully created dataset: %s for application: %s", sanitizedName, appType)
+	log.Printf("Successfully created dataset: %s for application: %s (connector mode: %v)", sanitizedName, appType, req.ConnectorMode)
 }
 
 func (h *FileUploadHandler) DeleteDataset(w http.ResponseWriter, r *http.Request) {

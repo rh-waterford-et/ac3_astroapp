@@ -1,9 +1,9 @@
 # UC3 Backend Build and Deploy Makefile
-IMAGE_NAME = quay.io/bcapper30/uc3-backend:latest
+IMAGE_NAME = quay.io/ryjenkin/uc3-backend:connector-mode
 DOCKERFILE = containerfile
 PRODUCER_DEPLOYMENT = ucm-producer-deployment
 PROCESSOR_DEPLOYMENT = ucm-processor-deployment
-NAMESPACE = uc3-applications
+NAMESPACE = connector-test
 
 .PHONY: build push deploy rebuild status clean help
 
@@ -13,14 +13,14 @@ all: rebuild
 # Build the container image
 build:
 	@echo "🔨 Building backend container..."
-	podman build --platform linux/amd64 -t $(IMAGE_NAME) -f $(DOCKERFILE) .
+	sudo docker build --platform linux/amd64 -t $(IMAGE_NAME) -f $(DOCKERFILE) .
 	@echo "✅ Build completed!"
 
 
 # Push the container image to registry
 push:
 	@echo "📤 Pushing backend container to registry..."
-	podman push $(IMAGE_NAME)
+	sudo docker push $(IMAGE_NAME)
 	@echo "✅ Push completed!"
 
 
@@ -48,7 +48,7 @@ status:
 # Clean local images
 clean:
 	@echo "🧹 Cleaning local backend images..."
-	podman rmi $(IMAGE_NAME) || true
+	sudo docker rmi $(IMAGE_NAME) || true
 	@echo "✅ Cleanup completed!"
 
 # Show help

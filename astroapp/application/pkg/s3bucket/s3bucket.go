@@ -88,6 +88,27 @@ func NewS3Bucket() *S3Bucket {
 	}
 }
 
+// NewS3BucketWithName creates an S3Bucket instance for a specific bucket name
+func NewS3BucketWithName(bucketName string) *S3Bucket {
+	sess, err := session.NewSession(&aws.Config{
+		Credentials: credentials.NewStaticCredentials(
+			os.Getenv("AWS_ACCESS_KEY_ID"),
+			os.Getenv("AWS_SECRET_ACCESS_KEY"),
+			""),
+		Endpoint:         aws.String(os.Getenv("S3_ENDPOINT")),
+		Region:           aws.String(os.Getenv("S3_REGION")),
+		S3ForcePathStyle: aws.Bool(true),
+	})
+	if err != nil {
+		log.Fatalf("Failed to create S3 session: %v", err)
+	}
+
+	return &S3Bucket{
+		S3Client:   s3.New(sess),
+		BucketName: bucketName,
+	}
+}
+
 func (sb *S3Bucket) GetS3Client() *s3.S3 {
 	return sb.S3Client
 }

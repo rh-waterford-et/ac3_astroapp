@@ -11,7 +11,7 @@ import { useAutoRefresh } from '../../hooks/data/useAutoRefresh';
 import { useDatasetFileCounts } from '../../hooks/data/useDatasetFileCounts';
 
 
-function DatasetsList({ processorType }) {
+function DatasetsList({ processorType, isConnectorMode = false }) {
   // Extract data management into hooks
   const datasetOps = useDatasetOperations(processorType);
   const inputFilesData = usePaginatedFiles(datasetOps.selectedDataset, 'input', processorType);
@@ -139,6 +139,7 @@ function DatasetsList({ processorType }) {
           onToggleCollapse={() => toggleSection('upload')} 
           processorType={processorType}
           onDatasetCreated={datasetOps.handleDatasetCreated}
+          isConnectorMode={isConnectorMode}
         />
       </div>
       
@@ -167,6 +168,7 @@ function DatasetsList({ processorType }) {
             <DatasetsPane
               datasetOps={datasetOps}
               processorType={processorType}
+              isConnectorMode={isConnectorMode}
             />
 
             {/* Middle Pane - Input Files */}
@@ -212,6 +214,7 @@ function DatasetsList({ processorType }) {
 
 DatasetsList.propTypes = {
   processorType: PropTypes.string.isRequired,
+  isConnectorMode: PropTypes.bool,
 };
 
 export default DatasetsList; 

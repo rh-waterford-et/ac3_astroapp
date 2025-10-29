@@ -36,9 +36,9 @@ export default function useDatasets(processorType) {
     refresh(true, true);
   }, [processorType, refresh]);
 
-  const createDataset = useCallback(async (name, configOrNull = null) => {
+  const createDataset = useCallback(async (name, configOrNull = null, isConnectorMode = false) => {
     try {
-      const result = await apiCreateDataset(name, processorType, configOrNull);
+      const result = await apiCreateDataset(name, processorType, configOrNull, isConnectorMode);
       return result;
     } catch (err) {
       return { success: false, message: err?.message || 'Failed to create dataset' };

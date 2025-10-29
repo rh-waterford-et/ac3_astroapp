@@ -9,7 +9,7 @@
 # Multi-cluster 
 # API_KEY="password"
 # PROVIDER_MGMT_URL="https://provider-management-connectors.apps.ac3-cluster-2.rh-horizon.eu/management/v3"
-# CONSUMER_MGMT_URL="https://consumer-management-connectors.apps.ac3-cluster-1.rh-horizon.eu/management/v3"
+# CONSUMER_MGMT_URL="https://consumer-management-connector-test.apps.ocp-rh-aio2.waltoninstitute.ie/management/v3"
 # PROVIDER_PROTOCOL="http://provider-protocol-connectors.apps.ac3-cluster-2.rh-horizon.eu/protocol"
 
 # Check if asset name is provided as an argument
@@ -20,13 +20,15 @@ fi
 
 # Configuration
 ASSET_NAME="$1"
-POLICY_NAME="$1-policy"
-CONTRACT_NAME="$1-contract"
+# Sanitize names for EDC (replace slashes with dashes)
+SANITIZED_ASSET_NAME=$(echo "$1" | sed 's/\//-/g')
+POLICY_NAME="$SANITIZED_ASSET_NAME-policy"
+CONTRACT_NAME="$SANITIZED_ASSET_NAME-contract"
 API_KEY="password"
-PROVIDER_MGMT_URL="https://provider-management-uc3-applications.apps.ac3-cluster-2.rh-horizon.eu/management/v3"
-CONSUMER_MGMT_URL="https://consumer-management-connectors.apps.ac3-cluster-1.rh-horizon.eu/management/v3"
-CONSUMER_PROTOCOL="http://consumer-protocol-connectors.apps.ac3-cluster-1.rh-horizon.eu/protocol"
-PROVIDER_PROTOCOL="http://provider-protocol-uc3-applications.apps.ac3-cluster-2.rh-horizon.eu/protocol"
+PROVIDER_MGMT_URL="https://provider-management-connector-test.apps.ocp-rh-aio2.waltoninstitute.ie/management/v3"
+CONSUMER_MGMT_URL="https://consumer-management-connector-test.apps.ocp-rh-aio2.waltoninstitute.ie/management/v3"
+CONSUMER_PROTOCOL="http://consumer-protocol-connector-test.apps.ocp-rh-aio2.waltoninstitute.ie/protocol"
+PROVIDER_PROTOCOL="http://provider-protocol-connector-test.apps.ocp-rh-aio2.waltoninstitute.ie/protocol"
 BEARER_TOKEN="eyJ0eXAiOiJKV1QiLCJraWQiOiJiNzlkODE3OS02MmFhLTRkMGYtODU0Zi1lMzQyMmNmYzE1MTciLCJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJpb25vc2Nsb3VkIiwiaWF0IjoxNzQ0ODE0NzE0LCJjbGllbnQiOiJVU0VSIiwiaWRlbnRpdHkiOnsicm9sZSI6ImFkbWluIiwiY29udHJhY3ROdW1iZXIiOjMyNDM5MjQ1LCJpc1BhcmVudCI6ZmFsc2UsInByaXZpbGVnZXMiOlsiREFUQV9DRU5URVJfQ1JFQVRFIiwiU05BUFNIT1RfQ1JFQVRFIiwiSVBfQkxPQ0tfUkVTRVJWRSIsIk1BTkFHRV9EQVRBUExBVEZPUk0iLCJBQ0NFU1NfQUNUSVZJVFlfTE9HIiwiUENDX0NSRUFURSIsIkFDQ0VTU19TM19PQkpFQ1RfU1RPUkFHRSIsIkJBQ0tVUF9VTklUX0NSRUFURSIsIkNSRUFURV9JTlRFUk5FVF9BQ0NFU1MiLCJLOFNfQ0xVU1RFUl9DUkVBVEUiLCJGTE9XX0xPR19DUkVBVEUiLCJBQ0NFU1NfQU5EX01BTkFHRV9NT05JVE9SSU5HIiwiQUNDRVNTX0FORF9NQU5BR0VfQ0VSVElGSUNBVEVTIiwiQUNDRVNTX0FORF9NQU5BR0VfTE9HR0lORyIsIk1BTkFHRV9EQkFBUyIsIkFDQ0VTU19BTkRfTUFOQUdFX0ROUyIsIk1BTkFHRV9SRUdJU1RSWSIsIkFDQ0VTU19BTkRfTUFOQUdFX0NETiIsIkFDQ0VTU19BTkRfTUFOQUdFX1ZQTiIsIkFDQ0VTU19BTkRfTUFOQUdFX0FQSV9HQVRFV0FZIiwiQUNDRVNTX0FORF9NQU5BR0VfTkdTIiwiQUNDRVNTX0FORF9NQU5BR0VfS0FBUyIsIkFDQ0VTU19BTkRfTUFOQUdFX05FVFdPUktfRklMRV9TVE9SQUdFIiwiQUNDRVNTX0FORF9NQU5BR0VfQUlfTU9ERUxfSFVCIiwiQ1JFQVRFX05FVFdPUktfU0VDVVJJVFlfR1JPVVBTIiwiQUNDRVNTX0FORF9NQU5BR0VfSUFNX1JFU09VUkNFUyJdLCJ1dWlkIjoiZWUxMjdlOGItOTMwNi00OTFhLTk1MDAtOGE0MWE4MjQ3YzhlIiwicmVzZWxsZXJJZCI6MSwicmVnRG9tYWluIjoiaW9ub3MuZGUifSwiZXhwIjoxNzc2MzUwNzE0fQ.K8axaTD53Mr1ymn5X9dJhI8DlAu2cO_IgknpBtFjs9tOPkSGPwKc8ImTfyiJbiA3UemXAoLQ4W67KUf7SR7E8dOJWRbnCdv4OAMk1MGDcQ58gRPlwQ-ztS6sHN0PWQsB7Os4IILkgDsUKMvDNj_FWWBFy3910ztnkqvrgmexQJcgOsm0VumxmBWntRnNPpaudl8GK2wJip-fn8iNOwss9qz_IqlN7PilmdYLzVMIk9KNIRUWnjLj2wdbYmJaS4tDkUFcm5y17pICx4hyaBNo19pN2B7FWEvDsWGK_avCsxkUiI5mpiYnEW5dIwPRMr_LsiQleFxUZnY46xa5ekttbA"
 KEEP_ID="f72ce80a-f4f8-43e2-b4e1-224258895a09"
 ACCESS_KEYS_URL="https://s3.ionos.com/accesskeys"
@@ -184,17 +186,18 @@ fi
 # Step 1: Create Asset
 echo "Creating asset..."
 ASSET_PAYLOAD=$(jq -n \
+    --arg asset_id "$SANITIZED_ASSET_NAME" \
     --arg asset_name "$ASSET_NAME" \
     --arg bucket "$2" \
     '{
         "@context": {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
-        "@id": $asset_name,
+        "@id": $asset_id,
         "properties": {"name": $asset_name},
         "dataAddress": {"type": "IonosS3", "bucketName": $bucket, "blobName": $asset_name}
 }')
 ASSET_RESPONSE=$(make_api_call POST "$PROVIDER_MGMT_URL/assets" "$ASSET_PAYLOAD")
 # echo "$ASSET_RESPONSE"
-ASSET_ID=$(extract_id "$ASSET_RESPONSE" "$ASSET_NAME")
+ASSET_ID=$(extract_id "$ASSET_RESPONSE" "$SANITIZED_ASSET_NAME")
 # Check if response is valid JSON and contains @id
 if echo "$ASSET_RESPONSE" | jq -e '.["@id"]' >/dev/null 2>&1; then
     echo "[$2 -> $3] Asset created successfully with ID: $ASSET_ID" >&2
@@ -205,7 +208,7 @@ fi
 # Step 2: Create Policy
 echo "Creating policy..."
 POLICY_PAYLOAD=$(jq -n \
-    --arg asset_name "$ASSET_NAME" \
+    --arg asset_id "$SANITIZED_ASSET_NAME" \
     --arg policy_name "$POLICY_NAME" \
 '{
     "@context": {"edc": "https://w3id.org/edc/v0.0.1/ns/", "odrl": "http://www.w3.org/ns/odrl/2/"},
@@ -213,7 +216,7 @@ POLICY_PAYLOAD=$(jq -n \
     "policy": {
         "@type": "odrl:Set",
         "odrl:assigner": {"@id": "provider"},
-        "odrl:target": {"@id": $asset_name},
+        "odrl:target": {"@id": $asset_id},
         "odrl:permission": [],
         "odrl:prohibition": [],
         "odrl:obligation": []
@@ -258,17 +261,17 @@ CATALOG_PAYLOAD='{
     "protocol": "dataspace-protocol-http"
 }'
 CATALOG_RESPONSE=$(make_api_call POST "$CONSUMER_MGMT_URL/catalog/request" "$CATALOG_PAYLOAD")
-OFFER_ID=$(echo "$CATALOG_RESPONSE" | jq -r --arg asset_name "$ASSET_NAME" '
-    (.["dcat:dataset"] | if type == "array" then .[] else . end) |
-    select(.["@id"] == $asset_name) |
-    (.["odrl:hasPolicy"] | if type == "array" then .[] else . end) |
-    select(.["odrl:target"]["@id"] == $asset_name) |
-    .["@id"]' 2>/dev/null)
+OFFER_ID=$(echo "$CATALOG_RESPONSE" | jq -r --arg asset_id "$SANITIZED_ASSET_NAME" '
+    .["dcat:dataset"][] | 
+    select(."@id" == $asset_id) | 
+    ."odrl:hasPolicy" | 
+    if type == "array" then .[0] else . end | 
+    ."@id"' 2>/dev/null)
 if [ -z "$OFFER_ID" ]; then
-        delete_resource "asset" "$ASSET_ID" 2>&1 | tee /dev/stderr
+        delete_resource "asset" "$SANITIZED_ASSET_NAME" 2>&1 | tee /dev/stderr
         echo "[$2 -> $3] Failed to extract offer ID for asset: $ASSET_NAME." >&2
         logger -t transfer_script "Fetch Catalogue failed for asset $ASSET_NAME"
-        #echo "$CATALOG_RESPONSE" | jq . 2>/dev/null || echo "Invalid JSON: $CATALOG_RESPONSE" >&2
+        echo "$CATALOG_RESPONSE" | jq . 2>/dev/null || echo "Invalid JSON: $CATALOG_RESPONSE" >&2
         exit 100
     fi
     echo "[$2 -> $3] Extracted offer ID: $OFFER_ID"
@@ -276,7 +279,7 @@ if [ -z "$OFFER_ID" ]; then
 # Step 5: Initiate Contract Negotiation
 echo "Initiating contract negotiation..."
 NEGOTIATION_PAYLOAD=$(jq -n \
-    --arg asset_name "$ASSET_NAME" \
+    --arg asset_id "$SANITIZED_ASSET_NAME" \
     --arg offerId "$OFFER_ID" \
     --arg provider "$PROVIDER_PROTOCOL" \
     '{
@@ -289,7 +292,7 @@ NEGOTIATION_PAYLOAD=$(jq -n \
             "@id": $offerId,
             "@type": "odrl:Offer",
             "odrl:assigner": {"@id": "provider"},
-            "odrl:target": {"@id": $asset_name},
+            "odrl:target": {"@id": $asset_id},
             "odrl:permission": [],
             "odrl:prohibition": [],
             "odrl:obligation": []
@@ -315,7 +318,7 @@ echo "[$2 -> $3] Contract finalized. Agreement ID: $CONTRACT_AGREEMENT_ID"
 echo "[$2 -> $3] Initiating transfer..."
 KEY_NAME=$(uuidgen)
 TRANSFER_PAYLOAD=$(jq -n \
-    --arg asset_name "$ASSET_NAME" \
+    --arg asset_id "$SANITIZED_ASSET_NAME" \
     --arg contractId "$CONTRACT_AGREEMENT_ID" \
     --arg provider "$PROVIDER_PROTOCOL" \
     --arg keyName "$KEY_NAME" \
@@ -327,7 +330,7 @@ TRANSFER_PAYLOAD=$(jq -n \
         "counterPartyAddress": $provider,
         "protocol": "dataspace-protocol-http",
         "contractId": $contractId,
-        "assetId": $asset_name,
+        "assetId": $asset_id,
         "transferType": "IonosS3-PUSH",
         "dataDestination": {
             "type": "IonosS3",
@@ -360,7 +363,7 @@ echo "[$2 -> $3] Polling deprovision status for transfer ID: $TRANSFER_ID..."
 poll_deprovision_status "$TRANSFER_ID" "$CONSUMER_MGMT_URL/transferprocesses" "DEPROVISIONED" >/dev/null
 echo "[$2 -> $3] Deprovisioning completed successfully."
 
-delete_resource "asset" "$ASSET_NAME" 2>&1
+delete_resource "asset" "$SANITIZED_ASSET_NAME" 2>&1
 delete_resource "policy" "$POLICY_NAME" 2>&1
 delete_resource "contract" "$CONTRACT_NAME" 2>&1
 

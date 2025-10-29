@@ -27,7 +27,8 @@ const VirtualizedFileList = ({
   isDatasetMode = false,
   selectedDatasetId = null,
   onSelectDataset = null,
-  onStartProcessing = null
+  onStartProcessing = null,
+  isConnectorMode = false
 }) => {
   const listRef = useRef();
 
@@ -95,14 +96,21 @@ const VirtualizedFileList = ({
             <div className="dataset-actions">
               {onStartProcessing && (
                 <button
-                  className="dataset-process-btn"
+                  className={`dataset-process-btn ${isConnectorMode ? 'connector-mode' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onStartProcessing(item.name);
+                    if (!isConnectorMode) {
+                      onStartProcessing(item.name);
+                    }
                   }}
-                  title={`Start processing "${item.name}"`}
+                  disabled={isConnectorMode}
+                  title={
+                    isConnectorMode 
+                      ? `Waiting for files to transfer to consumer bucket - "${item.name}"` 
+                      : `Start processing "${item.name}"`
+                  }
                 >
-                  ▶
+                  {isConnectorMode ? '⏸' : '▶'}
                 </button>
               )}
               {onDelete && (
@@ -287,7 +295,8 @@ VirtualizedFileList.propTypes = {
   isDatasetMode: PropTypes.bool,
   selectedDatasetId: PropTypes.string,
   onSelectDataset: PropTypes.func,
-  onStartProcessing: PropTypes.func
+  onStartProcessing: PropTypes.func,
+  isConnectorMode: PropTypes.bool
 };
 
 export default VirtualizedFileList; 

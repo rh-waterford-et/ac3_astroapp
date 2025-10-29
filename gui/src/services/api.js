@@ -100,11 +100,12 @@ const apiRequestSafe = async (endpoint, options = {}) => {
  * @param {function} onProgress - Progress callback function
  * @returns {Promise<Object>} - Upload response
  */
-export const uploadFile = async (file, dataset, onProgress = null, processorType) => {
+export const uploadFile = async (file, dataset, onProgress = null, processorType, isConnectorMode = false) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('dataset', dataset);
   formData.append('app', processorType);
+  formData.append('connectorMode', isConnectorMode);
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -157,7 +158,7 @@ export const checkHealth = async () => {
  * @param {function} onOverallProgress - Progress callback for overall upload
  * @returns {Promise<Array>} - Array of upload responses
  */
-export const uploadFiles = async (files, dataset, onFileProgress = null, onOverallProgress = null, processorType) => {
+export const uploadFiles = async (files, dataset, onFileProgress = null, onOverallProgress = null, processorType, isConnectorMode = false) => {
   const results = [];
   const totalFiles = files.length;
   
@@ -169,7 +170,7 @@ export const uploadFiles = async (files, dataset, onFileProgress = null, onOvera
         if (onFileProgress) {
           onFileProgress(file, progress);
         }
-      }, processorType);
+      }, processorType, isConnectorMode);
       
       results.push({
         file: file,
@@ -228,10 +229,11 @@ export const getDatasets = async (processorType, signal = null) => {
  * @param {Object} ppxfConfig - Optional pPXF configuration (only for ppxf datasets)
  * @returns {Promise<Object>} - Creation response
  */
-export const createDataset = async (datasetName, processorType, ppxfConfig = null) => {
+export const createDataset = async (datasetName, processorType, ppxfConfig = null, isConnectorMode = false) => {
   const requestBody = {
     datasetName: datasetName,
-    appType: processorType
+    appType: processorType,
+    connectorMode: isConnectorMode
   };
   
   // Add pPXF config if provided and processor is pPXF

@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { uploadFiles as apiUploadFiles } from '../../services/api';
 
-export default function useUploadQueue(processorType) {
+export default function useUploadQueue(processorType, isConnectorMode = false) {
   const [queue, setQueue] = useState([]);
 
   const addFiles = useCallback((fileList) => {
@@ -47,7 +47,8 @@ export default function useUploadQueue(processorType) {
         setQueue(prev => prev.map(item => item.file === file ? { ...item, progress } : item));
       },
       null,
-      processorType
+      processorType,
+      isConnectorMode
     );
 
     setQueue(prev => prev.map(item => {
@@ -57,7 +58,7 @@ export default function useUploadQueue(processorType) {
     }));
 
     return results;
-  }, [processorType, queue]);
+  }, [processorType, queue, isConnectorMode]);
 
   return {
     queue,

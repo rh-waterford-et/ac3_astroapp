@@ -1,0 +1,120 @@
+/* Connector Mode Toggle Button Styling */
+.connector-mode-toggle {
+  display: flex;
+  align-items: center;
+  margin-left: 1rem;
+}
+
+.toggle-button {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: 0.5rem;
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(26, 32, 44, 0.8) 100%);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
+  min-width: 200px;
+}
+
+.toggle-icon {
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.toggle-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  text-align: left;
+}
+
+.toggle-label {
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.toggle-status {
+  font-size: 0.75rem;
+  font-style: italic;
+  opacity: 0.8;
+  line-height: 1.1;
+}
+
+.toggle-indicator {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  min-width: 32px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+/* Inactive state */
+.toggle-button.inactive {
+  border-color: var(--border-color);
+}
+
+.toggle-button.inactive .toggle-indicator {
+  background-color: rgba(156, 163, 175, 0.2);
+  color: var(--text-secondary);
+}
+
+.toggle-button.inactive:hover {
+  border-color: var(--accent-color);
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.1) 0%, rgba(26, 32, 44, 0.9) 100%);
+  transform: translateY(-1px);
+}
+
+/* Active state */
+.toggle-button.active {
+  border-color: var(--accent-color);
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.15) 0%, rgba(26, 32, 44, 0.9) 100%);
+  color: var(--accent-color);
+}
+
+.toggle-button.active .toggle-indicator {
+  background-color: var(--accent-color);
+  color: white;
+}
+
+.toggle-button.active:hover {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.25) 0%, rgba(26, 32, 44, 0.95) 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(79, 209, 197, 0.3);
+}
+
+/* Disabled state */
+.toggle-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.toggle-button:disabled:hover {
+  border-color: var(--border-color);
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(26, 32, 44, 0.8) 100%);
+}
+
+/* Focus state for accessibility */
+.toggle-button:focus {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* Active click effect */
+.toggle-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}

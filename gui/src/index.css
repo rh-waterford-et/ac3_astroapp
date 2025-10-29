@@ -14,6 +14,7 @@
 @import './styles/components/PipelineProgress.css';
 @import './styles/components/VirtualisedFileList.css';
 @import './styles/components/StatusBar.css';
+@import './styles/components/ConnectorModeToggle.css';
 
 /* Utilities */
 @import './styles/utils/utils.css';

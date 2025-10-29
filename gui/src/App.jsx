@@ -9,6 +9,7 @@ import ImageModal from './components/ui/ImageModal';
 import GalleryModal from './components/aladin/gallery/modal/GalleryModal';
 import PipelineAppSelector from './components/pipeline/PipelineAppSelector';
 import DatasetsList from './components/pipeline/DatasetsList';
+import ConnectorModeToggle from './components/pipeline/ConnectorModeToggle';
 import UploadZone from './components/upload/UploadZone';
 import logoImage from './assets/AC3-LogoConFrase.jpg';
 import { AppStateProvider } from './contexts/AppStateContext';
@@ -18,6 +19,7 @@ import { useAladinControls } from './hooks/aladin/useAladinControls';
 import { useSidebarControls } from './hooks/ui/useSidebarControls';
 import { useTabManager } from './hooks/ui/useTabManager';
 import { useUploadWarning } from './hooks/ui/useUploadWarning';
+import { useConnectorMode } from './hooks/data/useConnectorMode';
 
 function AppContent({ onGalleryOperationsReady }) {
   // Aladin instance and loading state
@@ -55,6 +57,9 @@ function AppContent({ onGalleryOperationsReady }) {
   // Selected app state for pipeline tab
   const [selectedApp, setSelectedApp] = React.useState('starlight');
 
+  // Connector mode state
+  const { isConnectorMode, setConnectorMode } = useConnectorMode();
+
   return (
     <div className="app">
       <header className="app-header">
@@ -65,7 +70,13 @@ function AppContent({ onGalleryOperationsReady }) {
           <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
           {/* App Selection for Pipeline */}
           {activeTab === 'pipeline' && (
-            <PipelineAppSelector selectedApp={selectedApp} onSelect={setSelectedApp} />
+            <>
+              <PipelineAppSelector selectedApp={selectedApp} onSelect={setSelectedApp} />
+              <ConnectorModeToggle 
+                isEnabled={isConnectorMode} 
+                onToggle={setConnectorMode} 
+              />
+            </>
           )}
         </div>
         {/* Integrated Controls */}
@@ -124,7 +135,10 @@ function AppContent({ onGalleryOperationsReady }) {
           {activeTab === 'pipeline' && (
             <div className="pipeline-full-view">
               {/* Pipeline Monitor with full space */}
-              <DatasetsList processorType={selectedApp} />
+              <DatasetsList 
+                processorType={selectedApp} 
+                isConnectorMode={isConnectorMode}
+              />
             </div>
           )}
         </div>

@@ -5,7 +5,8 @@ import RefreshIcon from '../ui/RefreshIcon';
 
 const DatasetsPane = ({
   datasetOps,
-  processorType
+  processorType,
+  isConnectorMode = false
 }) => {
   const { datasets, loading, error, refresh, selectedDataset, setSelectedDataset, startProcessing, deleteDataset } = datasetOps;
 
@@ -43,6 +44,7 @@ const DatasetsPane = ({
           hasNextPage={false}
           loadingMessage="Loading datasets..."
           processorType={processorType}
+          isConnectorMode={isConnectorMode}
         />
       </div>
     </div>
@@ -51,7 +53,8 @@ const DatasetsPane = ({
 
 DatasetsPane.propTypes = {
   datasetOps: PropTypes.object.isRequired,
-  processorType: PropTypes.string.isRequired
+  processorType: PropTypes.string.isRequired,
+  isConnectorMode: PropTypes.bool
 };
 
 export default DatasetsPane; 

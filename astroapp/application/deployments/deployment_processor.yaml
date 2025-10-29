@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ucm-processor-deployment
-  namespace: uc3-applications
+  namespace: connector-test
   labels:
     app: ucm-processor
 spec:
@@ -43,7 +43,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/bcapper30/uc3-backend:latest
+      - image: quay.io/ryjenkin/uc3-backend:connector-mode
         name: receiver-processor
         workingDir: /processing_data/
         volumeMounts:
@@ -122,7 +122,7 @@ spec:
           value: ""
         ports:
         - containerPort: 5672  
-      - image: quay.io/bcapper30/uc3-backend:latest
+      - image: quay.io/ryjenkin/uc3-backend:connector-mode
         name: watcher-processor
         workingDir: /processing_data/
         command: ["/usr/bin/ucm"]

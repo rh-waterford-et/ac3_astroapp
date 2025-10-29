@@ -16,4 +16,4 @@ spec:
     spec:
       containers:
       - name: transfer
-        image: quay.io/bcapper30/trigger-transfer
+        image: quay.io/ryjenkin/trigger-transfer:asset-id-fix
