@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: predictor-client
+  namespace: uc3-applications
+  labels:
+    app: predictor-client
+    openshift.io/user-monitoring: 'true'
+spec:
+  selector:
+    matchLabels:
+      app: predictor-client
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s

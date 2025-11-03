@@ -5,6 +5,7 @@ metadata:
   namespace: connector-test
   labels:
     app: ucm-producer
+    svc: ucm
 spec:
   selector:
     app: ucm-producer
