@@ -41,5 +41,5 @@ oc apply -f deployment_frontend.yaml
 echo "✅ Deployment complete!"
 echo ""
 echo "📊 Check status:"
-echo "oc get pods -n uc3-applications"
-echo "oc get routes -n uc3-applications" 
+echo "oc get pods -n connector-test"
+echo "oc get routes -n connector-test" 

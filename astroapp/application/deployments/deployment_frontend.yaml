@@ -16,11 +16,10 @@ spec:
         app: uc3-frontend
     spec:
       containers:
-      - image: quay.io/ryjenkin/uc3-gui:complete
+      - image: quay.io/bcapper30/uc3-apps:latest
         name: frontend
         ports:
         - containerPort: 8080
-        # Using relative URLs for API calls - nginx handles the proxying
 
 ---
 apiVersion: v1

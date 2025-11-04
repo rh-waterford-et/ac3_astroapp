@@ -43,10 +43,6 @@ spec:
           value: "5"
         - name: EXPORTER_PORT
           value: "9090"
-        volumeMounts:
-        - name: config
-          mountPath: /app/config.yaml
-          subPath: config.yaml
         resources:
           requests:
             memory: "128Mi"
@@ -67,10 +63,6 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 5
       serviceAccountName: uc3-monitoring
-      volumes:
-      - name: config
-        configMap:
-          name: predictor-client-config
 ---
 # ==========================
 # Service
@@ -110,4 +102,3 @@ spec:
   - port: metrics
     interval: 30s
     path: /metrics
-
