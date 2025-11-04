@@ -26,57 +26,11 @@ spec:
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
         args: ["/usr/bin/ucm", "watcher", "producer"]
-        env:
-        - name: RABBITMQ_USER
-          value: "guest"
-        - name: RABBITMQ_PASSWORD
-          value: "guest"
-        - name: RABBITMQ_HOST
-          value: "rabbitmq"
-        - name: RABBITMQ_PORT
-          value: "5672"
-        - name: JOB_SIZE
-          value: "5"
-        - name: AWS_ACCESS_KEY_ID
-          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
-        - name: AWS_SECRET_ACCESS_KEY
-          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
-        - name: S3_ENDPOINT
-          value: "https://s3.eu-central-1.ionoscloud.com"
-        - name: S3_REGION
-          value: "de"
-        - name: S3_BUCKET_NAME
-          value: "test-consumer"
-        - name: EXPLORED_STARLIGHT
-          value: "starlight/input"
-        - name: EXPLORED_PPXF
-          value: "ppxf/input"
-        - name: EXPLORED_STECKMAP
-          value: "steckmap/input"
-        - name: PROCESSED_STARLIGHT
-          value: "starlight/processed"
-        - name: PROCESSED_PPXF
-          value: "ppxf/processed"
-        - name: PROCESSED_STECKMAP
-          value: "steckmap/processed"
-        - name: OUTPUT_STARLIGHT
-          value: "starlight/output"
-        - name: OUTPUT_PPXF
-          value: "ppxf/output"
-        - name: OUTPUT_STECKMAP
-          value: "steckmap/output"
-        - name: TEMPLATE_IN_FILE_PATH
-          value: "/docker/starlight/config_files_starlight/grid_example.in"
-        - name: "IN_FILE_OUTPUT_PATH"
-          value: "/processing_data/starlight/runtime/infiles/"
-        - name: REDIS_HOST
-          value: "redis"
-        - name: REDIS_PORT
-          value: "6379"
-        - name: REDIS_PASSWORD
-          value: ""
-        - name: METRICS
-          value: "metrics/"
+        envFrom:
+        - configMapRef:
+            name: uc3-shared-config
+        - secretRef:
+            name: uc3-shared-secrets
         ports:
         - containerPort: 5672
         volumeMounts:
@@ -89,39 +43,11 @@ spec:
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
         args: ["/usr/bin/ucm", "server"]
-        env:
-        - name: AWS_ACCESS_KEY_ID
-          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
-        - name: AWS_SECRET_ACCESS_KEY
-          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
-        - name: S3_ENDPOINT
-          value: "https://s3.eu-central-1.ionoscloud.com"
-        - name: S3_REGION
-          value: "de"
-        - name: S3_BUCKET_NAME
-          value: "test-consumer"
-        - name: SERVER_PORT
-          value: "8080"
-        - name: CORS_ALLOWED_ORIGINS
-          value: "*"
-        - name: PROCESSED_STARLIGHT
-          value: "starlight/processed"
-        - name: PROCESSED_PPXF
-          value: "ppxf/processed"
-        - name: PROCESSED_STECKMAP
-          value: "steckmap/processed"
-        - name: OUTPUT_STARLIGHT
-          value: "starlight/output"
-        - name: OUTPUT_PPXF
-          value: "ppxf/output"
-        - name: OUTPUT_STECKMAP
-          value: "steckmap/output"
-        - name: EXPLORED_STARLIGHT
-          value: "starlight/input"
-        - name: EXPLORED_PPXF
-          value: "ppxf/input"
-        - name: EXPLORED_STECKMAP
-          value: "steckmap/input"
+        envFrom:
+        - configMapRef:
+            name: uc3-shared-config
+        - secretRef:
+            name: uc3-shared-secrets
         ports:
         - containerPort: 8080
         volumeMounts:
@@ -139,45 +65,11 @@ spec:
           privileged: true
         command: ["/uid_entrpoint.sh"]
         args: ["/usr/bin/ucm", "consumer", "producer"]
-        env:
-        - name: RABBITMQ_USER
-          value: "guest"
-        - name: RABBITMQ_PASSWORD
-          value: "guest"
-        - name: RABBITMQ_HOST
-          value: "rabbitmq"
-        - name: RABBITMQ_PORT
-          value: "5672"
-        - name: AWS_ACCESS_KEY_ID
-          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
-        - name: AWS_SECRET_ACCESS_KEY
-          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
-        - name: S3_ENDPOINT
-          value: "https://s3.eu-central-1.ionoscloud.com"
-        - name: S3_REGION
-          value: "de"
-        - name: S3_BUCKET_NAME
-          value: "test-consumer"
-        - name: IN_FILE_PATH
-          value: "/processing_data/starlight/runtime/infiles"
-        - name: PROCESS_LIST_STARLIGHT
-          value: "/processing_data/starlight/runtime/processlist.txt" 
-        - name: PROCESS_LIST_PPXF
-          value: "/processing_data/ppxf/runtime/processlist.txt"
-        - name: OUTPUT_BUCKET_STARLIGHT
-          value: "starlight/output"
-        - name: OUTPUT_BUCKET_PPXF
-          value: "ppxf/output"
-        - name: OUTPUT_BUCKET_STECKMAP
-          value: "steckmap/output"
-        - name: REDIS_HOST
-          value: "redis"
-        - name: REDIS_PORT
-          value: "6379"
-        - name: REDIS_PASSWORD
-          value: ""
-        - name: METRICS
-          value: "metrics"
+        envFrom:
+        - configMapRef:
+            name: uc3-shared-config
+        - secretRef:
+            name: uc3-shared-secrets
       - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: aggregator
         workingDir: /processing_data/
@@ -192,23 +84,14 @@ spec:
           privileged: true
         command: ["/uid_entrpoint.sh"]
         args: ["/usr/bin/ucm", "aggregator"]
-        env:
-        - name: REDIS_HOST
-          value: "redis"
-        - name: REDIS_PORT
-          value: "6379"
-        - name: REDIS_PASSWORD
-          value: ""
-        - name: METRICS
-          value: "metrics/"
-        - name: AWS_ACCESS_KEY_ID
-          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
-        - name: AWS_SECRET_ACCESS_KEY
-          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
-        - name: S3_ENDPOINT
-          value: "https://s3.eu-central-1.ionoscloud.com"
-        - name: S3_BUCKET_NAME
-          value: "test-consumer"
-        - name: S3_REGION
-          value: "de"
+        envFrom:
+        - configMapRef:
+            name: uc3-shared-config
+        - secretRef:
+            name: uc3-shared-secrets
+         env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
           

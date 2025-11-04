@@ -189,28 +189,28 @@ func (ms *MetricsStore) GetBatchJobes(ctx context.Context, batchID string) ([]*M
 func (ms *MetricsStore) GetCompletedBatchJobes(ctx context.Context, batchID string) ([]*MetricRecord, error) {
 	// Only retrieve from completed metrics table
 	pattern := fmt.Sprintf("%s:completed:%s:*", ms.keyPrefix, batchID)
-	log.Printf("DEBUG: GetCompletedBatchJobes searching with pattern: %s", pattern)
+	//log.Printf("AGG: DEBUG: GetCompletedBatchJobes searching with pattern: %s", pattern)
 	keys, err := ms.redis.Keys(ctx, pattern)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get completed job keys: %w", err)
 	}
 
-	log.Printf("DEBUG: GetCompletedBatchJobes found %d keys for batch %s", len(keys), batchID)
+	//log.Printf("AGG: DEBUG: GetCompletedBatchJobes found %d keys for batch %s", len(keys), batchID)
 
 	var jobes []*MetricRecord
 	for _, key := range keys {
 		data, err := ms.redis.HGetAll(ctx, key)
 		if err != nil {
-			log.Printf("DEBUG: Failed to get data for key %s: %v", key, err)
+			//log.Printf("AGG: DEBUG: Failed to get data for key %s: %v", key, err)
 			continue
 		}
 
 		job, err := ms.parseMetric(data)
 		if err == nil {
-			log.Printf("DEBUG: Parsed job %s from completed table, IsComplete=%v", job.JobID, job.IsComplete)
+			//log.Printf("AGG: DEBUG: Parsed job %s from completed table, IsComplete=%v", job.JobID, job.IsComplete)
 			jobes = append(jobes, job)
 		} else {
-			log.Printf("DEBUG: Failed to parse metric from key %s: %v", key, err)
+			//log.Printf("AGG: DEBUG: Failed to parse metric from key %s: %v", key, err)
 		}
 	}
 
@@ -218,7 +218,7 @@ func (ms *MetricsStore) GetCompletedBatchJobes(ctx context.Context, batchID stri
 		return jobes[i].QueueStartTime.Before(jobes[j].QueueStartTime)
 	})
 
-	log.Printf("DEBUG: GetCompletedBatchJobes returning %d jobs for batch %s", len(jobes), batchID)
+	//log.Printf("AGG: DEBUG: GetCompletedBatchJobes returning %d jobs for batch %s", len(jobes), batchID)
 	return jobes, nil
 }
 
@@ -470,13 +470,13 @@ func (ms *MetricsStore) ArchiveCompletedMetrics(ctx context.Context, batchID str
 	}
 
 	archiveKey := fmt.Sprintf("metrics:completed:%s", batchID)
-	
+
 	// Use pipeline for efficiency
 	pipe := ms.redis.Pipeline()
-	
+
 	for _, metric := range metrics {
 		jobArchiveKey := fmt.Sprintf("%s:%s", archiveKey, metric.JobID)
-		
+
 		data := map[string]interface{}{
 			"batch_id":               metric.BatchID,
 			"job_id":                 metric.JobID,
@@ -490,29 +490,29 @@ func (ms *MetricsStore) ArchiveCompletedMetrics(ctx context.Context, batchID str
 			"total_duration":         metric.TotalDuration,
 			"job_size_mb":            metric.JobSizeMB,
 		}
-		
+
 		pipe.HSet(ctx, jobArchiveKey, data)
 		pipe.Expire(ctx, jobArchiveKey, 30*24*time.Hour)
 	}
-	
+
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("failed to archive metrics: %w", err)
 	}
-	
+
 	log.Printf("Archived %d completed metrics to %s", len(metrics), archiveKey)
 	return nil
 }
 
 // CleanupJobes now only deletes metrics since archiving is already done in Export
 func (ms *MetricsStore) CleanupJobes(ctx context.Context, batchID string, timeParam string, cleanupMode string) error {
-		// Export only completed work
-		if err := ms.ExportBatchJobesToS3(ctx, batchID, timeParam, true); err != nil {
-			log.Printf("WARNING: failed to export COMPLETE metrics for batch %s: %v", batchID, err)
-		}
-	
-		log.Printf("DEBUG: Starting CleanupJobes with mode: %s", cleanupMode)
-	
-	log.Printf("DEBUG: Starting CleanupJobes with mode: %s", cleanupMode)
+	// Export only completed work
+	if err := ms.ExportBatchJobesToS3(ctx, batchID, timeParam, true); err != nil {
+		log.Printf("AGG: WARNING: failed to export COMPLETE metrics for batch %s: %v", batchID, err)
+	}
+
+	//log.Printf("AGG: DEBUG: Starting CleanupJobes with mode: %s", cleanupMode)
+
+	//log.Printf("AGG: DEBUG: Starting CleanupJobes with mode: %s", cleanupMode)
 
 	pattern := ms.getBatchPattern(batchID)
 	keys, err := ms.redis.Keys(ctx, pattern)
@@ -582,27 +582,27 @@ func (ms *MetricsStore) GetAllBatchIDs(ctx context.Context) ([]string, error) {
 func (ms *MetricsStore) GetAllCompletedBatchIDs(ctx context.Context) ([]string, error) {
 	// Only scan completed metrics table
 	pattern := fmt.Sprintf("%s:completed:*", ms.keyPrefix)
-	log.Printf("DEBUG: GetAllCompletedBatchIDs scanning with pattern: %s", pattern)
+	//log.Printf("AGG: DEBUG: GetAllCompletedBatchIDs scanning with pattern: %s", pattern)
 	keys, err := ms.redis.Keys(ctx, pattern)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get completed keys: %w", err)
 	}
 
-	log.Printf("DEBUG: GetAllCompletedBatchIDs found %d keys in Redis", len(keys))
-	if len(keys) > 0 && len(keys) <= 10 {
-		log.Printf("DEBUG: Sample keys: %v", keys)
-	} else if len(keys) > 10 {
-		log.Printf("DEBUG: Sample keys (first 10): %v", keys[:10])
-	}
+	//log.Printf("AGG: DEBUG: GetAllCompletedBatchIDs found %d keys in Redis", len(keys))
+	//if len(keys) > 0 && len(keys) <= 10 {
+	//	log.Printf("AGG: DEBUG: Sample keys: %v", keys)
+	//} else if len(keys) > 10 {
+	//	log.Printf("AGG: DEBUG: Sample keys (first 10): %v", keys[:10])
+	//}
 
 	batchIDs := make(map[string]struct{})
 	for _, key := range keys {
 		// Expected format: metrics:completed:BATCH_ID:JOB_ID
 		parts := strings.Split(key, ":")
-		log.Printf("DEBUG: Parsing key: %s, parts: %v, len=%d", key, parts, len(parts))
+		//log.Printf("AGG: DEBUG: Parsing key: %s, parts: %v, len=%d", key, parts, len(parts))
 		if len(parts) >= 3 && parts[1] == "completed" {
 			batchIDs[parts[2]] = struct{}{}
-			log.Printf("DEBUG: Extracted batch ID: %s", parts[2])
+			//log.Printf("AGG: DEBUG: Extracted batch ID: %s", parts[2])
 		}
 	}
 
@@ -611,6 +611,6 @@ func (ms *MetricsStore) GetAllCompletedBatchIDs(ctx context.Context) ([]string, 
 		result = append(result, id)
 	}
 
-	log.Printf("DEBUG: GetAllCompletedBatchIDs returning %d batch IDs: %v", len(result), result)
+	//log.Printf("AGG: DEBUG: GetAllCompletedBatchIDs returning %d batch IDs: %v", len(result), result)
 	return result, nil
 }

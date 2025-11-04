@@ -22,8 +22,6 @@ type UtilsInterface interface {
 
 type Utils struct{}
 
-
-
 func (u *Utils) GenerateUUID() string {
 	return uuid.New().String()
 }
@@ -107,9 +105,9 @@ func (u *Utils) EnsureBucketDirectoriesExist(bucket s3bucket.S3BucketInterface) 
 		os.Getenv("PROCESSED_STARLIGHT"),
 		os.Getenv("PROCESSED_PPXF"),
 		os.Getenv("PROCESSED_STECKMAP"),
-		os.Getenv("OUTPUT_STARLIGHT"),
-		os.Getenv("OUTPUT_PPXF"),
-		os.Getenv("OUTPUT_STECKMAP"),
+		os.Getenv("OUTPUT_BUCKET_STARLIGHT"),
+		os.Getenv("OUTPUT_BUCKET_PPXF"),
+		os.Getenv("OUTPUT_BUCKET_STECKMAP"),
 		os.Getenv("METRICS"),
 	}
 

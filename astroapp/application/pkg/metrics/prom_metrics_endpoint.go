@@ -141,7 +141,7 @@ func (pm *PrometheusJobMetrics) UpdateMetrics(ctx context.Context) error {
 		return err
 	}
 
-	log.Printf("DEBUG: Found %d completed batch IDs: %v", len(batchIDs), batchIDs)
+	//log.Printf("DEBUG: Found %d completed batch IDs: %v", len(batchIDs), batchIDs)
 
 	totalCompletedCount := 0
 
@@ -209,18 +209,18 @@ func (pm *PrometheusJobMetrics) updatePodMetrics(ctx context.Context) error {
 func StartMetricsServer(addr string, store *MetricsStore) error {
 	registry := prometheus.NewRegistry()
 	pm := NewPrometheusJobMetrics(store, registry)
-	log.Printf("--------------- Starting /metrics Server ---------------")
+	//log.Printf("AGG: --------------- Starting /metrics Server ---------------")
 	// Update metrics initially
 	ctx := context.Background()
 	if err := pm.UpdateMetrics(ctx); err != nil {
-		log.Printf("Warning: initial metrics update failed: %v", err)
+		//log.Printf("AGG: Warning: initial metrics update failed: %v", err)
 	}
 
 	// Create HTTP handler that updates metrics on each scrape
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Update metrics before serving them
 		if err := pm.UpdateMetrics(r.Context()); err != nil {
-			log.Printf("Error updating metrics: %v", err)
+			//log.Printf("AGG: Error updating metrics: %v", err)
 		}
 		//log.Printf(registry.Gather())
 		promhttp.HandlerFor(registry, promhttp.HandlerOpts{}).ServeHTTP(w, r)
@@ -229,6 +229,6 @@ func StartMetricsServer(addr string, store *MetricsStore) error {
 	http.Handle("/metrics", handler)
 	//http.Handle("/metrics", promhttp.Handler())
 
-	log.Printf("Starting Prometheus metrics server on %s", addr)
+	//log.Printf("AGG: Starting Prometheus metrics server on %s", addr)
 	return http.ListenAndServe(addr, nil)
 }

@@ -151,9 +151,6 @@ func LaunchProducer(side string) error {
 	}
 	appRunner := &watcher.Watcher{}
 	if side == "processor" {
-		if err := utils.EnsureDirectoriesExist(); err != nil {
-			log.Fatalf("Directory initialization failed: %v", err)
-		}
 		appRunner.RunProcessor(side, utils, queue, redis)
 	} else {
 		// Producer side starts HTTP server to receive processing triggers
@@ -184,7 +181,7 @@ func LaunchProducer(side string) error {
 			// Run the watcher for this specific job
 			go func() {
 				appRunner.RunProducer(appType, jobName, side, utils, queue, redis)
-				log.Printf("Completed processing for job: %s", jobName)
+				log.Printf("Completed processing for batch: %s", jobName)
 			}()
 
 			w.Header().Set("Content-Type", "application/json")

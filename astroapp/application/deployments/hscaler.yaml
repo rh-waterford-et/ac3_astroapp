@@ -1,0 +1,136 @@
+# ==========================
+# HScaler Predictor Client
+# ==========================
+# ConfigMap
+# ==========================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: predictor-client-config
+  namespace: uc3-applications
+  labels:
+    app: predictor-client
+data:
+  config.yaml: |
+    # Predictor Client Configuration
+
+    # Prediction API settings
+    predictor_api:
+      url: "http://mock-api:5000/predict"  # Points to mock-api service
+
+    # Prometheus settings
+    prometheus:
+      url: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
+      
+    # Prometheus queries for required metrics
+    prometheus_queries:
+      numprocessors: "num_processors"  # Replace with actual Prometheus query
+      jobsize: "astroapp_job_size_mb"   # Relace with actual Prometheus query
+      queuelen: "astroapp_job_queue_ahead_length"            # Replace with actual Prometheus query
+
+    # Query interval in seconds
+    query_interval_seconds: 10
+
+    # Number of predictions to average (sliding window size)
+    averaging_window_size: 5
+
+    # Exporter settings
+    exporter:
+      port: 9090  # Port for Prometheus metrics endpoint
+---
+# ==========================
+# Deployment
+# ==========================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: predictor-client
+  namespace: uc3-applications
+  labels:
+    app: predictor-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: predictor-client
+  template:
+    metadata:
+      labels:
+        app: predictor-client
+    spec:
+      containers:
+      - name: predictor-client
+        image: quay.io/rcarroll/ac3_uc3/hautoscaler:latest
+        imagePullPolicy: Always
+        ports:
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        volumeMounts:
+        - name: config
+          mountPath: /app/config.yaml
+          subPath: config.yaml
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      serviceAccountName: uc3-monitoring
+      volumes:
+      - name: config
+        configMap:
+          name: predictor-client-config
+---
+# ==========================
+# Service
+# ==========================
+apiVersion: v1
+kind: Service
+metadata:
+  name: predictor-client
+  namespace: uc3-applications
+  labels:
+    app: predictor-client
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9090
+    targetPort: metrics
+    protocol: TCP
+    name: metrics
+  selector:
+    app: predictor-client
+---
+# ==========================
+# ServiceMonitor
+# ==========================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: predictor-client-monitor
+  namespace: uc3-applications
+  labels:
+    app: predictor-client
+spec:
+  selector:
+    matchLabels:
+      app: predictor-client
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+

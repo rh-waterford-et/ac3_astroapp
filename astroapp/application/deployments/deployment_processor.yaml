@@ -1,64 +1,7 @@
 # ==========================
-# ConfigMap
+# Note: This deployment uses shared secrets and config
+# See: secrets.yaml and configmap.yaml
 # ==========================
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ucm-processor-config
-  namespace: uc3-applications
-data:
-  # RabbitMQ
-  RABBITMQ_HOST: rabbitmq
-  RABBITMQ_PORT: "5672"
-
-  # S3
-  S3_ENDPOINT: https://s3.eu-central-1.ionoscloud.com
-  S3_REGION: de
-  S3_BUCKET_NAME: test-consumer
-
-  # Redis
-  REDIS_HOST: redis
-  REDIS_PORT: "6379"
-  REDIS_PASSWORD: ""
-
-  # Processing
-  JOB_SIZE: "5"
-  BATCH_INFO_DIR: /processing_data/batch_info
-  IN_FILE_OUTPUT_PATH: /processing_data/starlight/runtime/infiles
-  TEMPLATE_IN_FILE_PATH: /docker/starlight/config_files_starlight/grid_example.in
-
-  # STARLIGHT
-  INPUT_DIR_STARLIGHT: /processing_data/starlight/data/input
-  EXPLORED_DIR_STARLIGHT: /processing_data/starlight/data/output
-  PROCESSED_STARLIGHT: /processing_data/starlight/data/processed
-  PROCESS_LIST_STARLIGHT_PATH: /processing_data/starlight/runtime
-
-  # PPXF
-  INPUT_DIR_PPXF: /processing_data/ppxf/data/input
-  EXPLORED_DIR_PPXF: /processing_data/ppxf/data/output
-  PROCESSED_PPXF: /processing_data/ppxf/data/processed
-  PROCESS_LIST_PPXF_PATH: /processing_data/ppxf/runtime
-
-  # STECKMAP
-  EXPLORED_DIR_STECKMAP: /processing_data/steckmap/data/input
-  OUTPUT_DIR_STECKMAP: /processing_data/steckmap/data/output
-  PROCESSED_STECKMAP: /processing_data/steckmap/data/processed
----
-# ==========================
-# Secret 
-# ==========================
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ucm-processor-secrets
-  namespace: uc3-applications
-type: Opaque
-stringData:
-  RABBITMQ_USER: guest
-  RABBITMQ_PASSWORD: guest
-  AWS_ACCESS_KEY_ID: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
-  AWS_SECRET_ACCESS_KEY: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
----
 # ==========================
 # Deployment
 # ==========================
@@ -99,18 +42,6 @@ spec:
           image: quay.io/bcapper30/starlight:latest
           workingDir: /docker/starlight/STARLIGHTv04
           command: ["./bash_script2.sh"]
-          env:
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: PROCESS_LIST_STARLIGHT
-              value: "/processing_data/starlight/runtime/processlist-$(POD_NAME).txt"
-            - name: PROCESS_LIST_STARLIGHT_PATH
-              valueFrom:
-                configMapKeyRef:
-                  name: ucm-processor-config
-                  key: PROCESS_LIST_STARLIGHT_PATH
           volumeMounts:
             - name: processing-storage
               mountPath: /processing_data/
@@ -121,31 +52,31 @@ spec:
         - name: receiver
           image: quay.io/rh-ee-kromashk/uc3-backend:latest
           workingDir: /processing_data/
-           command: ["/usr/bin/ucm", "consumer", "processor"] 
+          command: ["/usr/bin/ucm", "consumer", "processor"] 
           envFrom:
             - configMapRef:
-                name: ucm-processor-config
+                name: uc3-shared-config
             - secretRef:
-                name: ucm-processor-secrets
+                name: uc3-shared-secrets
           env:
             - name: POD_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-            - name: PROCESS_LIST_STARLIGHT
-              value: "/processing_data/starlight/runtime/processlist-$(POD_NAME).txt"
-            - name: PROCESS_LIST_PPXF
-              value: "/processing_data/ppxf/runtime/processlist-$(POD_NAME).txt"
             - name: PROCESS_LIST_STARLIGHT_PATH
               valueFrom:
                 configMapKeyRef:
-                  name: ucm-processor-config
+                  name: uc3-shared-config
                   key: PROCESS_LIST_STARLIGHT_PATH
+            - name: PROCESS_LIST_STARLIGHT
+              value: "/processing_data/starlight/runtime/processlist-$(POD_NAME).txt"
             - name: PROCESS_LIST_PPXF_PATH
               valueFrom:
                 configMapKeyRef:
-                  name: ucm-processor-config
+                  name: uc3-shared-config
                   key: PROCESS_LIST_PPXF_PATH
+            - name: PROCESS_LIST_PPXF
+              value: "/processing_data/ppxf/runtime/processlist-$(POD_NAME).txt"
           ports:
             - containerPort: 8080
           volumeMounts:
@@ -168,14 +99,9 @@ spec:
           command: ["/usr/bin/ucm", "watcher", "processor"]
           envFrom:
             - configMapRef:
-                name: ucm-processor-config
+                name: uc3-shared-config
             - secretRef:  
-                name: ucm-processor-secrets
-          env:
-            - name: POD_NAME 
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
+                name: uc3-shared-secrets
           volumeMounts:
             - name: processing-storage
               mountPath: /processing_data/
@@ -189,7 +115,7 @@ spec:
           command: ["/home/ppxf/ppxf_script.sh"]
           envFrom:
             - configMapRef:
-                name: ucm-processor-config
+                name: uc3-shared-config
           env:
             - name: POD_NAME
               valueFrom:
@@ -197,8 +123,6 @@ spec:
                   fieldPath: metadata.name
             - name: API_URL
               value: "http://uc3-backend-service:8080/api/progress/update"
-            - name: PROCESS_LIST_PPXF
-              value: "/processing_data/ppxf/runtime/processlist-$(POD_NAME).txt"
           volumeMounts:
             - name: processing-storage
               mountPath: /processing_data/

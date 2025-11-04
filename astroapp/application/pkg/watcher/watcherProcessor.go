@@ -30,10 +30,12 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 	jobInfoDir := os.Getenv("BATCH_INFO_DIR")
 
 	for {
+		log.Printf("DEBUG: Reading directory: %s", jobInfoDir)
 		files, err := os.ReadDir(jobInfoDir)
 		if err != nil {
 			fmt.Printf("Error reading directory: %v\n", err)
 		} else {
+			log.Printf("DEBUG: Found %d files in directory: %s", len(files), jobInfoDir)
 			for _, file := range files {
 				// Wrap each file processing in panic recovery
 				func() {

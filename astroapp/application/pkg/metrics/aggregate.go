@@ -23,17 +23,17 @@ func (as *AggregationService) Run(ctx context.Context) {
 	ticker := time.NewTicker(as.interval)
 	defer ticker.Stop()
 
-	log.Printf("Starting metrics aggregation service with interval %v", as.interval)
+	//log.Printf("AGG: Starting metrics aggregation service with interval %v", as.interval)
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("Stopping metrics aggregation service")
+			//log.Printf("AGG: Stopping metrics aggregation service")
 			return
 		case <-ticker.C:
 			timeParam := time.Now().Format("15-04")
 			if err := as.AggregateAllBatchs(ctx, timeParam); err != nil {
-				log.Printf("Error aggregating batchs: %v", err)
+				//log.Printf("AGG: Error aggregating batchs: %v", err)
 			}
 		}
 	}
