@@ -11,7 +11,7 @@ data:
 
     # Prediction API settings
     predictor_api:
-      url: "http://mock-api:5000/predict"  # Points to mock-api service
+      url: "http://model-api:5000/predict"  # Points to model-api service
 
     # Prometheus settings
     prometheus:
