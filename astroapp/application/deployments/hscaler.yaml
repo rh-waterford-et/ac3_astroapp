@@ -1,44 +1,4 @@
 # ==========================
-# HScaler Predictor Client
-# ==========================
-# ConfigMap
-# ==========================
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: predictor-client-config
-  namespace: uc3-applications
-  labels:
-    app: predictor-client
-data:
-  config.yaml: |
-    # Predictor Client Configuration
-
-    # Prediction API settings
-    predictor_api:
-      url: "http://model-api:5000/predict"  # Points to model-api service
-
-    # Prometheus settings
-    prometheus:
-      url: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
-      
-    # Prometheus queries for required metrics
-    prometheus_queries:
-      numprocessors: "num_processors"  # Replace with actual Prometheus query
-      jobsize: "astroapp_job_size_mb"   # Relace with actual Prometheus query
-      queuelen: "astroapp_job_queue_ahead_length"            # Replace with actual Prometheus query
-
-    # Query interval in seconds
-    query_interval_seconds: 10
-
-    # Number of predictions to average (sliding window size)
-    averaging_window_size: 5
-
-    # Exporter settings
-    exporter:
-      port: 9090  # Port for Prometheus metrics endpoint
----
-# ==========================
 # Deployment
 # ==========================
 apiVersion: apps/v1
@@ -66,6 +26,23 @@ spec:
         - name: metrics
           containerPort: 9090
           protocol: TCP
+        env:
+        - name: PREDICTOR_API_URL
+          value: "http://model-api:5000/predict"
+        - name: PROMETHEUS_URL
+          value: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
+        - name: NUMPROCESSORS_QUERY
+          value: "num_processors"
+        - name: JOBSIZE_QUERY
+          value: "astroapp_job_size_mb"
+        - name: QUEUELEN_QUERY
+          value: "astroapp_job_queue_ahead_length"
+        - name: QUERY_INTERVAL_SECONDS
+          value: "10"
+        - name: AVERAGING_WINDOW_SIZE
+          value: "5"
+        - name: EXPORTER_PORT
+          value: "9090"
         volumeMounts:
         - name: config
           mountPath: /app/config.yaml
