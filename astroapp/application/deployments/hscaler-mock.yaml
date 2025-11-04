@@ -1,7 +1,12 @@
+# ==========================
+# HScaler Mock API
+# ==========================
+# Deployment
+# ==========================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mock-api
+  name: model-api
   namespace: uc3-applications
   labels:
     app: model-api
@@ -42,3 +47,24 @@ spec:
             port: http
           initialDelaySeconds: 5
           periodSeconds: 5
+---
+# ==========================
+# Service
+# ==========================
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-api
+  namespace: uc3-applications
+  labels:
+    app: model-api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: model-api
+

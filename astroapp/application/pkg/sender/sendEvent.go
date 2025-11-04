@@ -60,8 +60,7 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string,
 		if err != nil {
 			log.Printf("Failed to inspect queue %s: %v", queueName, err)
 		} else {
-			log.Printf("Queue %s before publish: messages=%d, consumers=%d",
-				queueName, stats.Messages, stats.Consumers)
+			//log.Printf("Queue %s before publish: messages=%d, consumers=%d", queueName, stats.Messages, stats.Consumers)
 
 			// Record queue metrics in Redis
 			if s.RedisClient != nil {
@@ -131,13 +130,13 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string,
 		}
 	}
 
-	stats, err := q.InspectQueue(queueName)
+	/* stats, err := q.InspectQueue(queueName)
 	if err != nil {
 		log.Printf("Failed to inspect queue after publish: %v", err)
 	} else {
 		log.Printf("Queue %s after publish: messages=%d, consumers=%d",
 			queueName, stats.Messages, stats.Consumers)
-	}
+	} */
 
 	if side == "producer" {
 		// Record queue start time for each job (individual job tracking)
@@ -158,7 +157,7 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string,
 		}
 	}
 
-	log.Printf("DEBUG: Published message to queue %s", queueName)
-	log.Printf(" [x] Sent job with %d files for app %s\n", len(batch.Files), appName)
+	//log.Printf("DEBUG: Published message to queue %s", queueName)
+	//log.Printf(" [x] Sent job with %d files for app %s\n", len(batch.Files), appName)
 	log.Printf("     Files: %s\n", strings.Join(filenames, ", "))
 }

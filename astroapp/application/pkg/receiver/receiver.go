@@ -3,7 +3,6 @@ package receiver
 import (
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -42,15 +41,6 @@ func NewReceiver(queue queue.QueueInterface, utils common.UtilsInterface, bucket
 func (r *Receiver) Start(side string) {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-	// Clear process list on startup to prevent processing old entries
-	processLists := []string{os.Getenv("PROCESS_LIST_STARLIGHT"), os.Getenv("PROCESS_LIST_PPXF")}
-	for _, processList := range processLists {
-		if side == "processor" {
-			r.clearProcessList(processList)
-
-		}
-	}
-
 	var queueName string
 	if side == "producer" {
 		queueName = "processor_to_producer_queue"
@@ -80,23 +70,16 @@ func (r *Receiver) ProcessMessages(queueName string, side string) {
 		//log.Printf("ProcessingMessage: %t", r.ProcessingMessage)
 		if r.ProcessingMessage {
 			// Check if processlists are now empty - if so, reset flag
-			status, err := r.checkProcessLists()
+			status, err := r.CheckProcessLists()
 			if err == nil && status {
 				log.Printf("│ ✓ All processlists empty - resetting ProcessingMessage flag")
 				r.ProcessingMessage = false
 			} else {
+				//log.Printf("Error checking process lists: %v", err)
 				return
 			}
 		}
-		status, err := r.checkProcessLists()
-		if err != nil {
-			log.Printf("Error checking process lists: %v", err)
-			return
-		}
 
-		if !status {
-			return
-		}
 	}
 
 	// Ensure queue connection is valid
@@ -113,7 +96,7 @@ func (r *Receiver) ProcessMessages(queueName string, side string) {
 		return
 	}
 
-	log.Printf("PROCESSING QUEUE: %s (%d messages)", queueName, queueInfo.Messages)
+	//log.Printf("PROCESSING QUEUE: %s (%d messages)", queueName, queueInfo.Messages)
 
 	d, ok, err := r.Queue.GetOne(queueName)
 	if err != nil {
@@ -161,15 +144,16 @@ func (r *Receiver) finalizeJobProcessing(d amqp.Delivery, side, appName, batchID
 		log.Printf("│ ✔ Successfully processed all %d files", jobSize)
 
 		if side == "producer" && r.RedisClient != nil {
-			log.Printf("Recording Job End Time")
+			//log.Printf("Recording Job End Time")
 			r.recordJobEndTime(batchID, jobID)
 		}
 		if side == "processor" {
 			if filenamesHeader, ok := d.Headers["filenames"].(string); ok {
-				if err := r.createBatchInfoFile(appName, batchID, jobID, filenamesHeader); err != nil {
+				if err := r.CreateBatchInfoFileStarlight(appName, batchID, jobID, filenamesHeader); appName == "STARLIGHT" && err != nil {
 					log.Printf("│ ⚠ Failed to create batch info file: %v", err)
 				}
 			}
+			
 		}
 		r.updateProgress(appName, jobID, api.StageComplete, 100.0)
 	} else {
@@ -181,5 +165,5 @@ func (r *Receiver) finalizeJobProcessing(d amqp.Delivery, side, appName, batchID
 		r.updateProgress(appName, jobID, api.StageError, 0.0)
 	}
 
-	log.Printf("■■■ BATCH COMPLETE [%s] ■■■", jobID)
+	log.Printf("■■■ JOB COMPLETE [%s] ■■■", jobID)
 }

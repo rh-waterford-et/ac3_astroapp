@@ -179,8 +179,8 @@ func (s *Starlight) UpdateToProcessList(inFileName string, fileContent []byte) {
 
 	if _, err = f.WriteString(inFileName + "\n"); err != nil {
 		log.Printf("│ ✗ Error updating process list: %v", err)
-	} else {
+	} /* else {
 		log.Printf("│ ✓ Added %s to process list", inFileName)
 	}
-	
+	 */
 }

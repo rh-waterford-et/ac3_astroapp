@@ -17,12 +17,12 @@ func (r *Receiver) handleApplicationProcessing(side, appName, jobID string, succ
 	if successCount == int(batchSize) && appName == "STARLIGHT" && side == "processor" {
 		starlight.UpdateToProcessList(inFileName, []byte(inFileContent))
 		r.ProcessingMessage = false
-		log.Printf("│ ✓ Added .in file from input side to processlist: %s", inFileName)
+		//log.Printf("│ ✓ Added .in file from input side to processlist: %s", inFileName)
 		r.updateProgress("STARLIGHT", jobID, api.StageAnalysis, 70.0)
 
 	}
 	if successCount == int(batchSize) && appName == "PPXF" && side == "processor" {
-		log.Printf("│ ✓ All pPXF files processed and added to process list")
+		//log.Printf("│ ✓ All pPXF files processed and added to process list")
 		r.updateProgress(appName, jobID, api.StageAnalysis, 70.0)
 	}
 }

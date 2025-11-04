@@ -101,7 +101,7 @@ func (r *Receiver) handleProcessorFile(file api.DataFile, outputPath, appName st
 }
 
 func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, batchID, jobID string) {
-	log.Printf("│ Processing standard text batch for %s", appName)
+	//log.Printf("│ Processing standard text batch for %s", appName)
 	r.updateProgress(appName, jobID, api.StageProcessing, 20.0)
 
 	// Validate batch metadata
@@ -132,7 +132,7 @@ func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, batchI
 	}
 
 	// Process files
-	log.Printf("processFiles")
+	//log.Printf("processFiles")
 	successCount, inFileName, inFileContent, spectrumFiles := r.processFiles(msgBody, side, appName, outputPath)
 
 	// Handle application-specific processing
@@ -150,6 +150,17 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 	r.updateProgress(appName, jobID, api.StageProcessing, 20.0)
 	jobSize, filenames, ok := r.validateJobMetadata(d, jobID)
 	if !ok {
+		return
+	}
+
+	batchID, ok := d.Headers["batch_id"].(string)
+	if !ok {
+		log.Printf("│ ERROR: batch_id not found in headers")
+		return
+	}
+	filenamesHeader, ok := d.Headers["filenames"].(string)
+	if !ok {
+		log.Printf("│ ERROR: filenames header not found")
 		return
 	}
 
@@ -264,6 +275,11 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 				log.Printf("│ ✗ Error writing binary file %s: %v", filePath, err)
 			} else {
 				log.Printf("│ ✓ Wrote binary file: %s to %s (%d bytes)", file.Name, filePath, len(file.Content))
+
+				if err := r.CreateBatchInfoFilePPXF(appName, batchID, jobID, filenamesHeader); err != nil {
+					log.Printf("│ ⚠ Failed to create/update batch info file: %v", err)
+				}
+
 				successCount++
 
 				// For pPXF, add each .fits file to the process list immediately
@@ -288,6 +304,7 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 				}
 			}
 		}
+
 	}
 
 	if successCount == int(jobSize) {

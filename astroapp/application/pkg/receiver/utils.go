@@ -124,8 +124,7 @@ func (r *Receiver) calculateJobSizeMB(messageBody []byte, filenames []string) fl
 
 	// Convert bytes to MB
 	sizeMB := float64(totalSize) / (1024 * 1024)
-	log.Printf("│ DEBUG: Calculated job size: %.2f MB (%d bytes across %d files)",
-		sizeMB, totalSize, totalfiles)
+	//log.Printf("│ DEBUG: Calculated job size: %.2f MB (%d bytes across %d files)", sizeMB, totalSize, totalfiles)
 
 	return sizeMB
 }

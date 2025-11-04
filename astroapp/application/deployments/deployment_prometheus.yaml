@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prometheus-server
-  namespace: connector-test
+  namespace: uc3-applications
   labels:
     app: prometheus-server
 spec:
@@ -52,7 +52,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prometheus-server
-  namespace: connector-test
+  namespace: uc3-applications
   labels:
     app: prometheus-server
 spec:
@@ -67,7 +67,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
-  namespace: connector-test
+  namespace: uc3-applications
 data:
   prometheus.yml: |
     global:
@@ -87,7 +87,7 @@ data:
           - role: pod
             namespaces:
               names:
-                - connector-test
+                - uc3-applications
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
@@ -122,7 +122,7 @@ data:
           - role: service
             namespaces:
               names:
-                - connector-test
+                - uc3-applications
         relabel_configs:
           - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
             action: keep
