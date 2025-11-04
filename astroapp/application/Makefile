@@ -9,7 +9,7 @@ NAMESPACE = uc3-applications
 HSCALER_IMAGE = quay.io/rcarroll/ac3_uc3/hautoscaler:latest
 HSCALER_MOCKAPI_IMAGE = quay.io/rcarroll/ac3_uc3/hscaler-mockapi:latest
 HSCALER_DEPLOYMENT = predictor-client
-HSCALER_MOCKAPI_DEPLOYMENT = mock-api
+HSCALER_MOCKAPI_DEPLOYMENT = model-api
 
 .PHONY: build push deploy rebuild status clean help hscaler-build hscaler-push hscaler-deploy hscaler-rebuild hscaler-mockapi-build hscaler-mockapi-push hscaler-mockapi-deploy hscaler-mockapi-rebuild
 

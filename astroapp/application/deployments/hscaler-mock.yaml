@@ -6,22 +6,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mock-api
+  name: model-api
   namespace: uc3-applications
   labels:
-    app: mock-api
+    app: model-api
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: mock-api
+      app: model-api
   template:
     metadata:
       labels:
-        app: mock-api
+        app: model-api
     spec:
       containers:
-      - name: mock-api
+      - name: model-api
         image: quay.io/rcarroll/ac3_uc3/predicter_mock_api:latest
         imagePullPolicy: Always
         ports:
@@ -54,10 +54,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: mock-api
+  name: model-api
   namespace: uc3-applications
   labels:
-    app: mock-api
+    app: model-api
 spec:
   type: ClusterIP
   ports:
@@ -66,5 +66,5 @@ spec:
     protocol: TCP
     name: http
   selector:
-    app: mock-api
+    app: model-api
 
