@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transfer
+  namespace: uc3-applications
+  labels:
+    app: transfer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: transfer
+  template:
+    metadata:
+      labels:
+        app: transfer
+    spec:
+      containers:
+      - name: transfer
+        image: quay.io/ryjenkin/trigger-transfer:asset-id-fix
