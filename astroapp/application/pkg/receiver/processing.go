@@ -101,7 +101,7 @@ func (r *Receiver) handleProcessorFile(file api.DataFile, outputPath, appName st
 }
 
 func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, batchID, jobID string) {
-	log.Printf("│ Processing standard text batch for %s", appName)
+	//log.Printf("│ Processing standard text batch for %s", appName)
 	r.updateProgress(appName, jobID, api.StageProcessing, 20.0)
 
 	// Validate batch metadata
@@ -132,7 +132,7 @@ func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, batchI
 	}
 
 	// Process files
-	log.Printf("processFiles")
+	//log.Printf("processFiles")
 	successCount, inFileName, inFileContent, spectrumFiles := r.processFiles(msgBody, side, appName, outputPath)
 
 	// Handle application-specific processing

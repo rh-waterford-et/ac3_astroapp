@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -16,9 +17,12 @@ type PrometheusJobMetrics struct {
 	totalDuration      *prometheus.GaugeVec
 	jobSize            *prometheus.GaugeVec
 	queueAheadLength   *prometheus.GaugeVec
-	completedJobs      *prometheus.CounterVec
-	activeUsers        *prometheus.GaugeVec
+	completedJobs      *prometheus.GaugeVec
+	totalCompletedJobs prometheus.Gauge
+	podCount           *prometheus.GaugeVec
+	runningPodCount    prometheus.Gauge
 	store              *MetricsStore
+	k8sClient          *K8sClient
 }
 
 // NewPrometheusJobMetrics creates and registers Prometheus metrics
@@ -27,8 +31,18 @@ func NewPrometheusJobMetrics(store *MetricsStore, registry *prometheus.Registry)
 		registry = prometheus.NewRegistry()
 	}
 
+	// Initialize Kubernetes client (optional, will log warning if it fails)
+	k8sClient, err := NewK8sClient()
+	if err != nil {
+		log.Printf("Warning: Failed to initialize Kubernetes client for pod metrics: %v", err)
+		log.Printf("Pod count metrics will not be available")
+	} else {
+		log.Printf("Successfully initialized Kubernetes client for pod metrics")
+	}
+
 	pm := &PrometheusJobMetrics{
-		store: store,
+		store:     store,
+		k8sClient: k8sClient,
 		queueDuration: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "astroapp_job_queue_duration_seconds",
@@ -64,12 +78,31 @@ func NewPrometheusJobMetrics(store *MetricsStore, registry *prometheus.Registry)
 			},
 			[]string{"batch_id", "job_id"},
 		),
-		completedJobs: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "astroapp_completed_jobs_total",
-				Help: "Total number of completed jobs",
+		completedJobs: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "astroapp_completed_jobs_per_batch",
+				Help: "Number of completed jobs per batch",
 			},
 			[]string{"batch_id"},
+		),
+		totalCompletedJobs: prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "astroapp_completed_jobs_total",
+				Help: "Total number of completed jobs across all batches",
+			},
+		),
+		podCount: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "astroapp_pod_count",
+				Help: "Number of pods by application label",
+			},
+			[]string{"app"},
+		),
+		runningPodCount: prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "astroapp_running_pods_total",
+				Help: "Total number of running pods in the namespace",
+			},
 		),
 	}
 
@@ -80,49 +113,95 @@ func NewPrometheusJobMetrics(store *MetricsStore, registry *prometheus.Registry)
 	registry.MustRegister(pm.jobSize)
 	registry.MustRegister(pm.queueAheadLength)
 	registry.MustRegister(pm.completedJobs)
+	registry.MustRegister(pm.totalCompletedJobs)
+
+	// Register pod metrics only if k8s client is available
+	if pm.k8sClient != nil {
+		registry.MustRegister(pm.podCount)
+		registry.MustRegister(pm.runningPodCount)
+	}
 
 	return pm
 }
 
 // UpdateMetrics fetches all metrics from the store and updates Prometheus metrics
 func (pm *PrometheusJobMetrics) UpdateMetrics(ctx context.Context) error {
-	// Get all batch IDs
-	batchIDs, err := pm.store.GetAllBatchIDs(ctx)
+	// Update pod counts from Kubernetes (independent of Redis)
+	if pm.k8sClient != nil {
+		if err := pm.updatePodMetrics(ctx); err != nil {
+			log.Printf("Warning: Failed to update pod metrics: %v", err)
+			// Don't return error, continue with other metrics
+		}
+	}
+
+	// Get all completed batch IDs (only from archived/completed metrics table)
+	batchIDs, err := pm.store.GetAllCompletedBatchIDs(ctx)
 	if err != nil {
-		log.Printf("Error getting batch IDs: %v", err)
+		log.Printf("Error getting completed batch IDs: %v", err)
 		return err
 	}
 
-	// For each batch, get all jobs and update metrics
+	log.Printf("DEBUG: Found %d completed batch IDs: %v", len(batchIDs), batchIDs)
+
+	totalCompletedCount := 0
+
+	// For each batch, get completed jobs and update metrics
 	for _, batchID := range batchIDs {
-		jobs, err := pm.store.GetBatchJobes(ctx, batchID)
-		log.Print(jobs)
+		jobs, err := pm.store.GetCompletedBatchJobes(ctx, batchID)
 		if err != nil {
-			log.Printf("Error getting jobs for batch %s: %v", batchID, err)
+			log.Printf("Error getting completed jobs for batch %s: %v", batchID, err)
 			continue
 		}
 
-		for _, job := range jobs {
-			// Update gauge metrics
-			if job.QueueDuration > 0 {
-				pm.queueDuration.WithLabelValues(job.BatchID, job.JobID).Set(job.QueueDuration)
-			}
-			if job.ProcessingDuration > 0 {
-				pm.processingDuration.WithLabelValues(job.BatchID, job.JobID).Set(job.ProcessingDuration)
-			}
-			if job.TotalDuration > 0 {
-				pm.totalDuration.WithLabelValues(job.BatchID, job.JobID).Set(job.TotalDuration)
-			}
-			if job.JobSizeMB > 0 {
-				pm.jobSize.WithLabelValues(job.BatchID, job.JobID).Set(job.JobSizeMB)
-			}
-			if job.JobQueueAheadLength >= 0 {
-				pm.queueAheadLength.WithLabelValues(job.BatchID, job.JobID).Set(float64(job.JobQueueAheadLength))
-			}
+		log.Printf("Updating Prometheus metrics for batch %s: %d completed jobs", batchID, len(jobs))
 
+		// Update all individual job metrics
+		for _, job := range jobs {
+			// Update gauge metrics with actual values from completed jobs
+			pm.queueDuration.WithLabelValues(job.BatchID, job.JobID).Set(job.QueueDuration)
+			pm.processingDuration.WithLabelValues(job.BatchID, job.JobID).Set(job.ProcessingDuration)
+			pm.totalDuration.WithLabelValues(job.BatchID, job.JobID).Set(job.TotalDuration)
+			pm.jobSize.WithLabelValues(job.BatchID, job.JobID).Set(job.JobSizeMB)
+			pm.queueAheadLength.WithLabelValues(job.BatchID, job.JobID).Set(float64(job.JobQueueAheadLength))
 		}
+
+		// Update completed jobs count for this batch
+		// Since we're only reading from completed table, all jobs are complete
+		completedCount := len(jobs)
+		totalCompletedCount += completedCount
+		log.Printf("Setting astroapp_completed_jobs_per_batch{batch_id=\"%s\"} = %d", batchID, completedCount)
+		pm.completedJobs.WithLabelValues(batchID).Set(float64(completedCount))
 	}
 
+	// Update total completed jobs across all batches
+	log.Printf("Setting astroapp_completed_jobs_total = %d", totalCompletedCount)
+	pm.totalCompletedJobs.Set(float64(totalCompletedCount))
+
+	return nil
+}
+
+// updatePodMetrics queries Kubernetes API and updates pod count metrics
+func (pm *PrometheusJobMetrics) updatePodMetrics(ctx context.Context) error {
+	// Get running pod count
+	runningCount, err := pm.k8sClient.GetRunningPodCount(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get running pod count: %w", err)
+	}
+	pm.runningPodCount.Set(float64(runningCount))
+
+	// Get pod counts by app label
+	podCounts, err := pm.k8sClient.GetPodCountsByApp(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get pod counts by app: %w", err)
+	}
+
+	//log.Printf("Pod counts by app:")
+	for app, count := range podCounts {
+		pm.podCount.WithLabelValues(app).Set(float64(count))
+		//log.Printf("  - %s: %d pods", app, count)
+	}
+
+	//log.Printf("Updated pod metrics: %d running pods total, %d apps tracked", runningCount, len(podCounts))
 	return nil
 }
 

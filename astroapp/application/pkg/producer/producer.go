@@ -115,7 +115,7 @@ func (p *Producer) CreateBatch(appName string, side string, q queue.QueueInterfa
 
 	// Wait for sender goroutine to finish processing all batches
 	<-done
-	log.Printf("Completed processing for job: %s", p.BatchID)
+	//log.Printf("Completed processing for job: %s", p.BatchID)
 }
 
 func (p *Producer) AddFile(file api.DataFile, appName string) {

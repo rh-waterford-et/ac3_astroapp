@@ -3,7 +3,7 @@ IMAGE_NAME = quay.io/ryjenkin/uc3-backend:connector-mode
 DOCKERFILE = containerfile
 PRODUCER_DEPLOYMENT = ucm-producer-deployment
 PROCESSOR_DEPLOYMENT = ucm-processor-deployment
-NAMESPACE = connector-test
+NAMESPACE = uc3-applications
 
 .PHONY: build push deploy rebuild status clean help
 

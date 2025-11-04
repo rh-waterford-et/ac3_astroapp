@@ -6,20 +6,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/rh-waterford-et/ac3_astroapp/pkg/common"
 )
 
 // clearProcessList removes all entries from the process list file on startup
 // This only runs once per deployment using a lock file mechanism
-func (r *Receiver) clearProcessList(processListPath string) {
+func (r *Receiver) ClearProcessList(processListPath string) {
 	if processListPath == "" {
 		log.Printf("│ ⚠ PROCESS_LIST environment variable not set, skipping cleanup")
 		return
 	}
 
 	// Use a lock file to ensure cleanup only happens once per deployment
-	lockFilePath := os.Getenv("PROCESS_LIST_STARLIGHT_PATH") + "/.cleanup_done"
+	lockFilePath := processListPath+"_PATH" + "/.cleanup_done"
 
 	// Check if cleanup has already been done
 	if _, err := os.Stat(lockFilePath); err == nil {
@@ -75,9 +73,9 @@ func (r *Receiver) clearProcessList(processListPath string) {
 		log.Printf("│ ✓ Created cleanup lock file: %s", lockFilePath)
 	}
 }
-func (r *Receiver) createBatchInfoFile(appName, batchID, jobID, filenamesHeader string) error {
+func (r *Receiver) CreateBatchInfoFileStarlight(appName, batchID, jobID, filenamesHeader string) error {
 
-	filePath := filepath.Join(common.GetBatchInfoDir(), jobID+".txt")
+	filePath := filepath.Join(os.Getenv("BATCH_INFO_DIR"), jobID+".txt")
 
 	filenames := strings.Split(filenamesHeader, ",")
 	var cleanFilenames []string
@@ -104,8 +102,36 @@ func (r *Receiver) createBatchInfoFile(appName, batchID, jobID, filenamesHeader 
 	log.Printf("│ ✓ Created batch info file: %s", filePath)
 	return nil
 }
+func (r *Receiver) CreateBatchInfoFilePPXF(appName, batchID, jobID, filenamesHeader string) error {
+	filePath := filepath.Join(os.Getenv("BATCH_INFO_DIR"), jobID+".in")
 
-func (r *Receiver) checkProcessLists() (bool, error) {
+	expectedSuffixes := []string{
+		"_kinematics_and_stellar_pops_info.txt",
+		"_pPXF_fitting.pdf",
+		"_residuals.fits",
+		"_bestfit.fits",
+		"_galaxy.fits",
+	}
+
+	pathLine := fmt.Sprintf("%s/output/run_%s", strings.ToLower(appName), batchID)
+	batchLine := batchID
+
+	filenames := make([]string, 0, len(expectedSuffixes))
+	for _, suffix := range expectedSuffixes {
+		filenames = append(filenames, filenamesHeader+suffix)
+	}
+	filesLine := strings.Join(filenames, ",")
+
+	content := strings.Join([]string{pathLine, batchLine, filesLine}, "\n")
+
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write batch info file: %v", err)
+	}
+
+	log.Printf("│ ✓ Created batch info file: %s", filePath)
+	return nil
+}
+func (r *Receiver) CheckProcessLists() (bool, error) {
 
 	processLists := []string{os.Getenv("PROCESS_LIST_STARLIGHT"), os.Getenv("PROCESS_LIST_PPXF")}
 

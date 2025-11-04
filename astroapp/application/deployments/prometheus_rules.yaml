@@ -2,7 +2,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: pod-monitoring-rules
-  namespace: connector-test
+  namespace: uc3-applications
   labels:
     prometheus: user-workload
 spec:
@@ -19,7 +19,7 @@ spec:
         description: "Pod {{ $labels.kubernetes_pod_name }} in namespace {{ $labels.kubernetes_namespace }} has been down for more than 5 minutes."
     
     - alert: HighPodCount
-      expr: kube_pod_info{namespace="connector-test"} > 10
+      expr: kube_pod_info{namespace="uc3-applications"} > 10
       for: 2m
       labels:
         severity: warning
@@ -28,7 +28,7 @@ spec:
         description: "There are {{ $value }} pods running, which is above the threshold of 10."
     
     - alert: LowPodCount
-      expr: count(kube_pod_info{namespace="connector-test"}) < 1
+      expr: count(kube_pod_info{namespace="uc3-applications"}) < 1
       for: 1m
       labels:
         severity: critical
@@ -73,7 +73,7 @@ spec:
         description: "Deployment {{ $labels.deployment }} has {{ $value }} replicas running but {{ $labels.spec_replicas }} expected."
     
     - alert: PodNotReady
-      expr: kube_pod_status_phase{phase!="Running",namespace="connector-test"} == 1
+      expr: kube_pod_status_phase{phase!="Running",namespace="uc3-applications"} == 1
       for: 5m
       labels:
         severity: warning

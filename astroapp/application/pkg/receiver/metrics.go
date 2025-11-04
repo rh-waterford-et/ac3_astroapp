@@ -69,9 +69,9 @@ func (r *Receiver) recordJobEndTime(batchID, jobID string) {
 	err := metricsStore.UpdateMetricField(context.Background(), batchID, "job_end_time", jobID, time.Now())
 	if err != nil {
 		log.Printf("│ ✗ Failed to record batch end time: %v", err)
-	} else {
+	} /* else {
 		log.Printf("│ ✓ Recorded job end time for %s", jobID)
-	}
+	} */
 }
 
 // recordJobSize records the job size in metrics
