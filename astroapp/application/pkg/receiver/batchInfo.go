@@ -103,22 +103,28 @@ func (r *Receiver) CreateBatchInfoFileStarlight(appName, batchID, jobID, filenam
 	return nil
 }
 func (r *Receiver) CreateBatchInfoFilePPXF(appName, batchID, jobID, filenamesHeader string) error {
-	filePath := filepath.Join(os.Getenv("BATCH_INFO_DIR"), jobID+".in")
+	filePath := filepath.Join(os.Getenv("BATCH_INFO_DIR"), jobID+".txt")
 
 	expectedSuffixes := []string{
 		"_kinematics_and_stellar_pops_info.txt",
 		"_pPXF_fitting.pdf",
-		"_residuals.fits",
+		"_residuals.fits", 
 		"_bestfit.fits",
 		"_galaxy.fits",
 	}
 
-	pathLine := fmt.Sprintf("%s/output/run_%s", strings.ToLower(appName), batchID)
+	pathLine := fmt.Sprintf("%s/data/output/", strings.ToLower(appName))
 	batchLine := batchID
 
+	
+	baseName := filepath.Base(filenamesHeader)
+	if dotIndex := strings.Index(baseName, "."); dotIndex != -1 {
+		baseName = baseName[:dotIndex] 
+	}
+	
 	filenames := make([]string, 0, len(expectedSuffixes))
 	for _, suffix := range expectedSuffixes {
-		filenames = append(filenames, filenamesHeader+suffix)
+		filenames = append(filenames, baseName+suffix)
 	}
 	filesLine := strings.Join(filenames, ",")
 
@@ -129,8 +135,11 @@ func (r *Receiver) CreateBatchInfoFilePPXF(appName, batchID, jobID, filenamesHea
 	}
 
 	log.Printf("│ ✓ Created batch info file: %s", filePath)
+	log.Printf("│ DEBUG: Base name: %s", baseName)
+	log.Printf("│ DEBUG: Files line: %s", filesLine)
 	return nil
 }
+
 func (r *Receiver) CheckProcessLists() (bool, error) {
 
 	processLists := []string{os.Getenv("PROCESS_LIST_STARLIGHT"), os.Getenv("PROCESS_LIST_PPXF")}

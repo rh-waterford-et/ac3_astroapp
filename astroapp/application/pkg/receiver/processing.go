@@ -153,6 +153,17 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 		return
 	}
 
+	batchID, ok := d.Headers["batch_id"].(string)
+	if !ok {
+		log.Printf("│ ERROR: batch_id not found in headers")
+		return
+	}
+	filenamesHeader, ok := d.Headers["filenames"].(string)
+	if !ok {
+		log.Printf("│ ERROR: filenames header not found")
+		return
+	}
+
 	jobSizeMB := r.calculateBinaryJobSizeMB(d.Body, filenames)
 	if batchID, ok := d.Headers["batch_id"].(string); ok && jobSizeMB > 0 && r.RedisClient != nil && side == "processor" {
 		r.recordJobSize(batchID, jobID, jobSizeMB)
@@ -264,6 +275,11 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 				log.Printf("│ ✗ Error writing binary file %s: %v", filePath, err)
 			} else {
 				log.Printf("│ ✓ Wrote binary file: %s to %s (%d bytes)", file.Name, filePath, len(file.Content))
+
+				if err := r.CreateBatchInfoFilePPXF(appName, batchID, jobID, filenamesHeader); err != nil {
+					log.Printf("│ ⚠ Failed to create/update batch info file: %v", err)
+				}
+
 				successCount++
 
 				// For pPXF, add each .fits file to the process list immediately
@@ -288,6 +304,7 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 				}
 			}
 		}
+
 	}
 
 	if successCount == int(jobSize) {

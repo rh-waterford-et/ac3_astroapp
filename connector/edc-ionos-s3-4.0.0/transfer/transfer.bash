@@ -9,7 +9,7 @@
 # Multi-cluster 
 # API_KEY="password"
 # PROVIDER_MGMT_URL="https://provider-management-connectors.apps.ac3-cluster-2.rh-horizon.eu/management/v3"
-# CONSUMER_MGMT_URL="https://consumer-management-connector-test.apps.ocp-rh-aio2.waltoninstitute.ie/management/v3"
+# CONSUMER_MGMT_URL="https://consumer-management-uc3-applications.apps.ocp-rh-aio2.waltoninstitute.ie/management/v3"
 # PROVIDER_PROTOCOL="http://provider-protocol-connectors.apps.ac3-cluster-2.rh-horizon.eu/protocol"
 
 # Check if asset name is provided as an argument
@@ -25,10 +25,10 @@ SANITIZED_ASSET_NAME=$(echo "$1" | sed 's/\//-/g')
 POLICY_NAME="$SANITIZED_ASSET_NAME-policy"
 CONTRACT_NAME="$SANITIZED_ASSET_NAME-contract"
 API_KEY="password"
-PROVIDER_MGMT_URL="https://provider-management-connector-test.apps.ocp-rh-aio2.waltoninstitute.ie/management/v3"
-CONSUMER_MGMT_URL="https://consumer-management-connector-test.apps.ocp-rh-aio2.waltoninstitute.ie/management/v3"
-CONSUMER_PROTOCOL="http://consumer-protocol-connector-test.apps.ocp-rh-aio2.waltoninstitute.ie/protocol"
-PROVIDER_PROTOCOL="http://provider-protocol-connector-test.apps.ocp-rh-aio2.waltoninstitute.ie/protocol"
+PROVIDER_MGMT_URL="https://provider-management-uc3-applications.apps.ocp-rh-aio2.waltoninstitute.ie/management/v3"
+CONSUMER_MGMT_URL="https://consumer-management-uc3-applications.apps.ocp-rh-aio2.waltoninstitute.ie/management/v3"
+CONSUMER_PROTOCOL="http://consumer-protocol-uc3-applications.apps.ocp-rh-aio2.waltoninstitute.ie/protocol"
+PROVIDER_PROTOCOL="http://provider-protocol-uc3-applications.apps.ocp-rh-aio2.waltoninstitute.ie/protocol"
 BEARER_TOKEN="eyJ0eXAiOiJKV1QiLCJraWQiOiJiNzlkODE3OS02MmFhLTRkMGYtODU0Zi1lMzQyMmNmYzE1MTciLCJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJpb25vc2Nsb3VkIiwiaWF0IjoxNzQ0ODE0NzE0LCJjbGllbnQiOiJVU0VSIiwiaWRlbnRpdHkiOnsicm9sZSI6ImFkbWluIiwiY29udHJhY3ROdW1iZXIiOjMyNDM5MjQ1LCJpc1BhcmVudCI6ZmFsc2UsInByaXZpbGVnZXMiOlsiREFUQV9DRU5URVJfQ1JFQVRFIiwiU05BUFNIT1RfQ1JFQVRFIiwiSVBfQkxPQ0tfUkVTRVJWRSIsIk1BTkFHRV9EQVRBUExBVEZPUk0iLCJBQ0NFU1NfQUNUSVZJVFlfTE9HIiwiUENDX0NSRUFURSIsIkFDQ0VTU19TM19PQkpFQ1RfU1RPUkFHRSIsIkJBQ0tVUF9VTklUX0NSRUFURSIsIkNSRUFURV9JTlRFUk5FVF9BQ0NFU1MiLCJLOFNfQ0xVU1RFUl9DUkVBVEUiLCJGTE9XX0xPR19DUkVBVEUiLCJBQ0NFU1NfQU5EX01BTkFHRV9NT05JVE9SSU5HIiwiQUNDRVNTX0FORF9NQU5BR0VfQ0VSVElGSUNBVEVTIiwiQUNDRVNTX0FORF9NQU5BR0VfTE9HR0lORyIsIk1BTkFHRV9EQkFBUyIsIkFDQ0VTU19BTkRfTUFOQUdFX0ROUyIsIk1BTkFHRV9SRUdJU1RSWSIsIkFDQ0VTU19BTkRfTUFOQUdFX0NETiIsIkFDQ0VTU19BTkRfTUFOQUdFX1ZQTiIsIkFDQ0VTU19BTkRfTUFOQUdFX0FQSV9HQVRFV0FZIiwiQUNDRVNTX0FORF9NQU5BR0VfTkdTIiwiQUNDRVNTX0FORF9NQU5BR0VfS0FBUyIsIkFDQ0VTU19BTkRfTUFOQUdFX05FVFdPUktfRklMRV9TVE9SQUdFIiwiQUNDRVNTX0FORF9NQU5BR0VfQUlfTU9ERUxfSFVCIiwiQ1JFQVRFX05FVFdPUktfU0VDVVJJVFlfR1JPVVBTIiwiQUNDRVNTX0FORF9NQU5BR0VfSUFNX1JFU09VUkNFUyJdLCJ1dWlkIjoiZWUxMjdlOGItOTMwNi00OTFhLTk1MDAtOGE0MWE4MjQ3YzhlIiwicmVzZWxsZXJJZCI6MSwicmVnRG9tYWluIjoiaW9ub3MuZGUifSwiZXhwIjoxNzc2MzUwNzE0fQ.K8axaTD53Mr1ymn5X9dJhI8DlAu2cO_IgknpBtFjs9tOPkSGPwKc8ImTfyiJbiA3UemXAoLQ4W67KUf7SR7E8dOJWRbnCdv4OAMk1MGDcQ58gRPlwQ-ztS6sHN0PWQsB7Os4IILkgDsUKMvDNj_FWWBFy3910ztnkqvrgmexQJcgOsm0VumxmBWntRnNPpaudl8GK2wJip-fn8iNOwss9qz_IqlN7PilmdYLzVMIk9KNIRUWnjLj2wdbYmJaS4tDkUFcm5y17pICx4hyaBNo19pN2B7FWEvDsWGK_avCsxkUiI5mpiYnEW5dIwPRMr_LsiQleFxUZnY46xa5ekttbA"
 KEEP_ID="f72ce80a-f4f8-43e2-b4e1-224258895a09"
 ACCESS_KEYS_URL="https://s3.ionos.com/accesskeys"

@@ -89,7 +89,7 @@ spec:
             name: uc3-shared-config
         - secretRef:
             name: uc3-shared-secrets
-         env:
+        env:
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:

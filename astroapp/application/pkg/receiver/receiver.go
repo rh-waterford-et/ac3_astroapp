@@ -41,7 +41,6 @@ func NewReceiver(queue queue.QueueInterface, utils common.UtilsInterface, bucket
 func (r *Receiver) Start(side string) {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-
 	var queueName string
 	if side == "producer" {
 		queueName = "processor_to_producer_queue"
@@ -76,7 +75,7 @@ func (r *Receiver) ProcessMessages(queueName string, side string) {
 				log.Printf("│ ✓ All processlists empty - resetting ProcessingMessage flag")
 				r.ProcessingMessage = false
 			} else {
-				log.Printf("Error checking process lists: %v", err)
+				//log.Printf("Error checking process lists: %v", err)
 				return
 			}
 		}
@@ -154,6 +153,7 @@ func (r *Receiver) finalizeJobProcessing(d amqp.Delivery, side, appName, batchID
 					log.Printf("│ ⚠ Failed to create batch info file: %v", err)
 				}
 			}
+			
 		}
 		r.updateProgress(appName, jobID, api.StageComplete, 100.0)
 	} else {
