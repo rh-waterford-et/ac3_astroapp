@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: mock-api
+  name: model-api
   namespace: uc3-applications
   labels:
-    app: mock-api
+    app: model-api
 spec:
   type: ClusterIP
   ports:
@@ -13,4 +13,4 @@ spec:
     protocol: TCP
     name: http
   selector:
-    app: mock-api
+    app: model-api
