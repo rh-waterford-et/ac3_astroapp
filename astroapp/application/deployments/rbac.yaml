@@ -1,17 +1,17 @@
-# ==========================
-# RBAC Resources for UC3 Application
-# ==========================
-# Service Account for Privileged Workloads
-# ==========================
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: starlight-sa
   namespace: uc3-applications
+
 ---
-# ==========================
-# RoleBinding for Privileged SCC
-# ==========================
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: uc3-monitoring
+  namespace: uc3-applications
+
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -25,21 +25,10 @@ subjects:
 - kind: ServiceAccount
   name: starlight-sa
   namespace: uc3-applications
+
 ---
-# ==========================
-# Service Account for Monitoring
-# ==========================
-kind: ServiceAccount
-apiVersion: v1
-metadata:
-  name: uc3-monitoring
-  namespace: uc3-applications
----
-# ==========================
-# ClusterRoleBinding for Monitoring
-# ==========================
-kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
 metadata:
   name: uc3-monitoring-cluster-monitoring-view
 subjects:
@@ -50,4 +39,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-monitoring-view
+
+
 

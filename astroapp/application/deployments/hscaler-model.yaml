@@ -1,8 +1,3 @@
-# ==========================
-# HScaler Mock API
-# ==========================
-# Deployment
-# ==========================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -47,10 +42,8 @@ spec:
             port: http
           initialDelaySeconds: 5
           periodSeconds: 5
+
 ---
-# ==========================
-# Service
-# ==========================
 apiVersion: v1
 kind: Service
 metadata:
