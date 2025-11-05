@@ -1,5 +1,5 @@
 # UC3 Backend Build and Deploy Makefile
-IMAGE_NAME = quay.io/ryjenkin/uc3-backend:connector-mode
+IMAGE_NAME = quay.io/rh-ee-kromashk/uc3-backend:latest
 DOCKERFILE = containerfile
 PRODUCER_DEPLOYMENT = ucm-producer-deployment
 PROCESSOR_DEPLOYMENT = ucm-processor-deployment

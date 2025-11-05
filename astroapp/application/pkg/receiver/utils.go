@@ -57,7 +57,7 @@ func (r *Receiver) extractBatchNameFromFilename(filename string) string {
 		parts := strings.Split(name, "_LR-V")
 		if len(parts) > 0 && parts[0] != "" {
 			batchName := parts[0]
-			log.Printf("│ DEBUG: pPXF batch name extracted: %s", batchName)
+			//log.Printf("│ DEBUG: pPXF batch name extracted: %s", batchName)
 			return batchName
 		}
 	}
@@ -96,7 +96,7 @@ func (r *Receiver) extractCellNumberFromFilename(filename string) string {
 
 	if len(matches) >= 2 {
 		cellNumber := matches[1]
-		log.Printf("│ DEBUG: Extracted cell number '%s' from filename: %s", cellNumber, filename)
+		//log.Printf("│ DEBUG: Extracted cell number '%s' from filename: %s", cellNumber, filename)
 		return cellNumber
 	}
 
