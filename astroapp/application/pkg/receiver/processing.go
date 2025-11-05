@@ -42,7 +42,7 @@ func (r *Receiver) processFiles(msgBody api.MessageBody, side, appName, outputPa
 		}
 
 		if side == "producer" {
-			successCount += r.handleProducerFile(file, outputPath)
+			successCount += r.handleProducerFile(file, outputPath, appName)
 		} else {
 			successCount += r.handleProcessorFile(file, outputPath, appName, ppxf)
 		}
@@ -51,14 +51,35 @@ func (r *Receiver) processFiles(msgBody api.MessageBody, side, appName, outputPa
 	return successCount, inFileName, inFileContent, spectrumFiles
 }
 
-func (r *Receiver) handleProducerFile(file api.DataFile, outputPath string) int {
+func (r *Receiver) handleProducerFile(file api.DataFile, outputPath string, appName string) int {
 	batchName := r.extractBatchNameFromFilename(file.Name)
 	var uploadPath string
 
-	if batchName != "" {
-		uploadPath = filepath.Join(outputPath, batchName, file.Name)
+	// Special handling for PPXF: organize by cell number
+	if appName == "PPXF" {
+		//log.Printf("│ DEBUG: Processing PPXF file for cell organization: %s", file.Name)
+		cellNumber := r.extractCellNumberFromFilename(file.Name)
+		//log.Printf("│ DEBUG: Cell number extracted: '%s' (batchName: '%s')", cellNumber, batchName)
+		if batchName != "" && cellNumber != "" {
+			// Path: /ppxf/output/<batch_name>/<cell_number>/filename
+			uploadPath = filepath.Join(outputPath, batchName, cellNumber, file.Name)
+			//log.Printf("│ DEBUG: Using cell-organized path: %s", uploadPath)
+		} else if batchName != "" {
+			// Fallback: /ppxf/output/<batch_name>/filename
+			uploadPath = filepath.Join(outputPath, batchName, file.Name)
+			//log.Printf("│ DEBUG: Using batch fallback path (missing cell): %s", uploadPath)
+		} else {
+			// Last resort: flat structure
+			uploadPath = filepath.Join(outputPath, file.Name)
+			//log.Printf("│ DEBUG: Using flat fallback path: %s", uploadPath)
+		}
 	} else {
-		uploadPath = filepath.Join(outputPath, file.Name)
+		// Standard logic for other apps (Starlight, etc.)
+		if batchName != "" {
+			uploadPath = filepath.Join(outputPath, batchName, file.Name)
+		} else {
+			uploadPath = filepath.Join(outputPath, file.Name)
+		}
 	}
 
 	folderPath := filepath.Dir(uploadPath)
@@ -69,6 +90,15 @@ func (r *Receiver) handleProducerFile(file api.DataFile, outputPath string) int 
 	}
 
 	//log.Printf("│ DEBUG: S3 upload - folderPath: '%s', fileName: '%s'", folderPath, fileName)
+
+	// Create directory structure if folderPath exists
+	if folderPath != "" {
+		err := r.Bucket.CreateDirectory(folderPath)
+		if err != nil {
+			log.Printf("│ ⚠ Error creating directory %s: %v", folderPath, err)
+			// Continue with upload even if directory creation fails
+		}
+	}
 
 	err := r.Bucket.UploadFileToBucket(folderPath, fileName, []byte(file.Content))
 	if err != nil {
@@ -205,8 +235,7 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 			successCount++
 			continue
 		}
-
-		if side == "producer" {
+		/* if side == "producer" {
 			// Handle S3 upload for binary files
 			batchName := r.extractBatchNameFromFilename(file.Name)
 			var uploadPath string
@@ -264,44 +293,44 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 				log.Printf("│ ✓ Uploaded binary file to bucket: %s (%d bytes)", uploadPath, len(file.Content))
 				successCount++
 			}
+		} */
+		// Handle local file write for binary files - NO STRING CONVERSION
+
+		filename := filepath.Base(file.Name)
+		filePath := filepath.Join(outputPath, filename)
+
+		// Write binary content directly (preserves .fits integrity)
+		err := os.WriteFile(filePath, file.Content, 0644)
+		if err != nil {
+			log.Printf("│ ✗ Error writing binary file %s: %v", filePath, err)
 		} else {
-			// Handle local file write for binary files - NO STRING CONVERSION
-			filename := filepath.Base(file.Name)
-			filePath := filepath.Join(outputPath, filename)
+			log.Printf("│ ✓ Wrote binary file: %s to %s (%d bytes)", file.Name, filePath, len(file.Content))
 
-			// Write binary content directly (preserves .fits integrity)
-			err := os.WriteFile(filePath, file.Content, 0644)
-			if err != nil {
-				log.Printf("│ ✗ Error writing binary file %s: %v", filePath, err)
-			} else {
-				log.Printf("│ ✓ Wrote binary file: %s to %s (%d bytes)", file.Name, filePath, len(file.Content))
+			if err := r.CreateBatchInfoFilePPXF(appName, batchID, jobID, filenamesHeader); err != nil {
+				log.Printf("│ ⚠ Failed to create/update batch info file: %v", err)
+			}
 
-				if err := r.CreateBatchInfoFilePPXF(appName, batchID, jobID, filenamesHeader); err != nil {
-					log.Printf("│ ⚠ Failed to create/update batch info file: %v", err)
+			successCount++
+
+			// For pPXF, add each .fits file to the process list immediately
+			if appName == "PPXF" && strings.HasSuffix(file.Name, ".fits") {
+				ppxf := app.NewPPXF(r.Utils)
+				err := ppxf.AddToProcessList(filename)
+				if err != nil {
+					// Processlist not empty - requeue message for later
+					log.Printf("│ ⚠ Cannot add to processlist (list not empty): %s", filename)
+					log.Printf("│ ⚠ Message will be requeued for later processing")
+					processDuration := time.Since(processStart)
+					log.Printf("\n■■■ BINARY BATCH REQUEUED [%s] ■■■ Duration: %v\n", jobID, processDuration)
+					// NACK with requeue - message goes back to queue
+					d.Nack(false, true) // requeue=true
+					// Keep flag TRUE - prevents immediate re-pull of same message
+					// Flag will be reset when processlist becomes empty
+					return
 				}
-
-				successCount++
-
-				// For pPXF, add each .fits file to the process list immediately
-				if appName == "PPXF" && strings.HasSuffix(file.Name, ".fits") {
-					ppxf := app.NewPPXF(r.Utils)
-					err := ppxf.AddToProcessList(filename)
-					if err != nil {
-						// Processlist not empty - requeue message for later
-						log.Printf("│ ⚠ Cannot add to processlist (list not empty): %s", filename)
-						log.Printf("│ ⚠ Message will be requeued for later processing")
-						processDuration := time.Since(processStart)
-						log.Printf("\n■■■ BINARY BATCH REQUEUED [%s] ■■■ Duration: %v\n", jobID, processDuration)
-						// NACK with requeue - message goes back to queue
-						d.Nack(false, true) // requeue=true
-						// Keep flag TRUE - prevents immediate re-pull of same message
-						// Flag will be reset when processlist becomes empty
-						return
-					}
-					log.Printf("│ ✓ Added pPXF binary file to process list: %s", filename)
-					// Keep ProcessingMessage = true
-					// Will be reset by receiver when processlist becomes empty
-				}
+				log.Printf("│ ✓ Added pPXF binary file to process list: %s", filename)
+				// Keep ProcessingMessage = true
+				// Will be reset by receiver when processlist becomes empty
 			}
 		}
 

@@ -16,8 +16,6 @@ import (
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/sender"
 )
 
-
-
 func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
 	// Add panic recovery to prevent pod crashes
 	defer func() {
