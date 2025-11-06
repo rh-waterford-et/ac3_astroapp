@@ -16,30 +16,40 @@ oc apply -f volumeclaim-producer.yaml
 
 # Deploy service account and RBAC
 echo "🔐 Deploying security..."
-oc apply -f starlight-sa.yaml
-oc apply -f rolebinding.yaml
+oc apply -f rbac.yaml
 
 # Deploy RabbitMQ
 echo "🐰 Deploying RabbitMQ..."
-oc apply -f deployment_rabbitmq.yaml
+oc apply -f rabbitmq.yaml
 
 # Deploy Redis
 echo "🔴 Deploying Redis..."
-oc apply -f deployment_redis.yaml
+oc apply -f redis.yaml
 
 # Deploy backend services
 echo "⚙️ Deploying backend..."
-oc apply -f deployment_producer.yaml
-oc apply -f deployment_processor.yaml
-oc apply -f service_backend.yaml
+oc apply -f producer.yaml
+oc apply -f processor.yaml
 oc apply -f service_monitor_metrics.yaml
+
+#Deploy Connector
+echo "🔧 Deploying connector..."
+oc apply -f consumer.yaml
+oc apply -f transfer.yaml
+oc apply -f vault.yaml
 
 # Deploy frontend
 echo "🌐 Deploying frontend..."
-oc apply -f deployment_frontend.yaml
+oc apply -f frontend.yaml
+
+# Deploy Scaling
+echo "🔄 Deploying scaling..."
+oc apply -f hscaler.yaml
+oc apply -f hscaler-model.yaml
+
 
 echo "✅ Deployment complete!"
 echo ""
 echo "📊 Check status:"
-echo "oc get pods -n connector-test"
-echo "oc get routes -n connector-test" 
+echo "oc get pods -n uc3-applocations"
+echo "oc get routes -n uc3-applocations" 

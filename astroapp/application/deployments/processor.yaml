@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ucm-processor-deployment
-  namespace: connector-test
+  namespace: uc3-applications
   labels:
     app: ucm-processor
 spec:
@@ -43,7 +43,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/ryjenkin/uc3-backend:connector-mode
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: receiver-processor
         workingDir: /processing_data/
         volumeMounts:
@@ -106,14 +106,12 @@ spec:
           value: "/processing_data/steckmap/data/processed"
         - name: TEMPLATE_IN_FILE_PATH
           value: "/docker/starlight/config_files_starlight/grid_example.in"
-        # Watcher environment variables (without _DIR_ in the name)
         - name: EXPLORED_STARLIGHT
           value: "/processing_data/starlight/data/output"
         - name: OUTPUT_STARLIGHT
           value: "/processing_data/starlight/data/output"
         - name : BATCH_INFO_DIR
           value: "/processing_data/batch_info"
-        # Redis configuration for metrics tracking
         - name: REDIS_HOST
           value: "redis"
         - name: REDIS_PORT
@@ -122,7 +120,7 @@ spec:
           value: ""
         ports:
         - containerPort: 5672  
-      - image: quay.io/ryjenkin/uc3-backend:connector-mode
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: watcher-processor
         workingDir: /processing_data/
         command: ["/usr/bin/ucm"]

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: uc3-frontend
-  namespace: connector-test
+  namespace: uc3-applications
   labels:
     app: uc3-frontend
 spec:
@@ -16,18 +16,17 @@ spec:
         app: uc3-frontend
     spec:
       containers:
-      - image: quay.io/ryjenkin/uc3-gui:complete
+      - image: quay.io/bcapper30/uc3-apps:latest
         name: frontend
         ports:
         - containerPort: 8080
-        # Using relative URLs for API calls - nginx handles the proxying
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: uc3-frontend-service
-  namespace: connector-test
+  namespace: uc3-applications
   labels:
     app: uc3-frontend
 spec:
@@ -43,7 +42,7 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: uc3-frontend-route
-  namespace: connector-test
+  namespace: uc3-applications
   labels:
     app: uc3-frontend
 spec:

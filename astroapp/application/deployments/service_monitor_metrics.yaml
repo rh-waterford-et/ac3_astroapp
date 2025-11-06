@@ -4,7 +4,7 @@ metadata:
   labels:
     openshift.io/user-monitoring: 'true'
   name: ucm-producer-metrics
-  namespace: connector-test
+  namespace: uc3-applications
 spec:
   endpoints:
     - interval: 30s
@@ -12,7 +12,7 @@ spec:
       scheme: http
   namespaceSelector:
     matchNames:
-      - connector-test
+      - uc3-applications
   selector:
     matchLabels:
       svc: ucm

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: ucm-pv-claim-producer
-  namespace: connector-test
+  namespace: uc3-applications
 spec:
   storageClassName: standard
   accessModes:

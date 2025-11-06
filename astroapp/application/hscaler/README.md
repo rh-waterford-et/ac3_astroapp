@@ -27,7 +27,7 @@ python predictor_client.py
 
 ### Mock API
 ```bash
-pip install -r requirements-mock-api.txt
+pip install -r requirements-model-api.txt
 python mock_api.py
 ```
 
@@ -35,7 +35,7 @@ python mock_api.py
 
 Edit `config.yaml` (local) or `k8s/configmap.yaml` (Kubernetes) to configure:
 
-- **predictor_api.url**: Your prediction API endpoint (default: `http://mock-api:5000/predict` in k8s)
+- **predictor_api.url**: Your prediction API endpoint (default: `http://model-api:5000/predict` in k8s)
 - **prometheus.url**: Your Prometheus server URL
 - **prometheus_queries**: PromQL queries for each metric
 - **query_interval_seconds**: How often to query the API
@@ -58,22 +58,22 @@ Edit `config.yaml` (local) or `k8s/configmap.yaml` (Kubernetes) to configure:
 # Build predictor-client image
 docker build -t predictor-client:latest .
 
-# Build mock-api image
-docker build -f Dockerfile.mock_api -t mock-api:latest .
+# Build model-api image
+docker build -f Dockerfile.mock_api -t model-api:latest .
 
 # Tag for your registry (optional)
 docker tag predictor-client:latest your-registry.com/predictor-client:latest
-docker tag mock-api:latest your-registry.com/mock-api:latest
+docker tag model-api:latest your-registry.com/model-api:latest
 
 # Push to registry (optional)
 docker push your-registry.com/predictor-client:latest
-docker push your-registry.com/mock-api:latest
+docker push your-registry.com/model-api:latest
 ```
 
 ### Update ConfigMap
 
 Edit `k8s/configmap.yaml` to set:
-- Prediction API endpoint (default: `http://mock-api:5000/predict` for testing)
+- Prediction API endpoint (default: `http://model-api:5000/predict` for testing)
 - Prometheus server URL (e.g., `http://prometheus-server:9090`)
 - Actual PromQL queries for your metrics
 
@@ -87,8 +87,8 @@ kubectl apply -k k8s/
 kubectl apply -f k8s/configmap.yaml
 kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
-kubectl apply -f k8s/mock-api-deployment.yaml
-kubectl apply -f k8s/mock-api-service.yaml
+kubectl apply -f k8s/model-api-deployment.yaml
+kubectl apply -f k8s/model-api-service.yaml
 ```
 
 ### Verify Deployment
@@ -100,24 +100,24 @@ kubectl get pods -l app.kubernetes.io/part-of=hscaler-orchestrator
 # Check predictor-client pod
 kubectl get pods -l app=predictor-client
 
-# Check mock-api pod
-kubectl get pods -l app=mock-api
+# Check model-api pod
+kubectl get pods -l app=model-api
 
 # View predictor-client logs
 kubectl logs -l app=predictor-client -f
 
-# View mock-api logs
-kubectl logs -l app=mock-api -f
+# View model-api logs
+kubectl logs -l app=model-api -f
 
 # Check services
-kubectl get svc predictor-client mock-api
+kubectl get svc predictor-client model-api
 ```
 
 ### Test the Mock API
 
 ```bash
 # Port-forward to test the mock API
-kubectl port-forward svc/mock-api 5000:5000
+kubectl port-forward svc/model-api 5000:5000
 
 # In another terminal, test the endpoint
 curl -X POST http://localhost:5000/predict \

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ucm-producer-deployment
-  namespace: connector-test
+  namespace: uc3-applications
   labels:
     app: ucm-producer
 spec:
@@ -21,7 +21,7 @@ spec:
         persistentVolumeClaim:
           claimName: ucm-pv-claim-producer
       containers:
-      - image: quay.io/ryjenkin/uc3-backend:connector-mode
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: watcher-producer
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
@@ -84,7 +84,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/ryjenkin/uc3-backend:connector-mode
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: http-server
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
@@ -129,25 +129,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/rh-ee-kromashk/ac3-connector-http-http-consumer:latest
-        name: consumer
-        env:
-        - name: WEB_BASE_URL
-          value: "http://192.168.1.10"
-        - name: WEB_HTTP_PORT
-          value: "28180"
-        - name: WEB_HTTP_MANAGEMENT_PORT
-          value: "28181"
-        - name: WEB_HTTP_PROTOCOL_PORT
-          value: "28182"
-        - name: WEB_HTTP_CONTROL_PORT
-          value: "28183"
-        ports:
-        - containerPort: 28180
-        - containerPort: 28181
-        - containerPort: 28182
-        - containerPort: 28183
-      - image: quay.io/ryjenkin/uc3-backend:connector-mode
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: receiver-producer
         workingDir: /processing_data/
         volumeMounts:
@@ -196,7 +178,7 @@ spec:
           value: ""
         - name: METRICS
           value: "metrics"
-      - image: quay.io/ryjenkin/uc3-backend:connector-mode
+      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
         name: aggregator
         workingDir: /processing_data/
         ports:
@@ -229,4 +211,42 @@ spec:
           value: "test-consumer"
         - name: S3_REGION
           value: "de"
-          
+
+---
+  
+apiVersion: v1
+kind: Service
+metadata:
+  name: uc3-backend-service
+  namespace: uc3-applications
+  labels:
+    app: ucm-producer
+    svc: ucm
+spec:
+  selector:
+    app: ucm-producer
+  ports:
+  - name: api
+    port: 8080
+    targetPort: 8080
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+  type: ClusterIP
+
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: uc3-backend-api
+  namespace: uc3-applications
+  labels:
+    app: ucm-producer
+spec:
+  to:
+    kind: Service
+    name: uc3-backend-service
+  port:
+    targetPort: api
+  tls:
+    termination: edge 

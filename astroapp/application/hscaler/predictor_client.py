@@ -13,7 +13,6 @@ from collections import deque
 from typing import Optional
 from prometheus_client import start_http_server, Gauge
 from prometheus_client.parser import text_string_to_metric_families
-import yaml
 import os
 import traceback
 
@@ -26,23 +25,21 @@ logger.level
 
 
 class PredictorClient:
-    def __init__(self, config_path: str = 'config.yaml'):
-        """Initialize the predictor client with configuration."""
-        logger.info("Hellowwwwasdasdasdw!")
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
+    def __init__(self):
+        """Initialize the predictor client with configuration from environment variables."""
+        logger.info("Initializing PredictorClient from environment variables")
 
-        # Configuration
-        self.predictor_api_url = self.config['predictor_api']['url']
-        self.prometheus_url = self.config['prometheus']['url']
-        self.query_interval = self.config['query_interval_seconds']
-        self.averaging_window = self.config['averaging_window_size']
-        self.exporter_port = self.config['exporter']['port']
+        # Configuration from environment variables
+        self.predictor_api_url = os.getenv('PREDICTOR_API_URL', 'http://model-api:5000/predict')
+        self.prometheus_url = os.getenv('PROMETHEUS_URL', 'https://thanos-querier.openshift-monitoring.svc.cluster.local:9091')
+        self.query_interval = int(os.getenv('QUERY_INTERVAL_SECONDS', '10'))
+        self.averaging_window = int(os.getenv('AVERAGING_WINDOW_SIZE', '5'))
+        self.exporter_port = int(os.getenv('EXPORTER_PORT', '9090'))
 
-        # Prometheus metric queries
-        self.num_processors_query = self.config['prometheus_queries']['numprocessors']
-        self.job_size_query = self.config['prometheus_queries']['jobsize']
-        self.queue_len_query = self.config['prometheus_queries']['queuelen']
+        # Prometheus metric queries from environment variables
+        self.num_processors_query = os.getenv('NUMPROCESSORS_QUERY', 'num_processors')
+        self.job_size_query = os.getenv('JOBSIZE_QUERY', 'astroapp_job_size_mb')
+        self.queue_len_query = os.getenv('QUEUELEN_QUERY', 'astroapp_job_queue_ahead_length')
 
         # Sliding window for averaging
         self.predictions_window = deque(maxlen=self.averaging_window)
@@ -54,6 +51,10 @@ class PredictorClient:
         )
 
         logger.info(f"Initialized PredictorClient with window size: {self.averaging_window}")
+        logger.info(f"Predictor API URL: {self.predictor_api_url}")
+        logger.info(f"Prometheus URL: {self.prometheus_url}")
+        logger.info(f"Query interval: {self.query_interval}s")
+        logger.info(f"Exporter port: {self.exporter_port}")
 
     def query_prometheus(self, query: str) -> Optional[float]:
         """Query Prometheus and return the metric value."""
@@ -198,5 +199,5 @@ class PredictorClient:
 
 
 if __name__ == '__main__':
-    client = PredictorClient('config.yaml')
+    client = PredictorClient()
     client.run()
