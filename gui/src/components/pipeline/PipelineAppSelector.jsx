@@ -16,12 +16,19 @@ export default function PipelineAppSelector({ selectedApp, onSelect }) {
         PPXF
       </button>
       <button 
+        className={`app-btn ${selectedApp === 'voronoi' ? 'active' : ''}`}
+        onClick={() => onSelect('voronoi')}
+      >
+        Voronoi Binning
+      </button>
+      <button 
         className={`app-btn ${selectedApp === 'steckmap' ? 'active' : ''} disabled`}
         onClick={() => onSelect('steckmap')}
         disabled
       >
         SteckMap
       </button>
+      <div className="app-selection-divider"></div>
     </div>
   );
 } 

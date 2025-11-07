@@ -346,6 +346,12 @@
   border-left: 1px solid rgba(79, 209, 197, 0.2);
 }
 
+.app-selection-divider {
+  width: 1px;
+  background-color: rgba(79, 209, 197, 0.2);
+  margin-left: 0.375rem;
+}
+
 .app-btn {
   padding: 0.375rem 0.75rem;
   background: linear-gradient(135deg, rgba(45, 55, 72, 0.3) 0%, rgba(74, 85, 104, 0.15) 100%);

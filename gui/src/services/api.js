@@ -225,20 +225,24 @@ export const getDatasets = async (processorType, signal = null) => {
 /**
  * Create a new dataset in S3
  * @param {string} datasetName - The name of the dataset to create
- * @param {string} processorType - The processor type (starlight, ppxf, steckmap)
- * @param {Object} ppxfConfig - Optional pPXF configuration (only for ppxf datasets)
+ * @param {string} processorType - The processor type (starlight, ppxf, voronoi, steckmap)
+ * @param {Object} config - Optional configuration (ppxfConfig for ppxf, voronoiConfig for voronoi)
  * @returns {Promise<Object>} - Creation response
  */
-export const createDataset = async (datasetName, processorType, ppxfConfig = null, isConnectorMode = false) => {
+export const createDataset = async (datasetName, processorType, config = null, isConnectorMode = false) => {
   const requestBody = {
     datasetName: datasetName,
     appType: processorType,
     connectorMode: isConnectorMode
   };
   
-  // Add pPXF config if provided and processor is pPXF
-  if (processorType.toLowerCase() === 'ppxf' && ppxfConfig) {
-    requestBody.ppxfConfig = ppxfConfig;
+  // Add processor-specific config if provided
+  if (config) {
+    if (processorType.toLowerCase() === 'ppxf') {
+      requestBody.ppxfConfig = config;
+    } else if (processorType.toLowerCase() === 'voronoi') {
+      requestBody.voronoiConfig = config;
+    }
   }
   
   return apiRequestSafe('datasets/create', {
