@@ -292,3 +292,23 @@ func (s *S3FileSource) GetJobesWithFiles() (map[string]int, error) {
 
 	return jobCounts, nil
 }
+
+// GetInputDir returns the S3 input directory prefix
+func (s *S3FileSource) GetInputDir() string {
+	return s.InputDir
+}
+
+// GetBucketName returns the S3 bucket name
+func (s *S3FileSource) GetBucketName() string {
+	return s.Bucket.GetBucketName()
+}
+
+// GetInputDir returns the S3 input directory prefix
+func (s *SingleFileSource) GetInputDir() string {
+	return s.InputDir
+}
+
+// GetBucketName returns the S3 bucket name
+func (s *SingleFileSource) GetBucketName() string {
+	return s.Bucket.GetBucketName()
+}

@@ -107,7 +107,7 @@ func (r *Receiver) createBatchInfoFile(appName, batchID, jobID, filenamesHeader 
 
 func (r *Receiver) checkProcessLists() (bool, error) {
 
-	processLists := []string{os.Getenv("PROCESS_LIST_STARLIGHT"), os.Getenv("PROCESS_LIST_PPXF")}
+	processLists := []string{os.Getenv("PROCESS_LIST_STARLIGHT"), os.Getenv("PROCESS_LIST_PPXF"), os.Getenv("PROCESS_LIST_VORONOI")}
 
 	allEmpty := true
 	for _, processList := range processLists {

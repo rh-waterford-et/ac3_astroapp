@@ -1,7 +1,7 @@
 # UC3 GUI Build and Deploy Makefile
-IMAGE_NAME = quay.io/rh_et_wd/ac3/astroapp-gui:voronoi
+IMAGE_NAME = quay.io/rh_et_wd/ac3/astroapp-voronoi
 DOCKERFILE = Dockerfile
-DEPLOYMENT_NAME = uc3-frontend
+DEPLOYMENT_NAME = ucm-processor-deployment
 NAMESPACE = astroapp
 
 .PHONY: build push deploy rebuild status clean help
@@ -31,12 +31,6 @@ deploy:
 rebuild: build push deploy
 	@echo "🎉 Full rebuild process completed!"
 
-
-# Check deployment status
-status:
-	@echo "📊 Checking deployment status..."
-	oc get pods -n $(NAMESPACE) | grep $(DEPLOYMENT_NAME)
-	@echo "🌐 Access URL: https://uc3-frontend-route-uc3-applications.apps.ac3.rh-horizon.eu"
 
 # Clean local images
 clean:

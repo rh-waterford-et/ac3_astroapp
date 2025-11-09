@@ -180,6 +180,105 @@ func (w *Watcher) handleCompletedPPXFFile(inputFilename, side string, utils comm
 	return nil
 }
 
+// handleCompletedVoronoiFile collects and uploads output files for a completed VORONOI input
+// Uploads directly to S3 (no RabbitMQ message) to avoid size limits
+func (w *Watcher) handleCompletedVoronoiFile(inputFilename, side string, utils common.UtilsInterface) error {
+	// Create S3 bucket instance for direct uploads
+	bucket := s3bucket.NewS3Bucket()
+	outputDir := os.Getenv("OUTPUT_DIR_VORONOI")
+	if outputDir == "" {
+		outputDir = "/processing_data/voronoi/data/output"
+	}
+
+	log.Printf("│ Collecting Voronoi outputs for: %s", inputFilename)
+
+	// Extract base name (remove .fits extension)
+	baseName := strings.TrimSuffix(inputFilename, ".fits")
+
+	// Discover all output files that start with the base name
+	// VORONOI generates multiple output files with various suffixes
+	files, err := os.ReadDir(outputDir)
+	if err != nil {
+		return fmt.Errorf("error reading output directory: %v", err)
+	}
+
+	var outputFiles []os.DirEntry
+	for _, file := range files {
+		// Check if file name starts with base name
+		if strings.HasPrefix(file.Name(), baseName) {
+			outputFiles = append(outputFiles, file)
+		}
+	}
+
+	if len(outputFiles) == 0 {
+		return fmt.Errorf("no Voronoi output files found for: %s", inputFilename)
+	}
+
+	log.Printf("│ Found %d Voronoi output files", len(outputFiles))
+
+	// Extract dataset name for S3 organization
+	dataset := extractDatasetFromFilename(inputFilename)
+
+	// Upload each file directly to S3
+	uploadedCount := 0
+	for _, file := range outputFiles {
+		// Skip directories (e.g., individual_spectra directory)
+		if file.IsDir() {
+			log.Printf("│ ⚠ Skipping directory: %s", file.Name())
+			continue
+		}
+
+		filePath := filepath.Join(outputDir, file.Name())
+
+		// Read file content
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Printf("│ ✗ Error reading Voronoi output %s: %v", file.Name(), err)
+			continue
+		}
+
+		// Upload directly to S3: voronoi/output/{dataset}/{filename}
+		s3Key := fmt.Sprintf("voronoi/output/%s/%s", dataset, file.Name())
+		folderPath := filepath.Dir(s3Key)
+		fileName := filepath.Base(s3Key)
+
+		err = bucket.UploadFileToBucket(folderPath, fileName, content)
+		if err != nil {
+			log.Printf("│ ✗ Error uploading Voronoi output %s to S3: %v", file.Name(), err)
+			continue
+		}
+
+		log.Printf("│ ✓ Uploaded: %s (%d bytes)", file.Name(), len(content))
+		uploadedCount++
+	}
+
+	log.Printf("│ ✓ Uploaded %d Voronoi output files directly to S3 (no message sent)", uploadedCount)
+
+	// Move processed files to processed directory
+	processedDir := strings.Replace(outputDir, "/output", "/processed", 1)
+	err = os.MkdirAll(processedDir, 0755)
+	if err != nil {
+		log.Printf("│ ⚠ Failed to create processed directory: %v", err)
+		return nil // Don't fail the upload operation
+	}
+
+	for _, file := range outputFiles {
+		if file.IsDir() {
+			continue // Skip directories
+		}
+		oldPath := filepath.Join(outputDir, file.Name())
+		newPath := filepath.Join(processedDir, file.Name())
+
+		if err := os.Rename(oldPath, newPath); err != nil {
+			log.Printf("│ ⚠ Failed to move %s to processed: %v", file.Name(), err)
+		} else {
+			log.Printf("│ ✓ Moved %s to processed directory", file.Name())
+		}
+	}
+
+	return nil
+}
+
 func (w *Watcher) RunProducer(appName string, jobName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) {
 	// Add panic recovery to prevent pod crashes
 	defer func() {
@@ -264,8 +363,14 @@ func (w *Watcher) RunProducer(appName string, jobName string, side string, utils
 	if shouldProcess {
 		log.Printf("Processing %s files...\n", appName)
 
-		// Check if this app needs binary processing (PPXF)
-		if api.IsAppBinary(appName) {
+		// Check if this app needs S3 reference processing (VORONOI)
+		if appName == "VORONOI" {
+			log.Printf("Using S3 reference processing for %s (avoids RabbitMQ size limits)", appName)
+			s3ReferenceBatchQueue := make(chan api.S3ReferenceBatch, 100)
+			s3ReferenceProducer := producer.NewS3ReferenceProducer(jobSize, fileSource, s3ReferenceBatchQueue, utils, side, batchID)
+			s3ReferenceProducer.CreateS3ReferenceBatch(appName, side, queue, s3ReferenceBatchQueue)
+		} else if api.IsAppBinary(appName) {
+			// Check if this app needs binary processing (PPXF)
 			log.Printf("Using binary processing for %s (prbatchs .fits corruption)", appName)
 			binaryBatchQueue := make(chan api.BinaryBatch, 100)
 			binaryProducer := producer.NewBinaryProducer(jobSize, fileSource, binaryBatchQueue, utils, side, batchID)
@@ -369,8 +474,20 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 		log.Printf("Monitoring pod-specific pPXF processlist: %s", processListPath)
 	}
 
+	// Track previous VORONOI processlist state to detect completions
+	var previousVoronoiList []string
+	voronoiProcessListPath := os.Getenv("PROCESS_LIST_VORONOI")
+
+	// Make pod-specific if POD_NAME is set
+	if podName := os.Getenv("POD_NAME"); podName != "" && voronoiProcessListPath != "" {
+		dir := filepath.Dir(voronoiProcessListPath)
+		voronoiProcessListPath = filepath.Join(dir, fmt.Sprintf("processlist-%s.txt", podName))
+		log.Printf("Monitoring pod-specific VORONOI processlist: %s", voronoiProcessListPath)
+	}
+
 	log.Println("Checking for completed files...")
 	log.Println("Starting pPXF processlist monitoring...")
+	log.Println("Starting VORONOI processlist monitoring...")
 
 	for {
 		// Process Starlight batch_info files (existing system)
@@ -421,6 +538,30 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 
 			// Update previous state
 			previousPPXFList = currentPPXFList
+		}
+
+		// NEW: Monitor VORONOI processlist for completed files
+		if voronoiProcessListPath != "" {
+			currentVoronoiList := w.readProcessList(voronoiProcessListPath)
+
+			// Only check for completions after first iteration (when we have previous state)
+			if previousVoronoiList != nil {
+				completedFiles := findCompletedFiles(previousVoronoiList, currentVoronoiList)
+
+				for _, filename := range completedFiles {
+					log.Printf("✓ VORONOI completed processing: %s", filename)
+
+					err := w.handleCompletedVoronoiFile(filename, side, utils)
+					if err != nil {
+						log.Printf("✗ Error handling VORONOI completion for %s: %v", filename, err)
+					} else {
+						log.Printf("✓ Successfully uploaded VORONOI outputs for: %s", filename)
+					}
+				}
+			}
+
+			// Update previous state
+			previousVoronoiList = currentVoronoiList
 		}
 
 		// Sleep for 10 seconds before next iteration
@@ -513,8 +654,14 @@ func (w *Watcher) ProcessJob(appName string, side string, utils common.UtilsInte
 		return
 	}
 
-	// Check if this app needs binary processing (PPXF)
-	if api.IsAppBinary(appName) {
+	// Check if this app needs S3 reference processing (VORONOI)
+	if appName == "VORONOI" {
+		log.Printf("Using S3 reference processing for %s (avoids RabbitMQ size limits)", appName)
+		s3ReferenceBatchQueue := make(chan api.S3ReferenceBatch, 100)
+		s3ReferenceProducer := producer.NewS3ReferenceProducer(jobSize, fileSource, s3ReferenceBatchQueue, utils, side, batchID)
+		s3ReferenceProducer.CreateS3ReferenceBatch(appName, side, queue, s3ReferenceBatchQueue)
+	} else if api.IsAppBinary(appName) {
+		// Check if this app needs binary processing (PPXF)
 		log.Printf("Using binary processing for %s (prbatchs .fits corruption)", appName)
 		binaryBatchQueue := make(chan api.BinaryBatch, 100)
 		binaryProducer := producer.NewBinaryProducer(jobSize, fileSource, binaryBatchQueue, utils, side, batchID)

@@ -38,10 +38,11 @@ type ListDatasetsResponse struct {
 }
 
 type CreateDatasetRequest struct {
-	DatasetName   string      `json:"datasetName"`
-	AppType       string      `json:"appType"`
-	PPXFConfig    *PPXFConfig `json:"ppxfConfig,omitempty"`
-	ConnectorMode bool        `json:"connectorMode,omitempty"`
+	DatasetName   string         `json:"datasetName"`
+	AppType       string         `json:"appType"`
+	PPXFConfig    *PPXFConfig    `json:"ppxfConfig,omitempty"`
+	VoronoiConfig *VoronoiConfig `json:"voronoiConfig,omitempty"`
+	ConnectorMode bool           `json:"connectorMode,omitempty"`
 }
 
 type PPXFConfig struct {
@@ -50,6 +51,18 @@ type PPXFConfig struct {
 	WaveRangeStart int     `json:"waveRangeStart"`
 	WaveRangeEnd   int     `json:"waveRangeEnd"`
 	SPSName        string  `json:"spsName"`
+}
+
+type VoronoiConfig struct {
+	Instrument                string  `json:"instrument"`
+	TargetSN                  float64 `json:"targetSN"`
+	Redshift                  float64 `json:"redshift"`
+	WavelengthStart           int     `json:"wavelengthStart"`
+	WavelengthEnd             int     `json:"wavelengthEnd"`
+	SNMethod                  string  `json:"snMethod"`
+	KnotsNumber               int     `json:"knotsNumber"`
+	MinSN                     float64 `json:"minSN"`
+	GenerateIndividualSpectra bool    `json:"generateIndividualSpectra"`
 }
 
 // Unified file listing response structure
@@ -97,10 +110,10 @@ type PaginatedDatasetFilesResponse struct {
 func NewFileUploadHandler(s3Bucket s3bucket.S3BucketInterface, progressTracker *ProgressTracker) *FileUploadHandler {
 	// Create provider bucket instance for connector mode
 	providerBucket := s3bucket.NewS3BucketWithName("test-provider")
-	
+
 	return &FileUploadHandler{
-		S3Bucket:        s3Bucket,        // Consumer bucket (test-consumer)
-		ProviderBucket:  providerBucket,  // Provider bucket (test-provider) 
+		S3Bucket:        s3Bucket,       // Consumer bucket (test-consumer)
+		ProviderBucket:  providerBucket, // Provider bucket (test-provider)
 		ProgressTracker: progressTracker,
 	}
 }
@@ -194,12 +207,12 @@ func (h *FileUploadHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	if appType == "" {
 		appType = "starlight" // default
 	}
-	
+
 	// Get connector mode from form (default to false)
 	connectorMode := r.FormValue("connectorMode") == "true"
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "voronoi", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -281,9 +294,9 @@ func (h *FileUploadHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		targetBucket = h.S3Bucket
 		bucketType = "consumer"
 	}
-	
+
 	log.Printf("Uploading file %s to %s bucket (connector mode: %v)", fileName, bucketType, connectorMode)
-	
+
 	// Upload to S3 using the new batch structure: app/input/batch_name/filename
 	folderPath := fmt.Sprintf("%s/input/%s", appType, batchName)
 	err = targetBucket.UploadFileToBucket(folderPath, fileName, content)
@@ -334,7 +347,7 @@ func (h *FileUploadHandler) ListDatasets(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "voronoi", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -446,7 +459,7 @@ func (h *FileUploadHandler) CreateDataset(w http.ResponseWriter, r *http.Request
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "voronoi", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -490,8 +503,8 @@ func (h *FileUploadHandler) CreateDataset(w http.ResponseWriter, r *http.Request
 	}{
 		{h.S3Bucket, "consumer"}, // Always create in consumer bucket
 	}
-	
-	// In connector mode, also create directories in provider bucket  
+
+	// In connector mode, also create directories in provider bucket
 	if req.ConnectorMode {
 		bucketsToCreate = append(bucketsToCreate, struct {
 			bucket s3bucket.S3BucketInterface
@@ -590,6 +603,52 @@ func (h *FileUploadHandler) CreateDataset(w http.ResponseWriter, r *http.Request
 		log.Printf("Successfully created pPXF config file in %s bucket: %s", configBucketType, configKey)
 	}
 
+	// Create Voronoi config file if this is a Voronoi dataset and config is provided
+	if strings.ToLower(appType) == "voronoi" && req.VoronoiConfig != nil {
+		configJSON, err := json.MarshalIndent(req.VoronoiConfig, "", "  ")
+		if err != nil {
+			log.Printf("Error marshaling Voronoi config: %v", err)
+			response := CreateDatasetResponse{
+				Success: false,
+				Message: "Failed to create Voronoi configuration file",
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Choose bucket for config file based on connector mode
+		// Config file goes where the input files will be uploaded
+		var configBucket s3bucket.S3BucketInterface
+		var configBucketType string
+		if req.ConnectorMode {
+			configBucket = h.ProviderBucket
+			configBucketType = "provider"
+		} else {
+			configBucket = h.S3Bucket
+			configBucketType = "consumer"
+		}
+
+		// Upload config file to the appropriate bucket
+		// Use dataset-specific filename: voronoi_config_{dataset}.json
+		configKey := fmt.Sprintf("%s/input/%s/voronoi_config_%s.json", appType, sanitizedName, sanitizedName)
+		_, err = configBucket.GetS3Client().PutObject(&s3.PutObjectInput{
+			Bucket:      aws.String(configBucket.GetBucketName()),
+			Key:         aws.String(configKey),
+			Body:        bytes.NewReader(configJSON),
+			ContentType: aws.String("application/json"),
+		})
+		if err != nil {
+			log.Printf("Error uploading Voronoi config file to %s bucket: %v", configBucketType, err)
+			response := CreateDatasetResponse{
+				Success: false,
+				Message: "Failed to upload Voronoi configuration file",
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		log.Printf("Successfully created Voronoi config file in %s bucket: %s", configBucketType, configKey)
+	}
+
 	// Success response with connector mode info
 	var bucketInfo string
 	if req.ConnectorMode {
@@ -597,7 +656,7 @@ func (h *FileUploadHandler) CreateDataset(w http.ResponseWriter, r *http.Request
 	} else {
 		bucketInfo = " (directories created in consumer bucket)"
 	}
-	
+
 	response := CreateDatasetResponse{
 		Success: true,
 		Message: fmt.Sprintf("Dataset '%s' created successfully for application '%s'%s", sanitizedName, appType, bucketInfo),
@@ -642,7 +701,7 @@ func (h *FileUploadHandler) DeleteDataset(w http.ResponseWriter, r *http.Request
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "voronoi", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -745,7 +804,7 @@ func (h *FileUploadHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "voronoi", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -842,7 +901,7 @@ func (h *FileUploadHandler) ListDatasetFiles(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "voronoi", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -1055,7 +1114,7 @@ func (h *FileUploadHandler) ListDatasetOutputFiles(w http.ResponseWriter, r *htt
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "voronoi", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -1348,7 +1407,7 @@ func (h *FileUploadHandler) ListDatasetOutputFilesPaginated(w http.ResponseWrite
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "voronoi", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -1561,7 +1620,7 @@ func (h *FileUploadHandler) ListDatasetFilesUnified(w http.ResponseWriter, r *ht
 	}
 
 	// Validate application type
-	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "voronoi", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {
@@ -2035,7 +2094,7 @@ func (h *FileUploadHandler) DownloadAllFiles(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Validate app type
-	allowedApps := []string{"starlight", "ppxf", "steckmap"}
+	allowedApps := []string{"starlight", "ppxf", "voronoi", "steckmap"}
 	isValidApp := false
 	for _, app := range allowedApps {
 		if strings.ToLower(appType) == app {

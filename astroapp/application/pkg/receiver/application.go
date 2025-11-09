@@ -35,6 +35,8 @@ func (r *Receiver) getOutputPath(side, appName string) string {
 			outputPath = os.Getenv("OUTPUT_BUCKET_STARLIGHT")
 		case "PPXF":
 			outputPath = os.Getenv("OUTPUT_BUCKET_PPXF")
+		case "VORONOI":
+			outputPath = os.Getenv("OUTPUT_BUCKET_VORONOI")
 		case "STECKMAP":
 			outputPath = os.Getenv("OUTPUT_BUCKET_STECKMAP")
 		default:
@@ -47,6 +49,8 @@ func (r *Receiver) getOutputPath(side, appName string) string {
 			outputPath = os.Getenv("INPUT_DIR_STARLIGHT")
 		case "PPXF":
 			outputPath = os.Getenv("INPUT_DIR_PPXF")
+		case "VORONOI":
+			outputPath = os.Getenv("INPUT_DIR_VORONOI")
 		case "STECKMAP":
 			outputPath = os.Getenv("EXPLORED_DIR_STECKMAP")
 		default:

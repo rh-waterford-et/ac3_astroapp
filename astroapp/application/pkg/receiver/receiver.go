@@ -43,7 +43,7 @@ func (r *Receiver) Start(side string) {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
 	// Clear process list on startup to prevent processing old entries
-	processLists := []string{os.Getenv("PROCESS_LIST_STARLIGHT"), os.Getenv("PROCESS_LIST_PPXF")}
+	processLists := []string{os.Getenv("PROCESS_LIST_STARLIGHT"), os.Getenv("PROCESS_LIST_PPXF"), os.Getenv("PROCESS_LIST_VORONOI")}
 	for _, processList := range processLists {
 		if side == "processor" {
 			r.clearProcessList(processList)
@@ -140,6 +140,22 @@ func (r *Receiver) ProcessMessage(d amqp.Delivery, side string) {
 	// Handle queue metrics for processor side
 	if side == "processor" {
 		r.recordQueueFirstReceiveTime(batchID, jobID)
+	}
+
+	// Check for S3 reference messages FIRST (before binary)
+	// S3 reference messages are for VORONOI large files
+	isS3Ref := false
+	if val, ok := d.Headers["is_s3_reference"]; ok {
+		switch v := val.(type) {
+		case bool:
+			isS3Ref = v
+		case string:
+			isS3Ref = (v == "true" || v == "True" || v == "1")
+		}
+	}
+	if isS3Ref {
+		r.ProcessS3ReferenceMessage(d, side, appName, jobID)
+		return
 	}
 
 	// Process binary messages separately

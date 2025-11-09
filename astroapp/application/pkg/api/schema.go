@@ -72,7 +72,7 @@ type BinaryDataFile struct {
 // IsAppBinary determines if an app processes binary files
 func IsAppBinary(appName string) bool {
 	switch appName {
-	case "PPXF":
+	case "PPXF", "VORONOI":
 		return true
 	case "STARLIGHT", "STECKMAP":
 		return false
@@ -101,4 +101,25 @@ type BinaryBatch struct {
 	ID    string           `json:"ID"`
 	JobID string           `json:"JobID"`
 	Files []BinaryDataFile `json:"Files"`
+}
+
+// S3ReferenceDataFile for handling large files via S3 references (VORONOI only)
+// Contains S3 metadata instead of file content to avoid RabbitMQ size limits
+type S3ReferenceDataFile struct {
+	Name     string `json:"Name"`      // Original filename (e.g., "Arp_220_zap.fits")
+	S3Key    string `json:"S3Key"`     // Full S3 key (e.g., "voronoi/input/ARP220/Arp_220_zap.fits")
+	S3Bucket string `json:"S3Bucket"` // S3 bucket name
+	Size     int64  `json:"Size"`      // File size (set to 0, not needed for functionality)
+}
+
+// S3ReferenceMessageBody for handling large files via S3 references
+type S3ReferenceMessageBody struct {
+	Files []S3ReferenceDataFile `json:"Files"`
+}
+
+// S3ReferenceBatch for handling large files via S3 references
+type S3ReferenceBatch struct {
+	ID    string                `json:"ID"`
+	JobID string                `json:"JobID"`
+	Files []S3ReferenceDataFile `json:"Files"`
 }
