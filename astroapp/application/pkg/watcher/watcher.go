@@ -193,7 +193,18 @@ func (w *Watcher) handleCompletedVoronoiFile(inputFilename, side string, utils c
 	log.Printf("│ Collecting Voronoi outputs for: %s", inputFilename)
 
 	// Extract base name (remove .fits extension)
+	// Handle processlist format: "dataset:filename.fits" -> extract just "filename"
 	baseName := strings.TrimSuffix(inputFilename, ".fits")
+	if strings.Contains(baseName, ":") {
+		// Processlist entry format: "dataset:filename" - extract just the filename part
+		parts := strings.SplitN(baseName, ":", 2)
+		if len(parts) == 2 {
+			baseName = parts[1] // Use filename part after the colon
+		}
+	}
+
+	log.Printf("│ Extracted baseName: %s (from input: %s)", baseName, inputFilename)
+	log.Printf("│ Looking in output directory: %s", outputDir)
 
 	// Discover all output files that start with the base name
 	// VORONOI generates multiple output files with various suffixes
@@ -202,22 +213,41 @@ func (w *Watcher) handleCompletedVoronoiFile(inputFilename, side string, utils c
 		return fmt.Errorf("error reading output directory: %v", err)
 	}
 
+	log.Printf("│ Found %d total files in output directory", len(files))
+
 	var outputFiles []os.DirEntry
 	for _, file := range files {
 		// Check if file name starts with base name
 		if strings.HasPrefix(file.Name(), baseName) {
+			log.Printf("│ ✓ Matched file: %s", file.Name())
 			outputFiles = append(outputFiles, file)
+		} else {
+			log.Printf("│ ✗ Skipped file (doesn't match prefix): %s", file.Name())
 		}
 	}
 
 	if len(outputFiles) == 0 {
-		return fmt.Errorf("no Voronoi output files found for: %s", inputFilename)
+		log.Printf("│ ⚠ No matching files found. baseName='%s', available files:", baseName)
+		for _, file := range files {
+			log.Printf("│   - %s", file.Name())
+		}
+		return fmt.Errorf("no Voronoi output files found for: %s (baseName: %s)", inputFilename, baseName)
 	}
 
 	log.Printf("│ Found %d Voronoi output files", len(outputFiles))
 
 	// Extract dataset name for S3 organization
-	dataset := extractDatasetFromFilename(inputFilename)
+	// Handle processlist format: "dataset:filename.fits" -> extract dataset name
+	dataset := "unknown"
+	if strings.Contains(inputFilename, ":") {
+		parts := strings.SplitN(inputFilename, ":", 2)
+		if len(parts) == 2 {
+			dataset = parts[0] // Use dataset part before the colon
+		}
+	} else {
+		dataset = extractDatasetFromFilename(inputFilename)
+	}
+	log.Printf("│ Extracted dataset: %s (from input: %s)", dataset, inputFilename)
 
 	// Upload each file directly to S3
 	uploadedCount := 0
@@ -308,6 +338,7 @@ func (w *Watcher) RunProducer(appName string, jobName string, side string, utils
 
 	switch side {
 	case "producer":
+		log.Printf("RunProducer: producer side - looking for files in S3: inputDir=%s, jobName=%s", inputDir, jobName)
 		watcher := s3bucket.NewS3Watcher()
 		fileSource = &producer.S3FileSource{
 			Bucket:    watcher.Bucket,
@@ -322,6 +353,10 @@ func (w *Watcher) RunProducer(appName string, jobName string, side string, utils
 			return
 		}
 		length = len(files)
+		log.Printf("Found %d files in S3 for job %s", length, jobName)
+		if length == 0 {
+			log.Printf("WARNING: No files found in S3 at %s/%s for %s. Check if files were uploaded correctly.", inputDir, jobName, appName)
+		}
 		if length > 0 {
 			for _, file := range files {
 				parts := strings.Split(file, "/")
@@ -336,6 +371,7 @@ func (w *Watcher) RunProducer(appName string, jobName string, side string, utils
 			}
 		}
 	case "processor":
+		log.Printf("RunProducer: processor side - looking for files in inputDir=%s, processedDir=%s", inputDir, processedDir)
 		fileSource = &producer.LocalFileSource{
 			InputDir:     inputDir,
 			ProcessedDir: processedDir,
@@ -347,6 +383,9 @@ func (w *Watcher) RunProducer(appName string, jobName string, side string, utils
 		}
 		length = len(files)
 		log.Printf("Found %d files in %s: %v", length, inputDir, files)
+		if length == 0 {
+			log.Printf("WARNING: No files found in %s for %s. Files may not have been downloaded from S3 yet.", inputDir, appName)
+		}
 	default:
 		log.Printf("Invalid side: %s\n", side)
 		return
@@ -463,17 +502,6 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 
 	jobInfoDir := common.GetBatchInfoDir()
 
-	// Track previous pPXF processlist state to detect completions
-	var previousPPXFList []string
-	processListPath := os.Getenv("PROCESS_LIST_PPXF")
-
-	// Make pod-specific if POD_NAME is set
-	if podName := os.Getenv("POD_NAME"); podName != "" && processListPath != "" {
-		dir := filepath.Dir(processListPath)
-		processListPath = filepath.Join(dir, fmt.Sprintf("processlist-%s.txt", podName))
-		log.Printf("Monitoring pod-specific pPXF processlist: %s", processListPath)
-	}
-
 	// Track previous VORONOI processlist state to detect completions
 	var previousVoronoiList []string
 	voronoiProcessListPath := os.Getenv("PROCESS_LIST_VORONOI")
@@ -486,7 +514,6 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 	}
 
 	log.Println("Checking for completed files...")
-	log.Println("Starting pPXF processlist monitoring...")
 	log.Println("Starting VORONOI processlist monitoring...")
 
 	for {
@@ -514,30 +541,6 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 					os.Remove(filePath)
 				}()
 			}
-		}
-
-		// NEW: Monitor pPXF processlist for completed files
-		if processListPath != "" {
-			currentPPXFList := w.readProcessList(processListPath)
-
-			// Only check for completions after first iteration (when we have previous state)
-			if previousPPXFList != nil {
-				completedFiles := findCompletedFiles(previousPPXFList, currentPPXFList)
-
-				for _, filename := range completedFiles {
-					log.Printf("✓ pPXF completed processing: %s", filename)
-
-					err := w.handleCompletedPPXFFile(filename, side, utils, queue, redisClient)
-					if err != nil {
-						log.Printf("✗ Error handling pPXF completion for %s: %v", filename, err)
-					} else {
-						log.Printf("✓ Successfully sent pPXF outputs for: %s", filename)
-					}
-				}
-			}
-
-			// Update previous state
-			previousPPXFList = currentPPXFList
 		}
 
 		// NEW: Monitor VORONOI processlist for completed files

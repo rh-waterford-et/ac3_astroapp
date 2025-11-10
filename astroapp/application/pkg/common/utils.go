@@ -26,16 +26,16 @@ type Utils struct{}
 func GetBatchInfoDir() string {
 	baseDir := os.Getenv("BATCH_INFO_DIR")
 	podName := os.Getenv("POD_NAME")
-	
+
 	if baseDir == "" {
 		baseDir = "/processing_data/batch_info"
 	}
-	
+
 	// If POD_NAME is set, use per-pod directory
 	if podName != "" {
 		return fmt.Sprintf("%s-%s", baseDir, podName)
 	}
-	
+
 	return baseDir
 }
 

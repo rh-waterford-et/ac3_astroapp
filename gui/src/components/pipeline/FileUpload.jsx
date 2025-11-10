@@ -96,7 +96,9 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
               title={isCollapsed ? 'Expand File Upload' : 'Collapse File Upload'}
             >
               <span className={`toggle-icon ${isCollapsed ? 'collapsed' : ''}`}>
-                {isCollapsed ? '▲' : '▼'}
+                <svg width="8" height="6" viewBox="0 0 8 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 1 L4 4 L7 1" />
+                </svg>
               </span>
             </button>
           )}

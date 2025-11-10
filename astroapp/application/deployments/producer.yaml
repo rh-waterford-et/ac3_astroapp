@@ -17,11 +17,11 @@ spec:
     spec:
       serviceAccountName: starlight-sa
       volumes:
-      - name: ucm-pv-storage
+      - name: ucm-pv-storage-b
         persistentVolumeClaim:
-          claimName: ucm-pv-claim-producer
+          claimName: ucm-pv-claim-producer-b
       containers:
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
         name: watcher-producer
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
@@ -51,18 +51,24 @@ spec:
           value: "starlight/input"
         - name: EXPLORED_PPXF
           value: "ppxf/input"
+        - name: EXPLORED_VORONOI
+          value: "voronoi/input"
         - name: EXPLORED_STECKMAP
           value: "steckmap/input"
         - name: PROCESSED_STARLIGHT
           value: "starlight/processed"
         - name: PROCESSED_PPXF
           value: "ppxf/processed"
+        - name: PROCESSED_VORONOI
+          value: "voronoi/processed"
         - name: PROCESSED_STECKMAP
           value: "steckmap/processed"
         - name: OUTPUT_STARLIGHT
           value: "starlight/output"
         - name: OUTPUT_PPXF
           value: "ppxf/output"
+        - name: OUTPUT_VORONOI
+          value: "voronoi/output"
         - name: OUTPUT_STECKMAP
           value: "steckmap/output"
         - name: TEMPLATE_IN_FILE_PATH
@@ -81,10 +87,10 @@ spec:
         - containerPort: 5672
         volumeMounts:
         - mountPath: /processing_data/
-          name: ucm-pv-storage
+          name: ucm-pv-storage-b
         securityContext:
           privileged: true
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
         name: http-server
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
@@ -108,33 +114,39 @@ spec:
           value: "starlight/processed"
         - name: PROCESSED_PPXF
           value: "ppxf/processed"
+        - name: PROCESSED_VORONOI
+          value: "voronoi/processed"
         - name: PROCESSED_STECKMAP
           value: "steckmap/processed"
         - name: OUTPUT_STARLIGHT
           value: "starlight/output"
         - name: OUTPUT_PPXF
           value: "ppxf/output"
+        - name: OUTPUT_VORONOI
+          value: "voronoi/output"
         - name: OUTPUT_STECKMAP
           value: "steckmap/output"
         - name: EXPLORED_STARLIGHT
           value: "starlight/input"
         - name: EXPLORED_PPXF
           value: "ppxf/input"
+        - name: EXPLORED_VORONOI
+          value: "voronoi/input"
         - name: EXPLORED_STECKMAP
           value: "steckmap/input"
         ports:
         - containerPort: 8080
         volumeMounts:
         - mountPath: /processing_data/
-          name: ucm-pv-storage
+          name: ucm-pv-storage-b
         securityContext:
           privileged: true
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
-        name: receiver-producer
+      - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
+        name: receiver-producer-b
         workingDir: /processing_data/
         volumeMounts:
         - mountPath: /processing_data/
-          name: ucm-pv-storage
+          name: ucm-pv-storage-b
         securityContext:
           privileged: true
         command: ["/uid_entrpoint.sh"]
@@ -168,6 +180,8 @@ spec:
           value: "starlight/output"
         - name: OUTPUT_BUCKET_PPXF
           value: "ppxf/output"
+        - name: OUTPUT_BUCKET_VORONOI
+          value: "voronoi/output"
         - name: OUTPUT_BUCKET_STECKMAP
           value: "steckmap/output"
         - name: REDIS_HOST
@@ -178,7 +192,7 @@ spec:
           value: ""
         - name: METRICS
           value: "metrics"
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
         name: aggregator
         workingDir: /processing_data/
         ports:
@@ -187,7 +201,7 @@ spec:
           name: metrics
         volumeMounts:
         - mountPath: /processing_data/
-          name: ucm-pv-storage
+          name: ucm-pv-storage-b
         securityContext:
           privileged: true
         command: ["/uid_entrpoint.sh"]

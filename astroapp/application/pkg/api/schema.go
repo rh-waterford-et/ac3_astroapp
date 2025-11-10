@@ -106,10 +106,10 @@ type BinaryBatch struct {
 // S3ReferenceDataFile for handling large files via S3 references (VORONOI only)
 // Contains S3 metadata instead of file content to avoid RabbitMQ size limits
 type S3ReferenceDataFile struct {
-	Name     string `json:"Name"`      // Original filename (e.g., "Arp_220_zap.fits")
-	S3Key    string `json:"S3Key"`     // Full S3 key (e.g., "voronoi/input/ARP220/Arp_220_zap.fits")
+	Name     string `json:"Name"`     // Original filename (e.g., "Arp_220_zap.fits")
+	S3Key    string `json:"S3Key"`    // Full S3 key (e.g., "voronoi/input/ARP220/Arp_220_zap.fits")
 	S3Bucket string `json:"S3Bucket"` // S3 bucket name
-	Size     int64  `json:"Size"`      // File size (set to 0, not needed for functionality)
+	Size     int64  `json:"Size"`     // File size (set to 0, not needed for functionality)
 }
 
 // S3ReferenceMessageBody for handling large files via S3 references

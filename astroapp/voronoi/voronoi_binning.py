@@ -1,6 +1,8 @@
 import os
 from astropy.io import fits
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for headless environments
 import matplotlib.pyplot as plt
 # from os import path
 from matplotlib.backends.backend_pdf import PdfPages
@@ -880,7 +882,14 @@ voronoi_binning_plot = os.path.join(args.output_dir, f"{base_filename}_voronoi_b
 
 # Run the Voronoi binning routine with the specified target signal-to-noise ratio.
 # This routine groups the data points into bins to achieve the desired signal-to-noise ratio.
+print(f"Starting Voronoi binning with {len(x)} data points, target S/N={target_sn}, pixelsize={result['pixelsize']}")
+print("This may take several minutes...")
+sys.stdout.flush()
+
 binNum, xNode, yNode, xBar, yBar, sn, nPixels, scale = voronoi_2d_binning(x, y, signal, noise, target_sn, plot=True, quiet=1, pixelsize=result['pixelsize'])
+
+print(f"Voronoi binning completed. Created {len(np.unique(binNum))} bins.")
+sys.stdout.flush()
 
 # Save the Voronoi binning plot to the specified file.
 plt.savefig(voronoi_binning_plot, dpi=600)

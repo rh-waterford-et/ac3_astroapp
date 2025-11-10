@@ -3,6 +3,7 @@ package api
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 type FileUploadHandler struct {
@@ -2275,13 +2279,32 @@ func (h *FileUploadHandler) ProcessDataset(w http.ResponseWriter, r *http.Reques
 	}
 
 	jsonData, _ := json.Marshal(triggerData)
+	log.Printf("Triggering processing: POST %s with data: %s", triggerURL, string(jsonData))
+
 	resp, err := http.Post(triggerURL, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("Error triggering processing: %v", err)
-		http.Error(w, "Failed to trigger processing", http.StatusInternalServerError)
+		response := ProcessDatasetResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to trigger processing: %v. Check if producer watcher is running on port 8081", err),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Trigger endpoint returned status %d: %s", resp.StatusCode, string(body))
+		response := ProcessDatasetResponse{
+			Success: false,
+			Message: fmt.Sprintf("Trigger endpoint returned status %d", resp.StatusCode),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
 	log.Printf("Successfully triggered processing for batch: %s", req.Dataset)
 
@@ -2359,5 +2382,328 @@ func (h *FileUploadHandler) ProcessSingleFile(w http.ResponseWriter, r *http.Req
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+type DeleteAllFilesResponse struct {
+	Success      bool   `json:"success"`
+	Message      string `json:"message"`
+	DeletedCount int    `json:"deletedCount,omitempty"`
+}
+
+func (h *FileUploadHandler) DeleteAllFiles(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "DELETE" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get parameters from query
+	dataset := r.URL.Query().Get("dataset")
+	appType := r.URL.Query().Get("app")
+	fileType := r.URL.Query().Get("type") // "input" or "output"
+
+	if dataset == "" {
+		response := DeleteAllFilesResponse{
+			Success: false,
+			Message: "Dataset parameter is required",
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if appType == "" {
+		appType = "starlight" // default
+	}
+
+	// Validate application type
+	allowedApps := []string{"starlight", "ppxf", "voronoi", "steckmap"}
+	isValidApp := false
+	for _, app := range allowedApps {
+		if strings.ToLower(appType) == app {
+			appType = app
+			isValidApp = true
+			break
+		}
+	}
+
+	if !isValidApp {
+		response := DeleteAllFilesResponse{
+			Success: false,
+			Message: fmt.Sprintf("Invalid application type. Allowed: %s", strings.Join(allowedApps, ", ")),
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if fileType != "input" && fileType != "output" {
+		response := DeleteAllFilesResponse{
+			Success: false,
+			Message: "Type parameter must be 'input' or 'output'",
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Determine directories to delete
+	var directories []string
+	if fileType == "input" {
+		// Delete both input and processed directories
+		directories = []string{
+			fmt.Sprintf("%s/input/%s", appType, dataset),
+			fmt.Sprintf("%s/processed/%s", appType, dataset),
+		}
+	} else {
+		// Delete output directory
+		directories = []string{
+			fmt.Sprintf("%s/output/%s", appType, dataset),
+		}
+	}
+
+	totalDeleted := 0
+	var errors []string
+
+	// Delete each directory
+	for _, dir := range directories {
+		log.Printf("Starting bulk delete for directory: %s", dir)
+
+		// Use optimized bulk delete with pagination
+		deletedCount, err := h.deleteDirectoryWithPagination(dir)
+		if err != nil {
+			log.Printf("Error deleting directory %s: %v", dir, err)
+			errors = append(errors, fmt.Sprintf("%s: %v", dir, err))
+			continue
+		}
+
+		totalDeleted += deletedCount
+		log.Printf("Successfully deleted %d files from %s", deletedCount, dir)
+	}
+
+	// Prepare response
+	var response DeleteAllFilesResponse
+	if len(errors) > 0 {
+		response = DeleteAllFilesResponse{
+			Success:      false,
+			Message:      fmt.Sprintf("Partial success. Deleted %d files. Errors: %v", totalDeleted, errors),
+			DeletedCount: totalDeleted,
+		}
+		w.WriteHeader(http.StatusPartialContent)
+	} else if totalDeleted == 0 {
+		response = DeleteAllFilesResponse{
+			Success:      true,
+			Message:      "No files found to delete",
+			DeletedCount: 0,
+		}
+	} else {
+		response = DeleteAllFilesResponse{
+			Success:      true,
+			Message:      fmt.Sprintf("Successfully deleted %d files", totalDeleted),
+			DeletedCount: totalDeleted,
+		}
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// deleteDirectoryWithPagination deletes all files in a directory using ListObjectsV2 with pagination
+// Returns the number of files deleted
+func (h *FileUploadHandler) deleteDirectoryWithPagination(directoryPath string) (int, error) {
+	// Ensure the directory path ends with a slash
+	if !strings.HasSuffix(directoryPath, "/") {
+		directoryPath = directoryPath + "/"
+	}
+
+	totalDeleted := 0
+	var continuationToken *string
+	batchSize := 1000 // S3 allows up to 1000 objects per delete batch
+
+	for {
+		// List objects with pagination
+		listInput := &s3.ListObjectsV2Input{
+			Bucket:            aws.String(h.S3Bucket.GetBucketName()),
+			Prefix:            aws.String(directoryPath),
+			MaxKeys:           aws.Int64(1000), // List up to 1000 at a time
+			ContinuationToken: continuationToken,
+		}
+
+		resp, err := h.S3Bucket.GetS3Client().ListObjectsV2(listInput)
+		if err != nil {
+			return totalDeleted, fmt.Errorf("failed to list objects in directory %s: %v", directoryPath, err)
+		}
+
+		// If no objects found, we're done
+		if len(resp.Contents) == 0 {
+			break
+		}
+
+		// Prepare delete batch
+		var deleteObjects []*s3.ObjectIdentifier
+		for _, object := range resp.Contents {
+			deleteObjects = append(deleteObjects, &s3.ObjectIdentifier{
+				Key: object.Key,
+			})
+		}
+
+		// Delete in batches of 1000 (S3 limit)
+		for i := 0; i < len(deleteObjects); i += batchSize {
+			end := i + batchSize
+			if end > len(deleteObjects) {
+				end = len(deleteObjects)
+			}
+
+			batchObjects := deleteObjects[i:end]
+
+			deleteResp, err := h.S3Bucket.GetS3Client().DeleteObjects(&s3.DeleteObjectsInput{
+				Bucket: aws.String(h.S3Bucket.GetBucketName()),
+				Delete: &s3.Delete{
+					Objects: batchObjects,
+					Quiet:   aws.Bool(true),
+				},
+			})
+
+			if err != nil {
+				return totalDeleted, fmt.Errorf("failed to delete objects batch: %v", err)
+			}
+
+			// Count successfully deleted objects
+			deletedInBatch := len(batchObjects)
+			if len(deleteResp.Errors) > 0 {
+				// Some objects failed to delete
+				deletedInBatch = len(batchObjects) - len(deleteResp.Errors)
+				for _, delErr := range deleteResp.Errors {
+					log.Printf("Warning: Failed to delete %s: %s", *delErr.Key, *delErr.Message)
+				}
+			}
+
+			totalDeleted += deletedInBatch
+			log.Printf("Deleted batch: %d files (total so far: %d)", deletedInBatch, totalDeleted)
+		}
+
+		// Check if there are more objects to list
+		if !aws.BoolValue(resp.IsTruncated) {
+			break
+		}
+
+		// Set continuation token for next iteration
+		continuationToken = resp.NextContinuationToken
+	}
+
+	return totalDeleted, nil
+}
+
+type RestartQueueResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+func (h *FileUploadHandler) RestartRabbitMQ(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	log.Printf("Restart queue request received - restarting RabbitMQ, consumer, and producer deployments")
+
+	// Use Kubernetes Go client to restart deployments
+	// This uses in-cluster config (automatically available in pods)
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		log.Printf("Error getting in-cluster config: %v", err)
+		response := RestartQueueResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to connect to Kubernetes: %v", err),
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Printf("Error creating Kubernetes client: %v", err)
+		response := RestartQueueResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to create Kubernetes client: %v", err),
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	namespace := "astroapp"
+	deployments := []string{"rabbitmq", "consumer", "ucm-producer-deployment"}
+
+	var errors []string
+	var successes []string
+
+	// Create context with timeout for Kubernetes operations
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	for _, deploymentName := range deployments {
+		// Get deployment
+		deployment, err := clientset.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
+		if err != nil {
+			log.Printf("Error getting deployment %s: %v", deploymentName, err)
+			errors = append(errors, fmt.Sprintf("%s: %v", deploymentName, err))
+			continue
+		}
+
+		// Add annotation to trigger rollout restart
+		if deployment.Spec.Template.ObjectMeta.Annotations == nil {
+			deployment.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
+		}
+		deployment.Spec.Template.ObjectMeta.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+
+		// Update deployment
+		_, err = clientset.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+		if err != nil {
+			log.Printf("Error restarting deployment %s: %v", deploymentName, err)
+			errors = append(errors, fmt.Sprintf("%s: %v", deploymentName, err))
+			continue
+		}
+
+		log.Printf("Successfully restarted deployment: %s", deploymentName)
+		successes = append(successes, deploymentName)
+	}
+
+	var response RestartQueueResponse
+	if len(errors) > 0 {
+		response = RestartQueueResponse{
+			Success: false,
+			Message: fmt.Sprintf("Some deployments failed to restart. Successes: %v. Errors: %v", successes, errors),
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	} else {
+		response = RestartQueueResponse{
+			Success: true,
+			Message: fmt.Sprintf("Successfully restarted deployments: %v", successes),
+		}
+	}
+
 	json.NewEncoder(w).Encode(response)
 }

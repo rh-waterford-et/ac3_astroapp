@@ -91,6 +91,12 @@ func (s *Server) setupRoutes() {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status": "healthy"}`))
 	})
+
+	// Admin: Restart RabbitMQ and related deployments
+	http.HandleFunc("/api/admin/restart-rabbitmq", s.fileUploadHandler.RestartRabbitMQ)
+
+	// Delete all files endpoint
+	http.HandleFunc("/api/datasets/files/delete-all", s.fileUploadHandler.DeleteAllFiles)
 }
 
 func (s *Server) Start() {

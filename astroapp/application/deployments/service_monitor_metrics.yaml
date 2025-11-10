@@ -12,7 +12,7 @@ spec:
       scheme: http
   namespaceSelector:
     matchNames:
-      - uc3-applications
+      - astroapp
   selector:
     matchLabels:
       svc: ucm

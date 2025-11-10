@@ -101,11 +101,17 @@
 }
 
 .toggle-icon {
-  font-size: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.toggle-icon.collapsed {
+.toggle-icon svg {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggle-icon.collapsed svg {
   transform: rotate(180deg);
 }
 
@@ -178,6 +184,42 @@
   margin: 0;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.delete-all-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.75rem;
+  background: rgba(79, 209, 197, 0.1);
+  border: 1px solid rgba(79, 209, 197, 0.3);
+  border-radius: 0.25rem;
+  color: #4FD1C5;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.delete-all-btn:hover:not(:disabled) {
+  background: rgba(79, 209, 197, 0.2);
+  border-color: rgba(79, 209, 197, 0.5);
+  color: #66E3D7;
+}
+
+.delete-all-btn:active:not(:disabled) {
+  background: rgba(79, 209, 197, 0.3);
+}
+
+.delete-all-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: #718096;
+  border-color: rgba(113, 128, 150, 0.3);
+  background: rgba(113, 128, 150, 0.1);
 }
 
 .pane-count {

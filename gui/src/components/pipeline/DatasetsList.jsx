@@ -154,7 +154,9 @@ function DatasetsList({ processorType, isConnectorMode = false }) {
               title={collapseState.datasets ? "Expand Dataset Management" : "Collapse Dataset Management"}
             >
               <span className={`toggle-icon ${collapseState.datasets ? 'collapsed' : ''}`}>
-                {collapseState.datasets ? '▲' : '▼'}
+                <svg width="8" height="6" viewBox="0 0 8 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 1 L4 4 L7 1" />
+                </svg>
               </span>
             </button>
             <h3>Dataset Management</h3>
@@ -173,7 +175,7 @@ function DatasetsList({ processorType, isConnectorMode = false }) {
 
             {/* Middle Pane - Input Files */}
             <FilesPane
-              title={`Input - ${datasetName}`}
+              title="Input"
               filesData={inputFilesData}
               selectedDataset={datasetOps.selectedDataset}
               onDeleteFile={handleDeleteFile}
@@ -183,7 +185,7 @@ function DatasetsList({ processorType, isConnectorMode = false }) {
 
             {/* Right Pane - Output Files */}
             <FilesPane
-              title={`Output - ${datasetName}`}
+              title="Output"
               filesData={outputFilesData}
               selectedDataset={datasetOps.selectedDataset}
               onDeleteFile={handleDeleteFile}

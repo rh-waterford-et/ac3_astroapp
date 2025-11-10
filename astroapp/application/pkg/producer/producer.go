@@ -20,7 +20,7 @@ type FileSource interface {
 	ListFiles() ([]string, error)
 	ReadFile(filename string) ([]byte, error)
 	DeleteFile(filename string) error
-	GetInputDir() string  // Returns the input directory/path
+	GetInputDir() string   // Returns the input directory/path
 	GetBucketName() string // Returns the S3 bucket name (empty string for local filesystem)
 }
 

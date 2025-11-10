@@ -40,5 +40,31 @@ roleRef:
   kind: ClusterRole
   name: cluster-monitoring-view
 
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployment-restart-role
+  namespace: uc3-applications
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "update", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployment-restart-rolebinding
+  namespace: uc3-applications
+subjects:
+- kind: ServiceAccount
+  name: starlight-sa
+  namespace: uc3-applications
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deployment-restart-role
+
 
 
