@@ -255,3 +255,13 @@ func (l *LocalFileSource) isPPXFSetComplete(baseFilename string) bool {
 
 	return true
 }
+
+// GetInputDir returns the local input directory path
+func (l *LocalFileSource) GetInputDir() string {
+	return l.InputDir
+}
+
+// GetBucketName returns empty string for local filesystem (no S3 bucket)
+func (l *LocalFileSource) GetBucketName() string {
+	return ""
+}

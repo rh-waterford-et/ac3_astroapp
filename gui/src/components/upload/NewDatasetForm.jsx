@@ -1,10 +1,14 @@
 import React, { useCallback } from 'react';
 import PropTypes from 'prop-types';
+import PPXFConfigForm from './PPXFConfigForm';
+import VoronoiConfigForm from './VoronoiConfigForm';
 
 function NewDatasetForm({
   processorType,
   ppxfConfig,
   setPpxfConfig,
+  voronoiConfig,
+  setVoronoiConfig,
   newDatasetName,
   setNewDatasetName,
   onCreate,
@@ -12,31 +16,7 @@ function NewDatasetForm({
   loadingDatasets = false,
 }) {
   const isPPXF = (processorType || '').toLowerCase() === 'ppxf';
-
-  // Memoized handlers to prevent object recreation on every keystroke
-  const handleRedshiftChange = useCallback((e) => {
-    const value = parseFloat(e.target.value) || 0;
-    setPpxfConfig(prev => ({ ...prev, redshift: value }));
-  }, [setPpxfConfig]);
-
-  const handleVelocityDispChange = useCallback((e) => {
-    const value = parseFloat(e.target.value) || 0;
-    setPpxfConfig(prev => ({ ...prev, velocityDisp: value }));
-  }, [setPpxfConfig]);
-
-  const handleWaveStartChange = useCallback((e) => {
-    const value = parseFloat(e.target.value) || 0;
-    setPpxfConfig(prev => ({ ...prev, waveRangeStart: value }));
-  }, [setPpxfConfig]);
-
-  const handleWaveEndChange = useCallback((e) => {
-    const value = parseFloat(e.target.value) || 0;
-    setPpxfConfig(prev => ({ ...prev, waveRangeEnd: value }));
-  }, [setPpxfConfig]);
-
-  const handleSpsNameChange = useCallback((e) => {
-    setPpxfConfig(prev => ({ ...prev, spsName: e.target.value }));
-  }, [setPpxfConfig]);
+  const isVoronoi = (processorType || '').toLowerCase() === 'voronoi';
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter') {
@@ -60,71 +40,17 @@ function NewDatasetForm({
       </div>
 
       {isPPXF && (
-        <div className="ppxf-config-section">
-          <div className="ppxf-config-header">
-            <h5>pPXF Configuration</h5>
-          </div>
-          <div className="ppxf-config-form">
-            <div className="ppxf-config-row new-dataset-input-group">
-              <div className="ppxf-config-field" style={{ flex: '1 1 0', minWidth: 0 }}>
-                <label>Redshift:</label>
-                <input
-                  type="number"
-                  step="0.000001"
-                  className="new-dataset-input"
-                  value={ppxfConfig.redshift}
-                  onChange={handleRedshiftChange}
-                />
-              </div>
-              <div className="ppxf-config-field" style={{ flex: '1 1 0', minWidth: 0 }}>
-                <label>Velocity Dispersion (km/s):</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="new-dataset-input"
-                  value={ppxfConfig.velocityDisp}
-                  onChange={handleVelocityDispChange}
-                />
-              </div>
-            </div>
-            <div className="ppxf-config-row new-dataset-input-group">
-              <div className="ppxf-config-field" style={{ flex: '1 1 0', minWidth: 0 }}>
-                <label>Wave Start (Å):</label>
-                <input
-                  type="number"
-                  className="new-dataset-input"
-                  value={ppxfConfig.waveRangeStart}
-                  onChange={handleWaveStartChange}
-                />
-              </div>
-              <div className="ppxf-config-field" style={{ flex: '1 1 0', minWidth: 0 }}>
-                <label>Wave End (Å):</label>
-                <input
-                  type="number"
-                  className="new-dataset-input"
-                  value={ppxfConfig.waveRangeEnd}
-                  onChange={handleWaveEndChange}
-                />
-              </div>
-            </div>
-            <div className="ppxf-config-row new-dataset-input-group">
-              <div className="ppxf-config-field full-width" style={{ flex: '1 1 100%', minWidth: 0 }}>
-                <label>SPS Model:</label>
-                <select
-                  className="new-dataset-input"
-                  value={ppxfConfig.spsName}
-                  onChange={handleSpsNameChange}
-                >
-                  <option value="emiles">EMILES</option>
-                  <option value="fsps">FSPS</option>
-                  <option value="galaxev">GALAXEV</option>
-                  <option value="coelho">Coelho</option>
-                  <option value="coelho_mini">Coelho Mini</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PPXFConfigForm 
+          config={ppxfConfig} 
+          setConfig={setPpxfConfig} 
+        />
+      )}
+
+      {isVoronoi && (
+        <VoronoiConfigForm 
+          config={voronoiConfig} 
+          setConfig={setVoronoiConfig} 
+        />
       )}
 
       <div className="dataset-form-actions">
@@ -155,8 +81,20 @@ NewDatasetForm.propTypes = {
     waveRangeStart: PropTypes.number.isRequired,
     waveRangeEnd: PropTypes.number.isRequired,
     spsName: PropTypes.string.isRequired,
-  }).isRequired,
-  setPpxfConfig: PropTypes.func.isRequired,
+  }),
+  setPpxfConfig: PropTypes.func,
+  voronoiConfig: PropTypes.shape({
+    instrument: PropTypes.string.isRequired,
+    targetSN: PropTypes.number.isRequired,
+    redshift: PropTypes.number.isRequired,
+    wavelengthStart: PropTypes.number.isRequired,
+    wavelengthEnd: PropTypes.number.isRequired,
+    snMethod: PropTypes.string.isRequired,
+    knotsNumber: PropTypes.number.isRequired,
+    minSN: PropTypes.number.isRequired,
+    generateIndividualSpectra: PropTypes.bool.isRequired,
+  }),
+  setVoronoiConfig: PropTypes.func,
   newDatasetName: PropTypes.string.isRequired,
   setNewDatasetName: PropTypes.func.isRequired,
   onCreate: PropTypes.func.isRequired,

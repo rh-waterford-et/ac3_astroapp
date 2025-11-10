@@ -151,7 +151,8 @@
 }
 
 .gallery-item {
-  flex: 1 1 0;
+  flex: 0 0 auto;
+  width: 8rem;
   min-width: 4rem;
   max-width: 12rem;
   min-height: fit-content;

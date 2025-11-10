@@ -10,6 +10,7 @@ import GalleryModal from './components/aladin/gallery/modal/GalleryModal';
 import PipelineAppSelector from './components/pipeline/PipelineAppSelector';
 import DatasetsList from './components/pipeline/DatasetsList';
 import ConnectorModeToggle from './components/pipeline/ConnectorModeToggle';
+import ResetQueueButton from './components/pipeline/ResetQueueButton';
 import UploadZone from './components/upload/UploadZone';
 import logoImage from './assets/AC3-LogoConFrase.jpg';
 import { AppStateProvider } from './contexts/AppStateContext';
@@ -76,6 +77,7 @@ function AppContent({ onGalleryOperationsReady }) {
                 isEnabled={isConnectorMode} 
                 onToggle={setConnectorMode} 
               />
+              <ResetQueueButton />
             </>
           )}
         </div>

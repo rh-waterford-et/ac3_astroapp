@@ -26,16 +26,16 @@ type Utils struct{}
 func GetBatchInfoDir() string {
 	baseDir := os.Getenv("BATCH_INFO_DIR")
 	podName := os.Getenv("POD_NAME")
-	
+
 	if baseDir == "" {
 		baseDir = "/processing_data/batch_info"
 	}
-	
+
 	// If POD_NAME is set, use per-pod directory
 	if podName != "" {
 		return fmt.Sprintf("%s-%s", baseDir, podName)
 	}
-	
+
 	return baseDir
 }
 
@@ -77,15 +77,19 @@ func (u *Utils) EnsureDirectoriesExist() error {
 		os.Getenv("INPUT_DIR_STARLIGHT"),
 		os.Getenv("EXPLORED_DIR_PPXF"),
 		os.Getenv("INPUT_DIR_PPXF"),
+		os.Getenv("INPUT_DIR_VORONOI"),
+		os.Getenv("OUTPUT_DIR_VORONOI"),
 		os.Getenv("EXPLORED_DIR_STECKMAP"),
 		os.Getenv("OUTPUT_DIR_STECKMAP"),
 		os.Getenv("IN_FILE_OUTPUT_PATH"),
 		os.Getenv("PROCESSED_STECKMAP"),
 		os.Getenv("PROCESSED_STARLIGHT"),
 		os.Getenv("PROCESSED_PPXF"),
+		os.Getenv("PROCESSED_VORONOI"),
 		GetBatchInfoDir(), // Use per-pod batch_info directory
 		os.Getenv("PROCESS_LIST_STARLIGHT_PATH"),
 		os.Getenv("PROCESS_LIST_PPXF_PATH"),
+		os.Getenv("PROCESS_LIST_VORONOI_PATH"),
 	}
 
 	for _, dir := range requiredDirs {
@@ -99,7 +103,7 @@ func (u *Utils) EnsureDirectoriesExist() error {
 		log.Printf("Verified directory: %s", dir)
 	}
 
-	processList := []string{os.Getenv("PROCESS_LIST_STARLIGHT"), os.Getenv("PROCESS_LIST_PPXF")}
+	processList := []string{os.Getenv("PROCESS_LIST_STARLIGHT"), os.Getenv("PROCESS_LIST_PPXF"), os.Getenv("PROCESS_LIST_VORONOI")}
 	for _, processList := range processList {
 		// Create process list file if it doesn't exist
 		if _, err := os.Stat(processList); os.IsNotExist(err) {
@@ -118,12 +122,15 @@ func (u *Utils) EnsureBucketDirectoriesExist(bucket s3bucket.S3BucketInterface) 
 	requiredDirs := []string{
 		os.Getenv("EXPLORED_STARLIGHT"),
 		os.Getenv("EXPLORED_PPXF"),
+		os.Getenv("EXPLORED_VORONOI"),
 		os.Getenv("EXPLORED_STECKMAP"),
 		os.Getenv("PROCESSED_STARLIGHT"),
 		os.Getenv("PROCESSED_PPXF"),
+		os.Getenv("PROCESSED_VORONOI"),
 		os.Getenv("PROCESSED_STECKMAP"),
 		os.Getenv("OUTPUT_STARLIGHT"),
 		os.Getenv("OUTPUT_PPXF"),
+		os.Getenv("OUTPUT_BUCKET_VORONOI"),
 		os.Getenv("OUTPUT_STECKMAP"),
 		os.Getenv("METRICS"),
 	}

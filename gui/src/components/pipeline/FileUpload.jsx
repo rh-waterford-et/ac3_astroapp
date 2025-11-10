@@ -39,6 +39,17 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
     waveRangeEnd: 6150,
     spsName: 'emiles'
   });
+  const [voronoiConfig, setVoronoiConfig] = React.useState({
+    instrument: 'megara',
+    targetSN: 30,
+    redshift: 0.01657,
+    wavelengthStart: 5600,
+    wavelengthEnd: 5800,
+    snMethod: 'spline',
+    knotsNumber: 40,
+    minSN: 1,
+    generateIndividualSpectra: true
+  });
   const [newDatasetName, setNewDatasetName] = React.useState('');
 
   useEffect(() => {
@@ -56,7 +67,14 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
     const sanitizedName = newName.trim().replace(/[^a-zA-Z0-9_-]/g, '');
     if (!sanitizedName) return;
 
-    const configToSend = processorType.toLowerCase() === 'ppxf' ? cfg : null;
+    // Determine which config to send based on processor type
+    let configToSend = null;
+    if (processorType.toLowerCase() === 'ppxf') {
+      configToSend = ppxfConfig;
+    } else if (processorType.toLowerCase() === 'voronoi') {
+      configToSend = voronoiConfig;
+    }
+
     const result = await createDataset(sanitizedName, configToSend, isConnectorMode);
     if (result.success) {
       setCurrentDataset(sanitizedName);
@@ -78,7 +96,9 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
               title={isCollapsed ? 'Expand File Upload' : 'Collapse File Upload'}
             >
               <span className={`toggle-icon ${isCollapsed ? 'collapsed' : ''}`}>
-                {isCollapsed ? '▲' : '▼'}
+                <svg width="8" height="6" viewBox="0 0 8 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 1 L4 4 L7 1" />
+                </svg>
               </span>
             </button>
           )}
@@ -130,9 +150,11 @@ const FileUpload = forwardRef(({ isCollapsed = false, onToggleCollapse, processo
                 processorType={processorType}
                 ppxfConfig={ppxfConfig}
                 setPpxfConfig={setPpxfConfig}
+                voronoiConfig={voronoiConfig}
+                setVoronoiConfig={setVoronoiConfig}
                 newDatasetName={newDatasetName}
                 setNewDatasetName={setNewDatasetName}
-                onCreate={() => handleNewDatasetCreate(newDatasetName, ppxfConfig, () => {}, setNewDatasetName)}
+                onCreate={() => handleNewDatasetCreate(newDatasetName, null, () => {}, setNewDatasetName)}
                 onCancel={() => { setShowCreateForm(false); setNewDatasetName(''); }}
                 loadingDatasets={loadingDatasets}
               />

@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import VirtualizedFileList from './VirtualizedFileList';
 import { truncateFileName } from '../../utils/file/fileUtils';
 import { getFileStatusColor } from '../../utils/ui/styleUtils';
 import RefreshIcon from '../ui/RefreshIcon';
 import DownloadIcon from '../ui/DownloadIcon';
-import { getDownloadAllUrl } from '../../services/api';
+import { getDownloadAllUrl, deleteAllFiles } from '../../services/api';
 
 const FilesPane = ({
   title,
@@ -16,8 +16,11 @@ const FilesPane = ({
   processorType
 }) => {
   const { files, loading, error, pagination, refresh, loadMoreFiles } = filesData;
+  const [deleting, setDeleting] = useState(false);
   
   const isOutputPane = title.toLowerCase().includes('output');
+  const fileType = isOutputPane ? 'output' : 'input';
+  const totalFiles = pagination.total > 0 ? pagination.total : files.length;
 
   const handleDownloadAll = () => {
     if (!selectedDataset || files.length === 0) return;
@@ -64,6 +67,33 @@ const FilesPane = ({
     console.log(`[FilesPane] Download initiated for file: ${fileName}`);
   };
 
+  const handleDeleteAll = async () => {
+    if (!selectedDataset || totalFiles === 0) return;
+
+    const fileTypeLabel = isOutputPane ? 'output' : 'input and processed';
+    const confirmed = window.confirm(
+      `Delete all ${totalFiles} ${fileTypeLabel} files from ${selectedDataset}?\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      const result = await deleteAllFiles(selectedDataset, processorType, fileType);
+      if (result.success) {
+        alert(`✅ ${result.message}`);
+        // Refresh the file list
+        refresh();
+      } else {
+        alert(`❌ ${result.message}`);
+      }
+    } catch (error) {
+      alert(`❌ Failed to delete files: ${error.message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="pipeline-pane files-pane">
       <div className="pane-header">
@@ -84,10 +114,18 @@ const FilesPane = ({
           <button 
             className="refresh-btn" 
             onClick={refresh}
-            disabled={loading || !selectedDataset}
+            disabled={loading || deleting || !selectedDataset}
             title={`Refresh ${title.toLowerCase()}`}
           >
             <RefreshIcon />
+          </button>
+          <button 
+            className="delete-all-btn" 
+            onClick={handleDeleteAll}
+            disabled={loading || deleting || !selectedDataset || totalFiles === 0}
+            title={`Delete all ${fileType} files from ${selectedDataset || 'dataset'}`}
+          >
+            ×
           </button>
           <div className="pane-count">
             {pagination.total > 0 ? pagination.total : files.length}

@@ -16,7 +16,7 @@ spec:
         app: uc3-frontend
     spec:
       containers:
-      - image: quay.io/bcapper30/uc3-apps:latest
+      - image: quay.io/rh_et_wd/ac3/astroapp-gui:voronoi
         name: frontend
         ports:
         - containerPort: 8080

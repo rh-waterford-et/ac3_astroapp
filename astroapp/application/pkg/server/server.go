@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/api"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
@@ -90,6 +91,12 @@ func (s *Server) setupRoutes() {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status": "healthy"}`))
 	})
+
+	// Admin: Restart RabbitMQ and related deployments
+	http.HandleFunc("/api/admin/restart-rabbitmq", s.fileUploadHandler.RestartRabbitMQ)
+
+	// Delete all files endpoint
+	http.HandleFunc("/api/datasets/files/delete-all", s.fileUploadHandler.DeleteAllFiles)
 }
 
 func (s *Server) Start() {
@@ -116,7 +123,18 @@ func (s *Server) Start() {
 	log.Printf("Progress tracking endpoints: http://localhost:%s/api/progress/*", port)
 	log.Printf("Health check endpoint: http://localhost:%s/api/health", port)
 
-	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), nil); err != nil {
+	// Create HTTP server with extra long timeouts for extremely slow connections
+	server := &http.Server{
+		Addr:              fmt.Sprintf(":%s", port),
+		ReadHeaderTimeout: 28800 * time.Second, // 8 hours
+		ReadTimeout:       28800 * time.Second, // 8 hours
+		WriteTimeout:      28800 * time.Second, // 8 hours
+		IdleTimeout:       28800 * time.Second, // 8 hours
+		MaxHeaderBytes:    1 << 20,             // 1MB
+	}
+
+	log.Printf("HTTP server configured with 8-hour timeouts for slow connections")
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }

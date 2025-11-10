@@ -43,7 +43,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
         name: receiver-processor
         workingDir: /processing_data/
         volumeMounts:
@@ -86,6 +86,10 @@ spec:
           value: "/processing_data/ppxf/runtime/processlist-$(POD_NAME).txt"
         - name: PROCESS_LIST_PPXF_PATH
           value: "/processing_data/ppxf/runtime"
+        - name: PROCESS_LIST_VORONOI
+          value: "/processing_data/voronoi/runtime/processlist-$(POD_NAME).txt"
+        - name: PROCESS_LIST_VORONOI_PATH
+          value: "/processing_data/voronoi/runtime"
         - name: INPUT_DIR_STARLIGHT
           value: "/processing_data/starlight/data/input"
         - name: EXPLORED_DIR_STARLIGHT
@@ -98,6 +102,12 @@ spec:
           value: "/processing_data/ppxf/data/output"
         - name: PROCESSED_PPXF
           value: "/processing_data/ppxf/data/processed"
+        - name: INPUT_DIR_VORONOI
+          value: "/processing_data/voronoi/data/input"
+        - name: OUTPUT_DIR_VORONOI
+          value: "/processing_data/voronoi/data/output"
+        - name: PROCESSED_VORONOI
+          value: "/processing_data/voronoi/data/processed"
         - name: EXPLORED_DIR_STECKMAP
           value: "/processing_data/steckmap/data/input"
         - name: OUTPUT_DIR_STECKMAP
@@ -120,7 +130,7 @@ spec:
           value: ""
         ports:
         - containerPort: 5672  
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
+      - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
         name: watcher-processor
         workingDir: /processing_data/
         command: ["/usr/bin/ucm"]
@@ -132,6 +142,8 @@ spec:
               fieldPath: metadata.name
         - name: PROCESS_LIST_PPXF
           value: "/processing_data/ppxf/runtime/processlist-$(POD_NAME).txt"
+        - name: PROCESS_LIST_VORONOI
+          value: "/processing_data/voronoi/runtime/processlist-$(POD_NAME).txt"
         - name: RABBITMQ_USER
           value: "guest"
         - name: RABBITMQ_PASSWORD
@@ -160,6 +172,12 @@ spec:
           value: "/processing_data/ppxf/data/output"
         - name: OUTPUT_PPXF
           value: "/processing_data/ppxf/data/output"
+        - name: EXPLORED_VORONOI
+          value: "/processing_data/voronoi/data/output"
+        - name: OUTPUT_VORONOI
+          value: "/processing_data/voronoi/data/output"
+        - name: OUTPUT_DIR_VORONOI
+          value: "/processing_data/voronoi/data/output"
         - name: EXPLORED_STECKMAP
           value: "/processing_data/steckmap/data/input"
         - name: OUTPUT_STECKMAP
@@ -168,12 +186,16 @@ spec:
           value: "/processing_data/starlight/data/processed"
         - name: PROCESSED_PPXF
           value: "/processing_data/ppxf/data/processed"
+        - name: PROCESSED_VORONOI
+          value: "/processing_data/voronoi/data/processed"
         - name: PROCESSED_STECKMAP
           value: "/processing_data/steckmap/data/processed"
         - name: OUTPUT_BUCKET_STARLIGHT
           value: "starlight/output"
         - name: OUTPUT_BUCKET_PPXF
           value: "ppxf/output"
+        - name: OUTPUT_BUCKET_VORONOI
+          value: "voronoi/output"
         - name: OUTPUT_BUCKET_STECKMAP
           value: "steckmap/output"
         - name: TEMPLATE_IN_FILE_PATH
@@ -211,5 +233,26 @@ spec:
           value: "/processing_data/ppxf/data/input"
         - name: PPXF_OUTPUT_DIR
           value: "/processing_data/ppxf/data/output"
+        - name: API_URL
+          value: "http://uc3-backend-service:8080/api/progress/update"
+      - image: quay.io/rh_et_wd/ac3/astroapp-voronoi:latest
+        name: voronoi-processor
+        workingDir: /processing_data/
+        volumeMounts:
+        - mountPath: /processing_data/
+          name: ucm-pv-storage
+        securityContext:
+          privileged: true
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: INPUT_DIR
+          value: "/processing_data/voronoi/data/input"
+        - name: OUTPUT_DIR
+          value: "/processing_data/voronoi/data/output"
+        - name: PROCESS_FILE
+          value: "/processing_data/voronoi/runtime/processlist-$(POD_NAME).txt"
         - name: API_URL
           value: "http://uc3-backend-service:8080/api/progress/update"

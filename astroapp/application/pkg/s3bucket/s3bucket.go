@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -64,6 +65,18 @@ func NewS3Watcher() *S3Watcher {
 }
 
 func NewS3Bucket() *S3Bucket {
+	// Configure HTTP client with extra long timeouts for extremely slow connections
+	// 8 hours for connect/read/write (sufficient for 20GB+ files on very slow connections)
+	httpClient := &http.Client{
+		Timeout: 28800 * time.Second, // 8 hours total timeout
+		Transport: &http.Transport{
+			ResponseHeaderTimeout: 28800 * time.Second, // 8 hours
+			IdleConnTimeout:       28800 * time.Second, // 8 hours
+			MaxIdleConns:          100,
+			MaxIdleConnsPerHost:   10,
+		},
+	}
+
 	sess, err := session.NewSession(&aws.Config{
 		Credentials: credentials.NewStaticCredentials(
 			os.Getenv("AWS_ACCESS_KEY_ID"),
@@ -72,6 +85,7 @@ func NewS3Bucket() *S3Bucket {
 		Endpoint:         aws.String(os.Getenv("S3_ENDPOINT")),
 		Region:           aws.String(os.Getenv("S3_REGION")),
 		S3ForcePathStyle: aws.Bool(true),
+		HTTPClient:       httpClient,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create S3 session: %v", err)
@@ -90,6 +104,17 @@ func NewS3Bucket() *S3Bucket {
 
 // NewS3BucketWithName creates an S3Bucket instance for a specific bucket name
 func NewS3BucketWithName(bucketName string) *S3Bucket {
+	// Configure HTTP client with extra long timeouts for extremely slow connections
+	httpClient := &http.Client{
+		Timeout: 28800 * time.Second, // 8 hours total timeout
+		Transport: &http.Transport{
+			ResponseHeaderTimeout: 28800 * time.Second, // 8 hours
+			IdleConnTimeout:       28800 * time.Second, // 8 hours
+			MaxIdleConns:          100,
+			MaxIdleConnsPerHost:   10,
+		},
+	}
+
 	sess, err := session.NewSession(&aws.Config{
 		Credentials: credentials.NewStaticCredentials(
 			os.Getenv("AWS_ACCESS_KEY_ID"),
@@ -98,6 +123,7 @@ func NewS3BucketWithName(bucketName string) *S3Bucket {
 		Endpoint:         aws.String(os.Getenv("S3_ENDPOINT")),
 		Region:           aws.String(os.Getenv("S3_REGION")),
 		S3ForcePathStyle: aws.Bool(true),
+		HTTPClient:       httpClient,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create S3 session: %v", err)

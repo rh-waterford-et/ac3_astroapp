@@ -44,7 +44,9 @@ function PipelineProgress({
               title={isCollapsed ? "Expand Pipeline Progress" : "Collapse Pipeline Progress"}
             >
               <span className={`toggle-icon ${isCollapsed ? 'collapsed' : ''}`}>
-                {isCollapsed ? '▲' : '▼'}
+                <svg width="8" height="6" viewBox="0 0 8 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 1 L4 4 L7 1" />
+                </svg>
               </span>
             </button>
           )}

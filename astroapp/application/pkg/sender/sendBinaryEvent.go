@@ -75,3 +75,55 @@ func (bs *BinaryRabbitMQSender) SendBinaryBatch(batch api.BinaryBatch, appName s
 	log.Printf("     Binary Files: %s\n", strings.Join(filenames, ", "))
 	log.Printf("DEBUG: SendBinaryBatch completed successfully")
 }
+
+// SendS3ReferenceBatch handles S3 reference batches for VORONOI (sends S3 metadata instead of content)
+func (bs *BinaryRabbitMQSender) SendS3ReferenceBatch(batch api.S3ReferenceBatch, appName string, side string, q queue.QueueInterface) {
+	var queueName string
+
+	if side == "producer" {
+		queueName = "producer_to_processor_queue"
+	} else {
+		queueName = "processor_to_producer_queue"
+	}
+
+	err := q.Connect()
+	if err != nil {
+		bs.Utils.FailOnError("Failed to connect to RabbitMQ", err)
+	}
+	defer q.Close()
+
+	err = q.DeclareQueue(queueName)
+	if err != nil {
+		bs.Utils.FailOnError(fmt.Sprintf("Failed to declare queue"), err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	batchJSON, err := json.Marshal(batch)
+	if err != nil {
+		bs.Utils.FailOnError("Failed to marshal S3 reference batch", err)
+	}
+
+	headers := make(amqp.Table)
+	headers["job_size"] = len(batch.Files)
+	headers["app_name"] = appName
+	headers["batch_id"] = batch.ID
+	headers["job_id"] = batch.JobID
+	headers["is_s3_reference"] = true // CRITICAL: Mark as S3 reference batch
+	headers["is_binary"] = false      // Not binary content, just metadata
+
+	filenames := []string{}
+	for _, f := range batch.Files {
+		filenames = append(filenames, f.Name)
+	}
+	headers["filenames"] = strings.Join(filenames, ",")
+
+	err = q.Publish(ctx, queueName, batchJSON, headers)
+	if err != nil {
+		bs.Utils.FailOnError("Failed to publish S3 reference message: %v", err)
+	}
+	log.Printf(" [x] Sent S3 reference job with %d files for app %s\n", len(batch.Files), appName)
+	log.Printf("     S3 Reference Files: %s\n", strings.Join(filenames, ", "))
+	log.Printf("DEBUG: SendS3ReferenceBatch completed successfully")
+}

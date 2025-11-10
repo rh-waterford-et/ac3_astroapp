@@ -225,20 +225,24 @@ export const getDatasets = async (processorType, signal = null) => {
 /**
  * Create a new dataset in S3
  * @param {string} datasetName - The name of the dataset to create
- * @param {string} processorType - The processor type (starlight, ppxf, steckmap)
- * @param {Object} ppxfConfig - Optional pPXF configuration (only for ppxf datasets)
+ * @param {string} processorType - The processor type (starlight, ppxf, voronoi, steckmap)
+ * @param {Object} config - Optional configuration (ppxfConfig for ppxf, voronoiConfig for voronoi)
  * @returns {Promise<Object>} - Creation response
  */
-export const createDataset = async (datasetName, processorType, ppxfConfig = null, isConnectorMode = false) => {
+export const createDataset = async (datasetName, processorType, config = null, isConnectorMode = false) => {
   const requestBody = {
     datasetName: datasetName,
     appType: processorType,
     connectorMode: isConnectorMode
   };
   
-  // Add pPXF config if provided and processor is pPXF
-  if (processorType.toLowerCase() === 'ppxf' && ppxfConfig) {
-    requestBody.ppxfConfig = ppxfConfig;
+  // Add processor-specific config if provided
+  if (config) {
+    if (processorType.toLowerCase() === 'ppxf') {
+      requestBody.ppxfConfig = config;
+    } else if (processorType.toLowerCase() === 'voronoi') {
+      requestBody.voronoiConfig = config;
+    }
   }
   
   return apiRequestSafe('datasets/create', {
@@ -588,5 +592,36 @@ export const startSingleFileProcessing = async (datasetName, fileName, processor
       processorType: processorType
     },
     context: 'start single file processing'
+  });
+};
+
+/**
+ * Restart RabbitMQ and related deployments (consumer, producer)
+ * This will clear all queued messages and reset processing
+ * @returns {Promise<Object>} - Restart response
+ */
+export const restartRabbitMQ = async () => {
+  return apiRequestSafe('admin/restart-rabbitmq', {
+    method: 'POST',
+    context: 'restart queue'
+  });
+};
+
+/**
+ * Delete all files from a dataset (input/processed or output)
+ * @param {string} datasetName - The dataset name
+ * @param {string} processorType - The processor type (starlight, ppxf, etc.)
+ * @param {string} fileType - The file type ('input' or 'output')
+ * @returns {Promise<Object>} - Delete response with deletedCount
+ */
+export const deleteAllFiles = async (datasetName, processorType, fileType) => {
+  return apiRequestSafe('datasets/files/delete-all', {
+    method: 'DELETE',
+    params: {
+      dataset: datasetName,
+      app: processorType,
+      type: fileType
+    },
+    context: 'delete all files'
   });
 }; 
