@@ -1,0 +1,42 @@
+# ---------- Stage 1: backend ----------
+FROM quay.io/rh-ee-kromashk/uc3-backend:latest AS backend
+
+# ---------- Stage 2: starlight ----------
+FROM quay.io/bcapper30/starlight AS starlight
+
+# ---------- Stage 3: ppxf ----------
+FROM quay.io/bcapper30/uc3-ppxf:latest AS ppxf
+
+# ---------- Stage 4: final unified container ----------
+FROM ubuntu:22.04
+
+
+RUN apt-get update && \
+    apt-get install -y python3 gfortran ca-certificates procps && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+
+COPY --from=backend /usr/bin/ucm /usr/bin/ucm
+COPY --from=backend /docker/starlight /docker/starlight
+COPY --from=backend /uid_entrpoint.sh /uid_entrpoint.sh
+COPY --from=backend /processing_data /processing_data
+
+COPY --from=starlight /docker/starlight /docker/starlight
+
+COPY --from=ppxf /home/ppxf /home/ppxf
+COPY --from=ppxf /usr/local/lib/python3.8/dist-packages /usr/local/lib/python3.8/dist-packages
+
+
+RUN groupadd -g 1001 ucm && \
+    useradd -u 1001 -g ucm -d /home/ucm -s /bin/bash ucm && \
+    mkdir -p /home/ucm && chown -R ucm:ucm /home/ucm /processing_data
+
+
+COPY start.sh /start.sh
+RUN chmod +x /usr/bin/ucm /start.sh /uid_entrpoint.sh
+
+USER ucm
+WORKDIR /processing_data
+EXPOSE 8080 5672
+
+ENTRYPOINT ["/start.sh"]

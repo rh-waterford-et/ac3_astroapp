@@ -1,0 +1,14 @@
+Collecting xgboost
+  Downloading xgboost-3.1.1-py3-none-manylinux_2_28_x86_64.whl.metadata (2.1 kB)
+Requirement already satisfied: numpy in /home/kromashk/.local/lib/python3.13/site-packages (from xgboost) (2.3.4)
+Collecting nvidia-nccl-cu12 (from xgboost)
+  Downloading nvidia_nccl_cu12-2.28.7-py3-none-manylinux_2_18_x86_64.whl.metadata (2.0 kB)
+Requirement already satisfied: scipy in /home/kromashk/.local/lib/python3.13/site-packages (from xgboost) (1.16.3)
+Downloading xgboost-3.1.1-py3-none-manylinux_2_28_x86_64.whl (115.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 115.9/115.9 MB 13.2 MB/s eta 0:00:00
+
+Downloading nvidia_nccl_cu12-2.28.7-py3-none-manylinux_2_18_x86_64.whl (296.8 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 296.8/296.8 MB 21.7 MB/s eta 0:00:00
+
+Installing collected packages: nvidia-nccl-cu12, xgboost
+Successfully installed nvidia-nccl-cu12-2.28.7 xgboost-3.1.1

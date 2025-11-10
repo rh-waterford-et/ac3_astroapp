@@ -19,197 +19,94 @@ spec:
       labels:
         app: ucm-processor
     spec:
+      serviceAccountName: starlight-sa
       securityContext:
         runAsUser: 0
         runAsGroup: 0
         fsGroup: 0
-      serviceAccountName: starlight-sa
       volumes:
-      - name: ucm-pv-storage
-        persistentVolumeClaim:
-          claimName: ucm-pv-claim
+        - name: ucm-pv-storage
+          persistentVolumeClaim:
+            claimName: ucm-pv-claim
       containers:
-      - image: quay.io/bcapper30/starlight
-        name: starlight
-        workingDir: /docker/starlight/STARLIGHTv04
-        command: ["./bash_script2.sh"]
-        env:
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        volumeMounts:
-        - mountPath: /processing_data/
-          name: ucm-pv-storage
-        securityContext:
-          privileged: true
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
-        name: receiver-processor
-        workingDir: /processing_data/
-        volumeMounts:
-        - mountPath: /processing_data/
-          name: ucm-pv-storage
-        securityContext:
-          privileged: true
-        command: ["/usr/bin/ucm"]
-        args: ["consumer", "processor"]
-        env:
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        - name: RABBITMQ_USER
-          value: "guest"
-        - name: RABBITMQ_PASSWORD
-          value: "guest"
-        - name: RABBITMQ_HOST
-          value: "rabbitmq"
-        - name: RABBITMQ_PORT
-          value: "5672"
-        - name: AWS_ACCESS_KEY_ID
-          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
-        - name: AWS_SECRET_ACCESS_KEY
-          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
-        - name: S3_ENDPOINT
-          value: "https://s3.eu-central-1.ionoscloud.com"
-        - name: S3_REGION
-          value: "de"
-        - name: S3_BUCKET_NAME
-          value: "test-consumer"
-        - name: IN_FILE_OUTPUT_PATH
-          value: "/processing_data/starlight/runtime/infiles"
-        - name: PROCESS_LIST_STARLIGHT
-          value: "/processing_data/starlight/runtime/processlist-$(POD_NAME).txt"
-        - name: PROCESS_LIST_STARLIGHT_PATH
-          value: "/processing_data/starlight/runtime" 
-        - name: PROCESS_LIST_PPXF
-          value: "/processing_data/ppxf/runtime/processlist-$(POD_NAME).txt"
-        - name: PROCESS_LIST_PPXF_PATH
-          value: "/processing_data/ppxf/runtime"
-        - name: INPUT_DIR_STARLIGHT
-          value: "/processing_data/starlight/data/input"
-        - name: EXPLORED_DIR_STARLIGHT
-          value: "/processing_data/starlight/data/output"
-        - name: PROCESSED_STARLIGHT
-          value: "/processing_data/starlight/data/processed"
-        - name: INPUT_DIR_PPXF
-          value: "/processing_data/ppxf/data/input"
-        - name: EXPLORED_DIR_PPXF
-          value: "/processing_data/ppxf/data/output"
-        - name: PROCESSED_PPXF
-          value: "/processing_data/ppxf/data/processed"
-        - name: EXPLORED_DIR_STECKMAP
-          value: "/processing_data/steckmap/data/input"
-        - name: OUTPUT_DIR_STECKMAP
-          value: "/processing_data/steckmap/data/output"
-        - name: PROCESSED_STECKMAP
-          value: "/processing_data/steckmap/data/processed"
-        - name: TEMPLATE_IN_FILE_PATH
-          value: "/docker/starlight/config_files_starlight/grid_example.in"
-        - name: EXPLORED_STARLIGHT
-          value: "/processing_data/starlight/data/output"
-        - name: OUTPUT_STARLIGHT
-          value: "/processing_data/starlight/data/output"
-        - name : BATCH_INFO_DIR
-          value: "/processing_data/batch_info"
-        - name: REDIS_HOST
-          value: "redis"
-        - name: REDIS_PORT
-          value: "6379"
-        - name: REDIS_PASSWORD
-          value: ""
-        ports:
-        - containerPort: 5672  
-      - image: quay.io/rh-ee-kromashk/uc3-backend:latest
-        name: watcher-processor
-        workingDir: /processing_data/
-        command: ["/usr/bin/ucm"]
-        args: ["watcher", "processor"]
-        env:
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        - name: PROCESS_LIST_PPXF
-          value: "/processing_data/ppxf/runtime/processlist-$(POD_NAME).txt"
-        - name: RABBITMQ_USER
-          value: "guest"
-        - name: RABBITMQ_PASSWORD
-          value: "guest"
-        - name: RABBITMQ_HOST
-          value: "rabbitmq"
-        - name: RABBITMQ_PORT
-          value: "5672"
-        - name: JOB_SIZE
-          value: "5"
-        - name: AWS_ACCESS_KEY_ID
-          value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
-        - name: AWS_SECRET_ACCESS_KEY
-          value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
-        - name: S3_ENDPOINT
-          value: "https://s3.eu-central-1.ionoscloud.com"
-        - name: S3_REGION
-          value: "de"
-        - name: S3_BUCKET_NAME
-          value: "test-consumer"
-        - name: EXPLORED_STARLIGHT
-          value: "/processing_data/starlight/data/output"
-        - name: OUTPUT_STARLIGHT
-          value: "/processing_data/starlight/data/output"
-        - name: EXPLORED_PPXF
-          value: "/processing_data/ppxf/data/output"
-        - name: OUTPUT_PPXF
-          value: "/processing_data/ppxf/data/output"
-        - name: EXPLORED_STECKMAP
-          value: "/processing_data/steckmap/data/input"
-        - name: OUTPUT_STECKMAP
-          value: "/processing_data/steckmap/data/output"
-        - name: PROCESSED_STARLIGHT
-          value: "/processing_data/starlight/data/processed"
-        - name: PROCESSED_PPXF
-          value: "/processing_data/ppxf/data/processed"
-        - name: PROCESSED_STECKMAP
-          value: "/processing_data/steckmap/data/processed"
-        - name: OUTPUT_BUCKET_STARLIGHT
-          value: "starlight/output"
-        - name: OUTPUT_BUCKET_PPXF
-          value: "ppxf/output"
-        - name: OUTPUT_BUCKET_STECKMAP
-          value: "steckmap/output"
-        - name: TEMPLATE_IN_FILE_PATH
-          value: "/processing_data/starlight/config_files_starlight/grid_example.in"
-        - name: "IN_FILE_OUTPUT_PATH"
-          value: "/processing_data/starlight/runtime/infiles/"
-        - name: REDIS_HOST
-          value: "redis"
-        - name: REDIS_PORT
-          value: "6379"
-        - name: REDIS_PASSWORD
-          value: ""
-        - name : BATCH_INFO_DIR
-          value: "/processing_data/batch_info"
-        volumeMounts:
-        - mountPath: /processing_data/
-          name: ucm-pv-storage
-        securityContext:
-          privileged: true
-      - image: quay.io/bcapper30/uc3-ppxf:latest
-        name: ppxf
-        workingDir: /processing_data/
-        command: ["/home/ppxf/ppxf_script.sh"]
-        volumeMounts:
-        - mountPath: /processing_data/
-          name: ucm-pv-storage
-        securityContext:
-          privileged: true
-        env:
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        - name: PPXF_INPUT_DIR
-          value: "/processing_data/ppxf/data/input"
-        - name: PPXF_OUTPUT_DIR
-          value: "/processing_data/ppxf/data/output"
-        - name: API_URL
-          value: "http://uc3-backend-service:8080/api/progress/update"
+        - name: processor-unified
+          image: quay.io/rh-ee-kromashk/uc3-unified:latest
+          imagePullPolicy: Always
+          workingDir: /processing_data/
+          securityContext:
+            privileged: true
+          command: ["/start.sh"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: RABBITMQ_USER
+              value: "guest"
+            - name: RABBITMQ_PASSWORD
+              value: "guest"
+            - name: RABBITMQ_HOST
+              value: "rabbitmq"
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: AWS_ACCESS_KEY_ID
+              value: "EEAAAAHuEn6LkwZJGpUAikGoJHyOrAra4yXAV1WVXpvA8XU0HAAAAAEB7vvNAAAAAAHu-80YrfBIAbZ4Ef4idjOF9BTQ"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "D3c2ApVsGGa7Wm1+pmfDwJddoPxhY3qSwU1U2EUUyKJRE07H3MjR3nwwaxim7mhY"
+            - name: S3_ENDPOINT
+              value: "https://s3.eu-central-1.ionoscloud.com"
+            - name: S3_REGION
+              value: "de"
+            - name: S3_BUCKET_NAME
+              value: "test-consumer"
+            - name: IN_FILE_OUTPUT_PATH
+              value: "/processing_data/starlight/runtime/infiles"
+            - name: PROCESS_LIST_STARLIGHT
+              value: "/processing_data/starlight/runtime/processlist-$(POD_NAME).txt"
+            - name: PROCESS_LIST_PPXF
+              value: "/processing_data/ppxf/runtime/processlist-$(POD_NAME).txt"
+            - name: INPUT_DIR_STARLIGHT
+              value: "/processing_data/starlight/data/input"
+            - name: EXPLORED_DIR_STARLIGHT
+              value: "/processing_data/starlight/data/output"
+            - name: PROCESSED_STARLIGHT
+              value: "/processing_data/starlight/data/processed"
+            - name: INPUT_DIR_PPXF
+              value: "/processing_data/ppxf/data/input"
+            - name: EXPLORED_DIR_PPXF
+              value: "/processing_data/ppxf/data/output"
+            - name: PROCESSED_PPXF
+              value: "/processing_data/ppxf/data/processed"
+            - name: EXPLORED_DIR_STECKMAP
+              value: "/processing_data/steckmap/data/input"
+            - name: OUTPUT_DIR_STECKMAP
+              value: "/processing_data/steckmap/data/output"
+            - name: PROCESSED_STECKMAP
+              value: "/processing_data/steckmap/data/processed"
+            - name: TEMPLATE_IN_FILE_PATH
+              value: "/docker/starlight/config_files_starlight/grid_example.in"
+            - name: BATCH_INFO_DIR
+              value: "/processing_data/batch_info"
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              value: ""
+          volumeMounts:
+            - name: ucm-pv-storage
+              mountPath: /processing_data/
+          ports:
+            - containerPort: 8080
+            - containerPort: 5672
+          livenessProbe:
+            exec:
+              command: ["pgrep", "ucm"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
