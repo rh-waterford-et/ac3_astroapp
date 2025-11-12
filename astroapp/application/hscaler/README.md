@@ -11,10 +11,11 @@ A Python-based system for predictive job time estimation with Prometheus integra
 - Maintains a sliding window average of predictions
 - Exports the averaged value to Prometheus
 
-### 2. Mock API
-- Provides a mock prediction API endpoint for testing
+### 2. Model API
+- Provides a prediction API endpoint using a trained machine learning model
 - Accepts job metrics and returns predicted job times
-- Includes health check endpoint
+- Uses XGBoost model for accurate predictions based on historical data
+- Includes health check endpoint that reports model status
 - Deployed as a standalone pod in Kubernetes
 
 ## Local Installation
@@ -25,17 +26,21 @@ pip install -r requirements.txt
 python predictor_client.py
 ```
 
-### Mock API
+### Model API
 ```bash
-pip install -r requirements-model-api.txt
+cd mock_api
+pip install -r requirements-mock-api.txt
 python mock_api.py
 ```
+
+**Note**: The model file (`model.pkl`) must be present in the same directory as `mock_api.py`.
 
 ## Configuration
 
 Edit `config.yaml` (local) or `k8s/configmap.yaml` (Kubernetes) to configure:
 
 - **predictor_api.url**: Your prediction API endpoint (default: `http://model-api:5000/predict` in k8s)
+  - The API uses a trained XGBoost model to predict job execution times
 - **prometheus.url**: Your Prometheus server URL
 - **prometheus_queries**: PromQL queries for each metric
 - **query_interval_seconds**: How often to query the API
@@ -46,9 +51,13 @@ Edit `config.yaml` (local) or `k8s/configmap.yaml` (Kubernetes) to configure:
 
 1. Predictor client queries Prometheus for metrics every `query_interval_seconds`
 2. Client sends POST request to prediction API with JSON payload
-3. API (or mock API) returns `predicted_job_time`
-4. Client updates sliding window average
-5. Client exports average as `predicted_job_time_avg` metric to Prometheus
+3. API uses trained XGBoost model to predict job time based on:
+   - `processor_count`: Number of available processors
+   - `job_size_mb`: Size of the job in megabytes
+   - `queue_ahead_length`: Number of jobs waiting in queue
+4. API returns `predicted_job_time` in seconds
+5. Client updates sliding window average
+6. Client exports average as `predicted_job_time_avg` metric to Prometheus
 
 ## Kubernetes Deployment
 
@@ -70,10 +79,14 @@ docker push your-registry.com/predictor-client:latest
 docker push your-registry.com/model-api:latest
 ```
 
+### Prepare Model File
+
+Ensure your trained model file (`model.pkl`) is in the `mock_api/` directory before building the Docker image.
+
 ### Update ConfigMap
 
 Edit `k8s/configmap.yaml` to set:
-- Prediction API endpoint (default: `http://model-api:5000/predict` for testing)
+- Prediction API endpoint (default: `http://model-api:5000/predict`)
 - Prometheus server URL (e.g., `http://prometheus-server:9090`)
 - Actual PromQL queries for your metrics
 
@@ -113,16 +126,31 @@ kubectl logs -l app=model-api -f
 kubectl get svc predictor-client model-api
 ```
 
-### Test the Mock API
+### Test the Model API
 
 ```bash
-# Port-forward to test the mock API
+# Port-forward to test the API
 kubectl port-forward svc/model-api 5000:5000
 
-# In another terminal, test the endpoint
+# In another terminal, test the health endpoint
+curl http://localhost:5000/health
+
+# Test the prediction endpoint
 curl -X POST http://localhost:5000/predict \
   -H "Content-Type: application/json" \
-  -d '{"num_processors": 4, "job_size": 1024, "queue_len": 5}'
+  -d '{"num_processors": 4, "job_size": 10.5, "queue_len": 5}'
+```
+
+Expected response:
+```json
+{
+  "predicted_job_time": 284.23,
+  "metadata": {
+    "num_processors": 4,
+    "job_size": 10.5,
+    "queue_len": 5
+  }
+}
 ```
 
 ### Update Configuration

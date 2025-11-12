@@ -2,11 +2,15 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install Flask
-RUN pip install --no-cache-dir Flask==3.0.0
+# Copy requirements first for better caching
+COPY requirements-mock-api.txt .
 
-# Copy application code
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements-mock-api.txt
+
+# Copy application code and model
 COPY mock_api.py .
+COPY model.pkl .
 
 # Create a non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

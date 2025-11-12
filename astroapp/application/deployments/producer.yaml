@@ -19,7 +19,7 @@ spec:
       volumes:
       - name: ucm-pv-storage-b
         persistentVolumeClaim:
-          claimName: ucm-pv-claim-producer-b
+          claimName: ucm-pv-claim-producer
       containers:
       - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
         name: watcher-producer

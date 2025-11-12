@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Mock Prediction API
+Prediction API
 
-Provides a mock API endpoint that accepts job metrics and returns a predicted job time.
-Used for testing the predictor client component.
+Provides an API endpoint that accepts job metrics and returns a predicted job time
+using a trained machine learning model.
 """
 
 import logging
-import random
+import pickle
+import pandas as pd
 from flask import Flask, request, jsonify
 
 logging.basicConfig(
@@ -18,19 +19,21 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-app.config['BASE']=30
+# Load the trained model at startup
+MODEL_PATH = 'model.pkl'
+try:
+    with open(MODEL_PATH, 'rb') as f:
+        model = pickle.load(f)
+    logger.info(f"Successfully loaded model from {MODEL_PATH}")
+except Exception as e:
+    logger.error(f"Failed to load model: {e}")
+    model = None
 
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint."""
-    return jsonify({'status': 'healthy'}), 200
-
-@app.route('/setbase', methods=['GET'])
-def setbase():
-    base = request.args.get('base', 'default base')
-    app.config['BASE']=base
-    logger.warning(f"Base set to: {base}")
-    return jsonify({'Base=': base}), 200
+    model_status = 'loaded' if model is not None else 'not_loaded'
+    return jsonify({'status': 'healthy', 'model': model_status}), 200
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -50,8 +53,12 @@ def predict():
     }
     """
     try:
+        # Check if model is loaded
+        if model is None:
+            logger.error("Model not loaded, cannot make predictions")
+            return jsonify({'error': 'Model not available'}), 503
+        
         data = request.get_json()
-        base = int(app.config['BASE'])
         
         if not data:
             logger.warning("Received request with no JSON data")
@@ -76,20 +83,22 @@ def predict():
         logger.info(f"Received prediction request: num_processors={num_processors}, "
                    f"job_size={job_size}, queue_len={queue_len}")
 
-        # Mock prediction logic: simple formula with some randomness
-        # Base time: job_size / num_processors
-        # Queue penalty: queue_len * random factor
-        # Add some random noise to simulate realistic predictions
+        # Prepare input data for model prediction
+        # Model expects: processor_count, job_size_mb, queue_ahead_length
+        input_data = pd.DataFrame({
+            'processor_count': [num_processors],
+            'job_size_mb': [job_size],
+            'queue_ahead_length': [queue_len]
+        })
 
+        # Make prediction using the trained model
+        prediction = model.predict(input_data)
+        predicted_time = float(prediction[0])
         
-        queue_penalty = queue_len * random.uniform(5, 15)
-        noise = random.uniform(-10, 10)
+        # Ensure prediction is positive
+        predicted_time = max(1.0, predicted_time)
 
-        logger.info(f"base = {base}")
-        
-        predicted_time = max(1.0, base + queue_penalty + noise)
-
-        logger.info(f"Returning predicted_job_time: {predicted_time:.2f}")
+        logger.info(f"Model predicted job_time: {predicted_time:.2f}")
 
         return jsonify({
             'predicted_job_time': round(predicted_time, 2),
@@ -109,6 +118,7 @@ def predict():
 
 
 if __name__ == '__main__':
-    logger.info("Starting Mock Prediction API on port 5000")
-    base = 30
+    logger.info("Starting Prediction API on port 5000")
+    if model is None:
+        logger.warning("WARNING: Model not loaded, API will return errors for predictions")
     app.run(host='0.0.0.0', port=5000, debug=False)
