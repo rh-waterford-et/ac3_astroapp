@@ -29,7 +29,8 @@ spec:
         - name: PROMETHEUS_URL
           value: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
         - name: NUMPROCESSORS_QUERY
-          value: "num_processors"
+          value: >-
+            count(kube_pod_status_phase{namespace="uc3-applications", pod=~"ucm-processor.*", phase="Running"} == 1)
         - name: JOBSIZE_QUERY
           value: "astroapp_job_size_mb"
         - name: QUEUELEN_QUERY
