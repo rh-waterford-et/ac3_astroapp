@@ -89,10 +89,15 @@ class PredictorClient:
             
             data = response.json()
             if data['status'] == 'success' and data['data']['result']:
-                value = float(data['data']['result'][0]['value'][1])
+                result = data['data']['result'][0]
+                value = float(result['value'][1])
+                timestamp = result['value'][0]
+                logger.info(f"Query '{query}' returned value={value} at timestamp={timestamp}")
+                logger.info(f"Total results count: {len(data['data']['result'])}")
                 return value
             else:
                 logger.warning(f"No data returned for query: {query}")
+                logger.warning(f"Response data: {data}")
                 return None
         except Exception as e:
             logger.error(f"Error querying Prometheus: {e}")
