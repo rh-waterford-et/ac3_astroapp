@@ -23,6 +23,9 @@ spec:
         - name: http
           containerPort: 5000
           protocol: TCP
+        env:
+        - name: TEST_PREDICTION_OFFSET
+          value: "0"
         resources:
           requests:
             memory: "64Mi"

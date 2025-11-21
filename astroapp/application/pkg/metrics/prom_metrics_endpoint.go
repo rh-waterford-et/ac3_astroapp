@@ -17,7 +17,6 @@ type PrometheusJobMetrics struct {
 	jobSize            *prometheus.GaugeVec
 	queueAheadLength   *prometheus.GaugeVec
 	completedJobs      *prometheus.CounterVec
-	activeUsers        *prometheus.GaugeVec
 	store              *MetricsStore
 }
 

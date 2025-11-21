@@ -9,6 +9,7 @@ using a trained machine learning model.
 import logging
 import pickle
 import pandas as pd
+import os
 from flask import Flask, request, jsonify
 
 logging.basicConfig(
@@ -29,11 +30,23 @@ except Exception as e:
     logger.error(f"Failed to load model: {e}")
     model = None
 
+# Load test offset from environment (defaults to 0)
+TEST_OFFSET = float(os.getenv('TEST_PREDICTION_OFFSET', '0'))
+if TEST_OFFSET != 0:
+    logger.warning(f"⚠️  TEST MODE ACTIVE: Adding {TEST_OFFSET} seconds to all predictions")
+else:
+    logger.info("Test offset: 0 (normal operation)")
+
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint."""
     model_status = 'loaded' if model is not None else 'not_loaded'
-    return jsonify({'status': 'healthy', 'model': model_status}), 200
+    return jsonify({
+        'status': 'healthy',
+        'model': model_status,
+        'test_mode': TEST_OFFSET != 0,
+        'test_offset': TEST_OFFSET
+    }), 200
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -97,15 +110,24 @@ def predict():
         
         # Ensure prediction is positive
         predicted_time = max(1.0, predicted_time)
-
-        logger.info(f"Model predicted job_time: {predicted_time:.2f}")
+        
+        # Apply test offset if configured
+        original_prediction = predicted_time
+        predicted_time += TEST_OFFSET
+        
+        if TEST_OFFSET != 0:
+            logger.warning(f"⚠️  TEST MODE: Original={original_prediction:.2f}s, "
+                         f"Offset=+{TEST_OFFSET}s, Final={predicted_time:.2f}s")
+        else:
+            logger.info(f"Model predicted job_time: {predicted_time:.2f}s")
 
         return jsonify({
             'predicted_job_time': round(predicted_time, 2),
             'metadata': {
                 'num_processors': num_processors,
                 'job_size': job_size,
-                'queue_len': queue_len
+                'queue_len': queue_len,
+                'test_offset_applied': TEST_OFFSET
             }
         }), 200
 

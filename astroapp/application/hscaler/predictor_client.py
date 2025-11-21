@@ -106,11 +106,10 @@ class PredictorClient:
 
     def get_prometheus_metrics(self) -> Optional[dict]:
         """Fetch all required metrics from Prometheus."""
-        #num_processors = self.query_prometheus(self.num_processors_query)
-        num_processors = 1
+        num_processors = self.query_prometheus(self.num_processors_query) or 1
         logger.info(f"Job Size param: {self.job_size_query}")
-        job_size = self.query_prometheus(self.job_size_query)
-        queue_len = self.query_prometheus(self.queue_len_query)
+        job_size = self.query_prometheus(self.job_size_query) or 0
+        queue_len = self.query_prometheus(self.queue_len_query) or 0
 
         return {
             'num_processors': num_processors,

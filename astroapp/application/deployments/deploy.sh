@@ -46,6 +46,8 @@ oc apply -f frontend.yaml
 echo "🔄 Deploying scaling..."
 oc apply -f hscaler.yaml
 oc apply -f hscaler-model.yaml
+oc apply -f hpa.yaml
+oc apply -f prom-adapter.yaml
 
 
 echo "✅ Deployment complete!"

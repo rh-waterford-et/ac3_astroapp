@@ -32,9 +32,9 @@ spec:
           value: >-
             count(kube_pod_status_phase{namespace="uc3-applications", pod=~"ucm-processor.*", phase="Running"} == 1)
         - name: JOBSIZE_QUERY
-          value: "topk(1, astroapp_job_size_mb)"
+          value: "avg(avg_over_time(astroapp_job_size_mb[30s]))"
         - name: QUEUELEN_QUERY
-          value: "topk(1, astroapp_job_queue_ahead_length)"
+          value: "avg(avg_over_time(astroapp_job_queue_ahead_length[30s]))"
         - name: QUERY_INTERVAL_SECONDS
           value: "10"
         - name: AVERAGING_WINDOW_SIZE

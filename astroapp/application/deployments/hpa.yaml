@@ -1,0 +1,26 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ucm-processor-hpa
+  namespace: uc3-applications 
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ucm-processor-deployment
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: External
+    external:
+      metric:
+        ## This name exactly matches the 'as:' field from the new adapter rule.
+        name: "predicted_job_time_seconds"
+        ## This selector finds the metric labeled for the correct namespace.
+        selector:
+          matchLabels:
+            namespace: "uc3-applications"
+      target:
+        type: AverageValue
+        ## This example will scale up if the average job time exceeds 300 seconds.
+        averageValue: "100"

@@ -1,0 +1,192 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-adapter
+  namespace: openshift-user-workload-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-adapter
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - namespaces
+  - pods
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-adapter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-adapter
+subjects:
+- kind: ServiceAccount
+  name: prometheus-adapter
+  namespace: openshift-user-workload-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-adapter-monitoring-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view
+subjects:
+- kind: ServiceAccount
+  name: prometheus-adapter
+  namespace: openshift-user-workload-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-adapter-system-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: prometheus-adapter
+  namespace: openshift-user-workload-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus-adapter-auth-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: prometheus-adapter
+  namespace: openshift-user-workload-monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-adapter-config
+  namespace: openshift-user-workload-monitoring
+data:
+  config.yaml: |
+    rules: []
+    externalRules:
+    - seriesQuery: 'predicted_job_time_avg{namespace="uc3-applications"}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+      name:
+        as: "predicted_job_time_seconds"
+      metricsQuery: 'sum(predicted_job_time_avg{<<.LabelMatchers>>}) by (namespace)'
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-adapter
+  namespace: openshift-user-workload-monitoring
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: prometheus-adapter-tls
+spec:
+  ports:
+  - name: https
+    port: 443
+    targetPort: 6443
+  selector:
+    app: prometheus-adapter
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-adapter
+  namespace: openshift-user-workload-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-adapter
+  template:
+    metadata:
+      labels:
+        app: prometheus-adapter
+    spec:
+      serviceAccountName: prometheus-adapter
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: prometheus-adapter
+        image: registry.k8s.io/prometheus-adapter/prometheus-adapter:v0.11.2
+        args:
+        - --secure-port=6443
+        - --tls-cert-file=/var/run/serving-cert/tls.crt
+        - --tls-private-key-file=/var/run/serving-cert/tls.key
+        - --cert-dir=/tmp/cert
+        - --prometheus-url=https://thanos-querier.openshift-monitoring.svc.cluster.local:9091
+        - --prometheus-ca-file=/etc/service-ca-bundle/service-ca.crt
+        - --prometheus-client-tls-cert-file=/etc/prometheus-client-tls/tls.crt
+        - --prometheus-client-tls-key-file=/etc/prometheus-client-tls/tls.key
+        - --prometheus-token-file=/var/run/secrets/kubernetes.io/serviceaccount/token
+        - --config=/etc/adapter/config.yaml
+        - --v=6
+        ports:
+        - containerPort: 6443
+          name: https
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: config
+          mountPath: /etc/adapter
+          readOnly: true
+        - name: serving-cert
+          mountPath: /var/run/serving-cert
+          readOnly: true
+        - name: client-tls-secret
+          mountPath: /etc/prometheus-client-tls
+          readOnly: true
+        - name: service-ca-bundle
+          mountPath: /etc/service-ca-bundle
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-adapter-config
+      - name: serving-cert
+        secret:
+          secretName: prometheus-adapter-tls
+      - name: client-tls-secret
+        secret:
+          secretName: prometheus-user-workload-tls
+      - name: service-ca-bundle
+        configMap:
+          name: openshift-service-ca.crt
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1beta1.external.metrics.k8s.io
+spec:
+  service:
+    name: prometheus-adapter
+    namespace: openshift-user-workload-monitoring
+  group: external.metrics.k8s.io
+  version: v1beta1
+  insecureSkipTLSVerify: true
+  groupPriorityMinimum: 100
+  versionPriority: 100
