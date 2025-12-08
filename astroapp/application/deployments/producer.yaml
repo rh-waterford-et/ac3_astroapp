@@ -22,6 +22,7 @@ spec:
           claimName: ucm-pv-claim-producer
       containers:
       - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
+        imagePullPolicy: Always
         name: watcher-producer
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
@@ -91,6 +92,7 @@ spec:
         securityContext:
           privileged: true
       - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
+        imagePullPolicy: Always
         name: http-server
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
@@ -142,6 +144,7 @@ spec:
         securityContext:
           privileged: true
       - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
+        imagePullPolicy: Always
         name: receiver-producer
         workingDir: /processing_data/
         volumeMounts:
@@ -193,6 +196,7 @@ spec:
         - name: METRICS
           value: "metrics"
       - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
+        imagePullPolicy: Always
         name: aggregator
         workingDir: /processing_data/
         ports:

@@ -18,6 +18,7 @@ type PrometheusJobMetrics struct {
 	queueAheadLength   *prometheus.GaugeVec
 	completedJobs      *prometheus.CounterVec
 	store              *MetricsStore
+	queueStartTime     *prometheus.GaugeVec
 }
 
 // NewPrometheusJobMetrics creates and registers Prometheus metrics
@@ -56,6 +57,13 @@ func NewPrometheusJobMetrics(store *MetricsStore, registry *prometheus.Registry)
 			},
 			[]string{"batch_id", "job_id"},
 		),
+		queueStartTime: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "astroapp_job_queue_start_time_seconds",
+				Help: "Unix timestamp when the job was sent to the queue (seconds since epoch)",
+			},
+			[]string{"batch_id", "job_id"},
+		),
 		queueAheadLength: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "astroapp_job_queue_ahead_length",
@@ -77,6 +85,7 @@ func NewPrometheusJobMetrics(store *MetricsStore, registry *prometheus.Registry)
 	registry.MustRegister(pm.processingDuration)
 	registry.MustRegister(pm.totalDuration)
 	registry.MustRegister(pm.jobSize)
+	registry.MustRegister(pm.queueStartTime)
 	registry.MustRegister(pm.queueAheadLength)
 	registry.MustRegister(pm.completedJobs)
 
@@ -95,7 +104,7 @@ func (pm *PrometheusJobMetrics) UpdateMetrics(ctx context.Context) error {
 	// For each batch, get all jobs and update metrics
 	for _, batchID := range batchIDs {
 		jobs, err := pm.store.GetBatchJobes(ctx, batchID)
-		log.Print(jobs)
+		
 		if err != nil {
 			log.Printf("Error getting jobs for batch %s: %v", batchID, err)
 			continue
@@ -119,6 +128,16 @@ func (pm *PrometheusJobMetrics) UpdateMetrics(ctx context.Context) error {
 				pm.queueAheadLength.WithLabelValues(job.BatchID, job.JobID).Set(float64(job.JobQueueAheadLength))
 			}
 
+			// Queue start time
+			if !job.QueueStartTime.IsZero() {
+				queueStartUnix := float64(job.QueueStartTime.Unix())
+				pm.queueStartTime.WithLabelValues(job.BatchID, job.JobID).Set(queueStartUnix)
+			}
+
+			// Update counter for completed jobs
+			if job.IsComplete {
+				pm.completedJobs.WithLabelValues(job.BatchID).Inc()
+			}
 		}
 	}
 
