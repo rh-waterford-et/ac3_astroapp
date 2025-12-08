@@ -101,18 +101,28 @@ func (mdc *MultiDatasetController) Run() error {
 
 	log.Printf("[EXPERIMENT] Starting with %d datasets", mdc.experiment.GetTotalDatasetCount())
 
-	// Step 1: Scale to configured processor count
+	// Step 1: Scale to configured processor count (if enabled)
 	processorCount := mdc.config.Scaling.ProcessorCount
-	log.Printf("[EXPERIMENT] Scaling to %d processors", processorCount)
-	err := mdc.scaler.Scale(mdc.ctx, int32(processorCount))
-	if err != nil {
-		return fmt.Errorf("failed to scale to %d processors: %w", processorCount, err)
-	}
+	var err error
+	if mdc.config.Scaling.ShouldScale() {
+		log.Printf("[EXPERIMENT] Scaling to %d processors", processorCount)
+		err = mdc.scaler.Scale(mdc.ctx, int32(processorCount))
+		if err != nil {
+			return fmt.Errorf("failed to scale to %d processors: %w", processorCount, err)
+		}
 
-	// Wait for stabilization
-	if mdc.config.Scaling.StabilizeTime > 0 {
-		log.Printf("[EXPERIMENT] Waiting for stabilization (%s)", mdc.config.Scaling.StabilizeTime)
-		time.Sleep(mdc.config.Scaling.StabilizeTime)
+		// Wait for stabilization
+		if mdc.config.Scaling.StabilizeTime > 0 {
+			log.Printf("[EXPERIMENT] Waiting for stabilization (%s)", mdc.config.Scaling.StabilizeTime)
+			time.Sleep(mdc.config.Scaling.StabilizeTime)
+		}
+	} else {
+		log.Printf("[EXPERIMENT] Scaling disabled - using existing/HPA-managed pod count")
+		// Optionally query current scale for reference
+		currentScale, err := mdc.scaler.GetCurrentScale(mdc.ctx)
+		if err == nil {
+			log.Printf("[EXPERIMENT] Current processor count: %d", currentScale)
+		}
 	}
 
 	// Step 2: Upload all datasets simultaneously (new optimized approach)
@@ -147,10 +157,18 @@ func (mdc *MultiDatasetController) Run() error {
 	return nil
 }
 
-// uploadAllDatasets uploads all datasets to S3 simultaneously for faster preparation
+// uploadAllDatasets uploads all datasets to S3 with staggered starts to avoid overwhelming S3
 func (mdc *MultiDatasetController) uploadAllDatasets() error {
-	datasets := mdc.experiment.GetAllDatasets()
-	log.Printf("[EXPERIMENT] Uploading %d datasets simultaneously...", len(datasets))
+	datasetsMap := mdc.experiment.GetAllDatasets()
+	startInterval := mdc.config.Workload.GetDatasetStartInterval()
+
+	// Convert map to slice for ordered iteration
+	datasets := make([]*collector.DatasetExecution, 0, len(datasetsMap))
+	for _, dataset := range datasetsMap {
+		datasets = append(datasets, dataset)
+	}
+
+	log.Printf("[EXPERIMENT] Uploading %d datasets with %s interval between starts...", len(datasets), startInterval)
 
 	// Use a channel to collect upload results
 	type uploadResult struct {
@@ -161,8 +179,8 @@ func (mdc *MultiDatasetController) uploadAllDatasets() error {
 
 	resultChan := make(chan uploadResult, len(datasets))
 
-	// Start all uploads simultaneously
-	for _, datasetExec := range datasets {
+	// Start uploads with staggered delays to avoid overwhelming S3
+	for i, datasetExec := range datasets {
 		go func(de *collector.DatasetExecution) {
 			datasetName := de.Config.Name
 			processorType := de.Config.ProcessorType
@@ -177,6 +195,12 @@ func (mdc *MultiDatasetController) uploadAllDatasets() error {
 				err:           err,
 			}
 		}(datasetExec)
+
+		// Wait before starting next upload (except for the last one)
+		if i < len(datasets)-1 && startInterval > 0 {
+			log.Printf("[EXPERIMENT] Waiting %s before starting next upload...", startInterval)
+			time.Sleep(startInterval)
+		}
 	}
 
 	// Collect all upload results

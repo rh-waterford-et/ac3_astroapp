@@ -44,7 +44,7 @@ COPY --from=builder /app/configs ./configs
 # Copy cleanup scripts
 COPY --from=builder /app/scripts ./scripts
 
-# Copy dataset files from host system
+# Copy dataset files from host system (from build context root)
 COPY datasets /app/datasets/
 
 # Create directories for data and results
