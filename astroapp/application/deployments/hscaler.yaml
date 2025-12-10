@@ -39,6 +39,8 @@ spec:
           value: "10"
         - name: AVERAGING_WINDOW_SIZE
           value: "5"
+        - name: AVERAGING_WINDOW_MINUTES
+          value: "5"
         - name: STALENESS_TIMEOUT_SECONDS
           value: "300"
         - name: EXPORTER_PORT
