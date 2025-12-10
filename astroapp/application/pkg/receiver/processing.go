@@ -106,18 +106,13 @@ func (r *Receiver) processStandardMessage(d amqp.Delivery, side, appName, batchI
 	r.updateProgress(appName, jobID, api.StageProcessing, 20.0)
 
 	// Validate batch metadata
-	jobSize, filenames, ok := r.validateJobMetadata(d, jobID)
+	jobSize, _, ok := r.validateJobMetadata(d, jobID)
 	if !ok {
 		return
 	}
 
-	jobSizeMB := r.calculateJobSizeMB(d.Body, filenames)
+	// Job size is now recorded on producer side before sending to queue
 
-	// Record job size in metrics
-
-	if side == "processor" && jobSizeMB > 0 && r.RedisClient != nil {
-		r.recordJobSize(batchID, jobID, jobSizeMB)
-	}
 	// Process message body
 	msgBody, ok := r.processMessageBody(d, jobID, jobSize)
 	if !ok {
@@ -154,10 +149,7 @@ func (r *Receiver) ProcessBinaryMessage(d amqp.Delivery, side string, appName st
 		return
 	}
 
-	jobSizeMB := r.calculateBinaryJobSizeMB(d.Body, filenames)
-	if batchID, ok := d.Headers["batch_id"].(string); ok && jobSizeMB > 0 && r.RedisClient != nil && side == "processor" {
-		r.recordJobSize(batchID, jobID, jobSizeMB)
-	}
+	// Job size is now recorded on producer side before sending to queue
 
 	log.Printf("│ Processing binary batch of %d files:", jobSize)
 	for i, filename := range filenames {
