@@ -211,6 +211,14 @@ spec:
         command: ["/uid_entrpoint.sh"]
         args: ["/usr/bin/ucm", "aggregator"]
         env:
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASSWORD
+          value: "guest"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
         - name: REDIS_HOST
           value: "redis"
         - name: REDIS_PORT

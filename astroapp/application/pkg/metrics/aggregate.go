@@ -10,19 +10,89 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rh-waterford-et/ac3_astroapp/pkg/queue"
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/s3bucket"
 )
 
 type AggregationService struct {
-	metricsStore *MetricsStore
-	interval     time.Duration
+	metricsStore          *MetricsStore
+	interval              time.Duration
+	queue                 queue.QueueInterface
+	queueName             string
+	queueMonitorInterval  time.Duration
 }
 
 func NewAggregationService(metricsStore *MetricsStore, interval time.Duration) *AggregationService {
 	return &AggregationService{
-		metricsStore: metricsStore,
-		interval:     interval,
+		metricsStore:         metricsStore,
+		interval:             interval,
+		queueMonitorInterval: 10 * time.Second,
+		queueName:            "producer_to_processor_queue",
 	}
+}
+
+// SetQueue sets the queue interface for queue length monitoring
+func (as *AggregationService) SetQueue(q queue.QueueInterface) {
+	as.queue = q
+}
+
+// RegisterQueueLengthMetric registers the queue length gauge with a Prometheus registry
+func (as *AggregationService) RegisterQueueLengthMetric(registry *prometheus.Registry) {
+	registry.MustRegister(QueueLengthGauge)
+}
+
+// RunQueueLengthMonitor starts a goroutine that polls queue length every 10 seconds
+func (as *AggregationService) RunQueueLengthMonitor(ctx context.Context) {
+	if as.queue == nil {
+		log.Printf("Warning: Queue not set, queue length monitoring disabled")
+		return
+	}
+
+	ticker := time.NewTicker(as.queueMonitorInterval)
+	defer ticker.Stop()
+
+	log.Printf("Starting queue length monitor with interval %v for queue %s", as.queueMonitorInterval, as.queueName)
+
+	// Initialize metric to 0 to ensure it appears in Prometheus output
+	QueueLengthGauge.WithLabelValues(as.queueName).Set(0)
+
+	// Initial measurement
+	as.updateQueueLength()
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("Stopping queue length monitor")
+			return
+		case <-ticker.C:
+			as.updateQueueLength()
+		}
+	}
+}
+
+// updateQueueLength fetches the current queue length and updates the Prometheus metric
+func (as *AggregationService) updateQueueLength() {
+	// First ensure the queue exists by declaring it (idempotent operation)
+	err := as.queue.DeclareQueue(as.queueName)
+	if err != nil {
+		log.Printf("Error declaring queue %s: %v", as.queueName, err)
+		// Set to 0 if queue doesn't exist yet
+		QueueLengthGauge.WithLabelValues(as.queueName).Set(0)
+		return
+	}
+
+	queueInfo, err := as.queue.InspectQueue(as.queueName)
+	if err != nil {
+		log.Printf("Error inspecting queue %s: %v", as.queueName, err)
+		// Set to 0 on error
+		QueueLengthGauge.WithLabelValues(as.queueName).Set(0)
+		return
+	}
+
+	queueLength := float64(queueInfo.Messages)
+	QueueLengthGauge.WithLabelValues(as.queueName).Set(queueLength)
+	log.Printf("Queue length updated: %s = %d messages", as.queueName, queueInfo.Messages)
 }
 
 func (as *AggregationService) Run(ctx context.Context) {

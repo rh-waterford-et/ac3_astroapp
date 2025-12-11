@@ -21,6 +21,15 @@ type PrometheusJobMetrics struct {
 	queueStartTime     *prometheus.GaugeVec
 }
 
+// QueueLengthGauge is a Prometheus gauge for tracking the current queue length
+var QueueLengthGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "astroapp_queue_length",
+		Help: "Current number of messages in the RabbitMQ queue",
+	},
+	[]string{"queue_name"},
+)
+
 // NewPrometheusJobMetrics creates and registers Prometheus metrics
 func NewPrometheusJobMetrics(store *MetricsStore, registry *prometheus.Registry) *PrometheusJobMetrics {
 	if registry == nil {
@@ -148,6 +157,10 @@ func (pm *PrometheusJobMetrics) UpdateMetrics(ctx context.Context) error {
 func StartMetricsServer(addr string, store *MetricsStore) error {
 	registry := prometheus.NewRegistry()
 	pm := NewPrometheusJobMetrics(store, registry)
+	
+	// Register the queue length gauge for queue monitoring
+	registry.MustRegister(QueueLengthGauge)
+	
 	log.Printf("--------------- Starting /metrics Server ---------------")
 	// Update metrics initially
 	ctx := context.Background()

@@ -241,17 +241,37 @@ func LaunchAggregator() {
 	metricsStore := metrics.NewMetricsStore(redisClient, 168*time.Hour)
 	aggregationService := metrics.NewAggregationService(metricsStore, 5*time.Minute)
 
+	// Create RabbitMQ connection for queue length monitoring
+	rabbitMQ, err := queue.NewRabbitMQConnection()
+	if err != nil {
+		log.Printf("Warning: Failed to connect to RabbitMQ for queue monitoring: %v", err)
+		log.Printf("Queue length monitoring will be disabled")
+	} else {
+		aggregationService.SetQueue(rabbitMQ)
+		log.Printf("✓ RabbitMQ connection established for queue length monitoring")
+	}
+
 	log.Printf("🔄 Starting Prometheus /metrics endpoint")
 	go func() {
 		if err := metrics.StartMetricsServer(":9090", metricsStore); err != nil {
 			log.Fatalf("Metrics server failed: %v", err)
 		}
 	}()
-	time.Sleep(1 * time.Second) // Give server time to start
+	time.Sleep(2 * time.Second) // Give server time to start and register metrics
 	log.Printf("🔄 Started Prometheus /metrics endpoint on :9090")
+
 	// Start aggregation service in background (only on processor side to avoid duplication)
 	if aggregationService != nil {
 		ctx := context.Background()
+
+		// Start queue length monitor in a separate goroutine (polls every 10 seconds)
+		go func() {
+			// Small delay to ensure metrics server is fully ready
+			time.Sleep(1 * time.Second)
+			aggregationService.RunQueueLengthMonitor(ctx)
+		}()
+		log.Printf("🔄 Started queue length monitor (10-second intervals)")
+
 		go func() {
 			time.Sleep(30 * time.Second)
 			// Run aggregation every 5 minutes
