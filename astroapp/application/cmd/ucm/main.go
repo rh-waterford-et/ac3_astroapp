@@ -242,14 +242,8 @@ func LaunchAggregator() {
 	aggregationService := metrics.NewAggregationService(metricsStore, 5*time.Minute)
 
 	// Create RabbitMQ connection for queue length monitoring
-	rabbitMQ, err := queue.NewRabbitMQConnection()
-	if err != nil {
-		log.Printf("Warning: Failed to connect to RabbitMQ for queue monitoring: %v", err)
-		log.Printf("Queue length monitoring will be disabled")
-	} else {
-		aggregationService.SetQueue(rabbitMQ)
-		log.Printf("✓ RabbitMQ connection established for queue length monitoring")
-	}
+	go retryRabbitConnection(context.Background(), aggregationService)
+log.Printf("🔄 RabbitMQ auto-reconnect enabled")
 
 	log.Printf("🔄 Starting Prometheus /metrics endpoint")
 	go func() {
@@ -282,4 +276,26 @@ func LaunchAggregator() {
 			time.Sleep(1 * time.Hour)
 		}
 	}
+}
+
+func retryRabbitConnection(ctx context.Context, aggregationService *metrics.AggregationService) {
+    for {
+        rabbitMQ, err := queue.NewRabbitMQConnection()
+        if err != nil {
+            log.Printf("RabbitMQ is unavailable, retrying in 10 seconds... Error: %v", err)
+            time.Sleep(10 * time.Second)
+            continue
+        }
+
+        log.Printf("✓ RabbitMQ connected")
+        aggregationService.SetQueue(rabbitMQ)
+
+        
+        err = rabbitMQ.Ping()
+        if err != nil {
+            log.Printf("RabbitMQ connection lost, reconnecting...")
+        }
+
+        time.Sleep(5 * time.Second)
+    }
 }
