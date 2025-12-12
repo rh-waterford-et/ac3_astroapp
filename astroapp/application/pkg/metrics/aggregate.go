@@ -44,6 +44,10 @@ func (as *AggregationService) RegisterQueueLengthMetric(registry *prometheus.Reg
 
 // RunQueueLengthMonitor starts a goroutine that polls queue length every 10 seconds
 func (as *AggregationService) RunQueueLengthMonitor(ctx context.Context) {
+	// Initialize metric to 0 BEFORE the nil check to ensure it always appears in Prometheus output
+	// even if queue connection fails
+	QueueLengthGauge.WithLabelValues(as.queueName).Set(0)
+
 	if as.queue == nil {
 		log.Printf("Warning: Queue not set, queue length monitoring disabled")
 		return
@@ -53,9 +57,6 @@ func (as *AggregationService) RunQueueLengthMonitor(ctx context.Context) {
 	defer ticker.Stop()
 
 	log.Printf("Starting queue length monitor with interval %v for queue %s", as.queueMonitorInterval, as.queueName)
-
-	// Initialize metric to 0 to ensure it appears in Prometheus output
-	QueueLengthGauge.WithLabelValues(as.queueName).Set(0)
 
 	// Initial measurement
 	as.updateQueueLength()

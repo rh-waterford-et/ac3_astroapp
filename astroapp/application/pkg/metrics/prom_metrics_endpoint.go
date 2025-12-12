@@ -161,6 +161,10 @@ func StartMetricsServer(addr string, store *MetricsStore) error {
 	// Register the queue length gauge for queue monitoring
 	registry.MustRegister(QueueLengthGauge)
 	
+	// Initialize the queue length metric immediately so it appears in Prometheus output
+	// The actual value will be updated by the queue length monitor
+	QueueLengthGauge.WithLabelValues("producer_to_processor_queue").Set(0)
+	
 	log.Printf("--------------- Starting /metrics Server ---------------")
 	// Update metrics initially
 	ctx := context.Background()
