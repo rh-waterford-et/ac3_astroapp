@@ -19,6 +19,7 @@ type PrometheusJobMetrics struct {
 	completedJobs      *prometheus.CounterVec
 	store              *MetricsStore
 	queueStartTime     *prometheus.GaugeVec
+	totalBatchDuration *prometheus.GaugeVec
 }
 
 // QueueLengthGauge is a Prometheus gauge for tracking the current queue length
@@ -87,6 +88,13 @@ func NewPrometheusJobMetrics(store *MetricsStore, registry *prometheus.Registry)
 			},
 			[]string{"batch_id"},
 		),
+		totalBatchDuration: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "astroapp_batch_total_duration_seconds",
+				Help: "Total batch duration from first job queue start to last job completion (seconds)",
+			},
+			[]string{"batch_id"},
+		),
 	}
 
 	// Register metrics
@@ -97,6 +105,7 @@ func NewPrometheusJobMetrics(store *MetricsStore, registry *prometheus.Registry)
 	registry.MustRegister(pm.queueStartTime)
 	registry.MustRegister(pm.queueAheadLength)
 	registry.MustRegister(pm.completedJobs)
+	registry.MustRegister(pm.totalBatchDuration)
 
 	return pm
 }
@@ -147,6 +156,16 @@ func (pm *PrometheusJobMetrics) UpdateMetrics(ctx context.Context) error {
 			if job.IsComplete {
 				pm.completedJobs.WithLabelValues(job.BatchID).Inc()
 			}
+		}
+
+		// Update batch-level metrics from batch summary
+		summary, err := pm.store.GetBatchSummary(ctx, batchID)
+		if err != nil {
+			log.Printf("Error getting batch summary for %s: %v", batchID, err)
+			continue
+		}
+		if summary != nil && summary.TotalBatchDuration > 0 {
+			pm.totalBatchDuration.WithLabelValues(batchID).Set(summary.TotalBatchDuration.Seconds())
 		}
 	}
 

@@ -536,7 +536,7 @@ Microservices_configuration:
 
 # Frontend
   - MicroserviceName: "frontend"
-    Image: "quay.io/bcapper30/uc3-apps:latest"
+    Image: "quay.io/rh_et_wd/ac3/astroapp-gui:voronoi"
     ID: "frontend"
     ClusterAffinity: "orchestrator"
     Dependencies:

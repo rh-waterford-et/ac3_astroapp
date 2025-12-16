@@ -241,9 +241,15 @@ func LaunchAggregator() {
 	metricsStore := metrics.NewMetricsStore(redisClient, 168*time.Hour)
 	aggregationService := metrics.NewAggregationService(metricsStore, 5*time.Minute)
 
-	// Create RabbitMQ connection for queue length monitoring
-	go retryRabbitConnection(context.Background(), aggregationService)
-log.Printf("🔄 RabbitMQ auto-reconnect enabled")
+	// Create RabbitMQ connection for queue length monitoring (blocking until first connection)
+	log.Printf("🔄 Connecting to RabbitMQ for queue monitoring...")
+	rabbitMQ := waitForRabbitConnection()
+	aggregationService.SetQueue(rabbitMQ)
+	log.Printf("✓ RabbitMQ connected for queue monitoring")
+
+	// Start background reconnection handler
+	go maintainRabbitConnection(context.Background(), aggregationService, rabbitMQ)
+	log.Printf("🔄 RabbitMQ auto-reconnect enabled")
 
 	log.Printf("🔄 Starting Prometheus /metrics endpoint")
 	go func() {
@@ -278,24 +284,36 @@ log.Printf("🔄 RabbitMQ auto-reconnect enabled")
 	}
 }
 
-func retryRabbitConnection(ctx context.Context, aggregationService *metrics.AggregationService) {
-    for {
-        rabbitMQ, err := queue.NewRabbitMQConnection()
-        if err != nil {
-            log.Printf("RabbitMQ is unavailable, retrying in 10 seconds... Error: %v", err)
-            time.Sleep(10 * time.Second)
-            continue
-        }
+// waitForRabbitConnection blocks until a RabbitMQ connection is established
+func waitForRabbitConnection() *queue.Queues {
+	for {
+		rabbitMQ, err := queue.NewRabbitMQConnection()
+		if err != nil {
+			log.Printf("RabbitMQ is unavailable, retrying in 10 seconds... Error: %v", err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		return rabbitMQ
+	}
+}
 
-        log.Printf("✓ RabbitMQ connected")
-        aggregationService.SetQueue(rabbitMQ)
+// maintainRabbitConnection monitors the connection and reconnects if it fails
+func maintainRabbitConnection(ctx context.Context, aggregationService *metrics.AggregationService, currentConn *queue.Queues) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 
-        
-        err = rabbitMQ.Ping()
-        if err != nil {
-            log.Printf("RabbitMQ connection lost, reconnecting...")
-        }
-
-        time.Sleep(5 * time.Second)
-    }
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := currentConn.Ping(); err != nil {
+				log.Printf("RabbitMQ connection lost, reconnecting...")
+				newConn := waitForRabbitConnection()
+				aggregationService.SetQueue(newConn)
+				currentConn = newConn
+				log.Printf("✓ RabbitMQ reconnected")
+			}
+		}
+	}
 }
