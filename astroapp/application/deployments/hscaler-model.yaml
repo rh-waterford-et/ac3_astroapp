@@ -17,12 +17,15 @@ spec:
     spec:
       containers:
       - name: model-api
-        image: quay.io/rcarroll/ac3_uc3/predicter_mock_api:latest
+        image: quay.io/rh_et_wd/ac3/predicter_mock_api:latest
         imagePullPolicy: Always
         ports:
         - name: http
           containerPort: 5000
           protocol: TCP
+        env:
+        - name: TEST_PREDICTION_OFFSET
+          value: "0"
         resources:
           requests:
             memory: "64Mi"

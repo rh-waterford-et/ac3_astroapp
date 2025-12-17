@@ -5,6 +5,7 @@ name: "test01-test01-burst-5proc-10datasets"
 description: "Simultaneous start - burst load test"
 
 scaling:
+  enable_scaling: false
   processor_count: 5
   stabilize_time: "180s"
 
@@ -31,7 +32,7 @@ workload:
     - name: "NGC7029"
       processor_type: "starlight"
   failure_strategy: "continue"
-  dataset_start_interval: "0s"
+  dataset_start_interval: "20s"
   job_size: 5
 
 metrics:

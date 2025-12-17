@@ -25,6 +25,13 @@ type ExperimentConfig struct {
 type ScalingConfig struct {
 	ProcessorCount int           `mapstructure:"processor_count"` // Number of processor pods to run
 	StabilizeTime  time.Duration `mapstructure:"stabilize_time"`  // Time to wait after scaling before triggering processing
+	EnableScaling  bool          `mapstructure:"enable_scaling"`  // Enable/disable scaling (set false when using HPA)
+}
+
+// ShouldScale returns whether the experiment tool should perform scaling operations
+// Defaults to true for backward compatibility (set in loader.go)
+func (s *ScalingConfig) ShouldScale() bool {
+	return s.EnableScaling
 }
 
 // DatasetConfig defines a single dataset configuration

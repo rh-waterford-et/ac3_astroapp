@@ -17,11 +17,12 @@ spec:
     spec:
       serviceAccountName: starlight-sa
       volumes:
-      - name: ucm-pv-storage-b
+      - name: ucm-pv-storage
         persistentVolumeClaim:
           claimName: ucm-pv-claim-producer
       containers:
       - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
+        imagePullPolicy: Always
         name: watcher-producer
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
@@ -87,10 +88,11 @@ spec:
         - containerPort: 5672
         volumeMounts:
         - mountPath: /processing_data/
-          name: ucm-pv-storage-b
+          name: ucm-pv-storage
         securityContext:
           privileged: true
       - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
+        imagePullPolicy: Always
         name: http-server
         workingDir: /processing_data/
         command: ["/uid_entrpoint.sh"]
@@ -138,15 +140,16 @@ spec:
         - containerPort: 8080
         volumeMounts:
         - mountPath: /processing_data/
-          name: ucm-pv-storage-b
+          name: ucm-pv-storage
         securityContext:
           privileged: true
       - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
-        name: receiver-producer-b
+        imagePullPolicy: Always
+        name: receiver-producer
         workingDir: /processing_data/
         volumeMounts:
         - mountPath: /processing_data/
-          name: ucm-pv-storage-b
+          name: ucm-pv-storage
         securityContext:
           privileged: true
         command: ["/uid_entrpoint.sh"]
@@ -193,6 +196,7 @@ spec:
         - name: METRICS
           value: "metrics"
       - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
+        imagePullPolicy: Always
         name: aggregator
         workingDir: /processing_data/
         ports:
@@ -201,12 +205,20 @@ spec:
           name: metrics
         volumeMounts:
         - mountPath: /processing_data/
-          name: ucm-pv-storage-b
+          name: ucm-pv-storage
         securityContext:
           privileged: true
         command: ["/uid_entrpoint.sh"]
         args: ["/usr/bin/ucm", "aggregator"]
         env:
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASSWORD
+          value: "guest"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
         - name: REDIS_HOST
           value: "redis"
         - name: REDIS_PORT

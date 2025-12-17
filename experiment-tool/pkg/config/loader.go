@@ -62,6 +62,7 @@ func setDefaults() {
 	// Scaling defaults
 	viper.SetDefault("scaling.processor_count", 3)
 	viper.SetDefault("scaling.stabilize_time", "0s")
+	viper.SetDefault("scaling.enable_scaling", true) // Default to enabled for backward compatibility
 
 	// Workload defaults
 	viper.SetDefault("workload.dataset", "NGC7025")

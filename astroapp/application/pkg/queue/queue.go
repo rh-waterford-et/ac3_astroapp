@@ -244,3 +244,11 @@ func (q *Queues) GetOne(queueName string) (amqp.Delivery, bool, error) {
 	)
 	return msg, ok, err
 }
+
+// Ping checks if the RabbitMQ connection is alive
+func (q *Queues) Ping() error {
+	if !q.isConnected() {
+		return fmt.Errorf("RabbitMQ connection is not alive")
+	}
+	return nil
+}

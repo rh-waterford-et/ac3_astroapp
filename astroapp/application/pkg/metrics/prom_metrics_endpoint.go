@@ -17,9 +17,19 @@ type PrometheusJobMetrics struct {
 	jobSize            *prometheus.GaugeVec
 	queueAheadLength   *prometheus.GaugeVec
 	completedJobs      *prometheus.CounterVec
-	activeUsers        *prometheus.GaugeVec
 	store              *MetricsStore
+	queueStartTime     *prometheus.GaugeVec
+	totalBatchDuration *prometheus.GaugeVec
 }
+
+// QueueLengthGauge is a Prometheus gauge for tracking the current queue length
+var QueueLengthGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "astroapp_queue_length",
+		Help: "Current number of messages in the RabbitMQ queue",
+	},
+	[]string{"queue_name"},
+)
 
 // NewPrometheusJobMetrics creates and registers Prometheus metrics
 func NewPrometheusJobMetrics(store *MetricsStore, registry *prometheus.Registry) *PrometheusJobMetrics {
@@ -57,6 +67,13 @@ func NewPrometheusJobMetrics(store *MetricsStore, registry *prometheus.Registry)
 			},
 			[]string{"batch_id", "job_id"},
 		),
+		queueStartTime: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "astroapp_job_queue_start_time_seconds",
+				Help: "Unix timestamp when the job was sent to the queue (seconds since epoch)",
+			},
+			[]string{"batch_id", "job_id"},
+		),
 		queueAheadLength: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "astroapp_job_queue_ahead_length",
@@ -71,6 +88,13 @@ func NewPrometheusJobMetrics(store *MetricsStore, registry *prometheus.Registry)
 			},
 			[]string{"batch_id"},
 		),
+		totalBatchDuration: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "astroapp_batch_total_duration_seconds",
+				Help: "Total batch duration from first job queue start to last job completion (seconds)",
+			},
+			[]string{"batch_id"},
+		),
 	}
 
 	// Register metrics
@@ -78,8 +102,10 @@ func NewPrometheusJobMetrics(store *MetricsStore, registry *prometheus.Registry)
 	registry.MustRegister(pm.processingDuration)
 	registry.MustRegister(pm.totalDuration)
 	registry.MustRegister(pm.jobSize)
+	registry.MustRegister(pm.queueStartTime)
 	registry.MustRegister(pm.queueAheadLength)
 	registry.MustRegister(pm.completedJobs)
+	registry.MustRegister(pm.totalBatchDuration)
 
 	return pm
 }
@@ -96,7 +122,7 @@ func (pm *PrometheusJobMetrics) UpdateMetrics(ctx context.Context) error {
 	// For each batch, get all jobs and update metrics
 	for _, batchID := range batchIDs {
 		jobs, err := pm.store.GetBatchJobes(ctx, batchID)
-		log.Print(jobs)
+		
 		if err != nil {
 			log.Printf("Error getting jobs for batch %s: %v", batchID, err)
 			continue
@@ -120,6 +146,26 @@ func (pm *PrometheusJobMetrics) UpdateMetrics(ctx context.Context) error {
 				pm.queueAheadLength.WithLabelValues(job.BatchID, job.JobID).Set(float64(job.JobQueueAheadLength))
 			}
 
+			// Queue start time
+			if !job.QueueStartTime.IsZero() {
+				queueStartUnix := float64(job.QueueStartTime.Unix())
+				pm.queueStartTime.WithLabelValues(job.BatchID, job.JobID).Set(queueStartUnix)
+			}
+
+			// Update counter for completed jobs
+			if job.IsComplete {
+				pm.completedJobs.WithLabelValues(job.BatchID).Inc()
+			}
+		}
+
+		// Update batch-level metrics from batch summary
+		summary, err := pm.store.GetBatchSummary(ctx, batchID)
+		if err != nil {
+			log.Printf("Error getting batch summary for %s: %v", batchID, err)
+			continue
+		}
+		if summary != nil && summary.TotalBatchDuration > 0 {
+			pm.totalBatchDuration.WithLabelValues(batchID).Set(summary.TotalBatchDuration.Seconds())
 		}
 	}
 
@@ -130,6 +176,14 @@ func (pm *PrometheusJobMetrics) UpdateMetrics(ctx context.Context) error {
 func StartMetricsServer(addr string, store *MetricsStore) error {
 	registry := prometheus.NewRegistry()
 	pm := NewPrometheusJobMetrics(store, registry)
+	
+	// Register the queue length gauge for queue monitoring
+	registry.MustRegister(QueueLengthGauge)
+	
+	// Initialize the queue length metric immediately so it appears in Prometheus output
+	// The actual value will be updated by the queue length monitor
+	QueueLengthGauge.WithLabelValues("producer_to_processor_queue").Set(0)
+	
 	log.Printf("--------------- Starting /metrics Server ---------------")
 	// Update metrics initially
 	ctx := context.Background()

@@ -241,17 +241,37 @@ func LaunchAggregator() {
 	metricsStore := metrics.NewMetricsStore(redisClient, 168*time.Hour)
 	aggregationService := metrics.NewAggregationService(metricsStore, 5*time.Minute)
 
+	// Create RabbitMQ connection for queue length monitoring (blocking until first connection)
+	log.Printf("🔄 Connecting to RabbitMQ for queue monitoring...")
+	rabbitMQ := waitForRabbitConnection()
+	aggregationService.SetQueue(rabbitMQ)
+	log.Printf("✓ RabbitMQ connected for queue monitoring")
+
+	// Start background reconnection handler
+	go maintainRabbitConnection(context.Background(), aggregationService, rabbitMQ)
+	log.Printf("🔄 RabbitMQ auto-reconnect enabled")
+
 	log.Printf("🔄 Starting Prometheus /metrics endpoint")
 	go func() {
 		if err := metrics.StartMetricsServer(":9090", metricsStore); err != nil {
 			log.Fatalf("Metrics server failed: %v", err)
 		}
 	}()
-	time.Sleep(1 * time.Second) // Give server time to start
+	time.Sleep(2 * time.Second) // Give server time to start and register metrics
 	log.Printf("🔄 Started Prometheus /metrics endpoint on :9090")
+
 	// Start aggregation service in background (only on processor side to avoid duplication)
 	if aggregationService != nil {
 		ctx := context.Background()
+
+		// Start queue length monitor in a separate goroutine (polls every 10 seconds)
+		go func() {
+			// Small delay to ensure metrics server is fully ready
+			time.Sleep(1 * time.Second)
+			aggregationService.RunQueueLengthMonitor(ctx)
+		}()
+		log.Printf("🔄 Started queue length monitor (10-second intervals)")
+
 		go func() {
 			time.Sleep(30 * time.Second)
 			// Run aggregation every 5 minutes
@@ -260,6 +280,40 @@ func LaunchAggregator() {
 		log.Printf("🔄 Started batch metrics aggregation service (5-minute intervals)")
 		for {
 			time.Sleep(1 * time.Hour)
+		}
+	}
+}
+
+// waitForRabbitConnection blocks until a RabbitMQ connection is established
+func waitForRabbitConnection() *queue.Queues {
+	for {
+		rabbitMQ, err := queue.NewRabbitMQConnection()
+		if err != nil {
+			log.Printf("RabbitMQ is unavailable, retrying in 10 seconds... Error: %v", err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		return rabbitMQ
+	}
+}
+
+// maintainRabbitConnection monitors the connection and reconnects if it fails
+func maintainRabbitConnection(ctx context.Context, aggregationService *metrics.AggregationService, currentConn *queue.Queues) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := currentConn.Ping(); err != nil {
+				log.Printf("RabbitMQ connection lost, reconnecting...")
+				newConn := waitForRabbitConnection()
+				aggregationService.SetQueue(newConn)
+				currentConn = newConn
+				log.Printf("✓ RabbitMQ reconnected")
+			}
 		}
 	}
 }

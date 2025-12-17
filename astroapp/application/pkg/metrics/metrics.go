@@ -58,43 +58,6 @@ func (ms *MetricsStore) getBatchPattern(batchID string) string {
 	return fmt.Sprintf("%s:%s:*", ms.keyPrefix, batchID)
 }
 
-/*func (ms *MetricsStore) RecordMetric(ctx context.Context, metric *MetricRecord) error {
-	ms.calculateDurations(metric)
-	key := ms.GetJobKey(metric.BatchID, metric.JobID)
-
-	values := map[string]interface{}{
-		"batch_id":           metric.BatchID,
-		"job_id":             metric.JobID,
-		"queue_start_time":   metric.QueueStartTime.Format(time.RFC3339Nano),
-		"queue_receive_time": metric.QueueReceiveTime.Format(time.RFC3339Nano),
-		"job_end_time":       metric.JobEndTime.Format(time.RFC3339Nano),
-
-		"queue_duration":      metric.QueueDuration,
-		"processing_duration": metric.ProcessingDuration,
-		"total_duration":      metric.TotalDuration,
-
-		"is_complete": metric.IsComplete,
-
-		"job_size_mb": metric.JobSizeMB,
-
-		"job_queue_ahead_length": metric.JobQueueAheadLength,
-	}
-
-	err := ms.redis.HSet(ctx, key, values)
-	if err != nil {
-		return fmt.Errorf("failed to record metric: %w", err)
-	}
-
-	if ms.ttl > 0 {
-		err = ms.redis.Expire(ctx, key, ms.ttl)
-		if err != nil {
-			return fmt.Errorf("failed to set TTL for metric: %w", err)
-		}
-	}
-
-	return nil
-}*/
-
 func (ms *MetricsStore) calculateDurations(metric *MetricRecord) {
 	metric.IsComplete = false
 

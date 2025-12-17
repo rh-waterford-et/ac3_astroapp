@@ -75,6 +75,17 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string,
 					log.Printf("Failed to record job_queue_ahead_length: %v", err)
 				}
 
+				// Calculate and record job size in MB
+				jobSizeMB := calculateJobSizeMB(batch.Files)
+				if jobSizeMB > 0 {
+					err = metricsStore.UpdateMetricField(metricsCtx, batch.ID, "job_size_mb", batch.JobID, jobSizeMB)
+					if err != nil {
+						log.Printf("Failed to record job_size_mb: %v", err)
+					} else {
+						log.Printf("Recorded job size: %.2f MB for batch %s, job %s", jobSizeMB, batch.ID, batch.JobID)
+					}
+				}
+
 				/* // Record number of active consumers
 				err = metricsStore.UpdateMetricField(metricsCtx, batch.ID, "queue_consumers_count", batch.JobID, stats.Consumers)
 				if err != nil {
@@ -161,4 +172,25 @@ func (s *RabbitMQSender) SendBatch(batch api.Batch, appName string, side string,
 	log.Printf("DEBUG: Published message to queue %s", queueName)
 	log.Printf(" [x] Sent job with %d files for app %s\n", len(batch.Files), appName)
 	log.Printf("     Files: %s\n", strings.Join(filenames, ", "))
+}
+
+// calculateJobSizeMB calculates the total size of all files in MB
+func calculateJobSizeMB(files []api.DataFile) float64 {
+	totalSize := 0
+	totalFiles := 0
+	for _, file := range files {
+		// Skip .in files (config files, not actual data)
+		if strings.HasSuffix(file.Name, ".in") {
+			continue
+		}
+		totalSize += len(file.Content)
+		totalFiles++
+	}
+
+	// Convert bytes to MB
+	sizeMB := float64(totalSize) / (1024 * 1024)
+	log.Printf("DEBUG: Calculated job size: %.2f MB (%d bytes across %d files)",
+		sizeMB, totalSize, totalFiles)
+
+	return sizeMB
 }

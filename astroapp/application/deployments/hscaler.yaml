@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: predictor-client
-        image: quay.io/rcarroll/ac3_uc3/hautoscaler:latest
+        image: quay.io/rh_et_wd/ac3/hautoscaler:latest
         imagePullPolicy: Always
         ports:
         - name: metrics
@@ -29,7 +29,8 @@ spec:
         - name: PROMETHEUS_URL
           value: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
         - name: NUMPROCESSORS_QUERY
-          value: "num_processors"
+          value: >-
+            count(kube_pod_status_phase{namespace="uc3-applications", pod=~"ucm-processor.*", phase="Running"} == 1)
         - name: JOBSIZE_QUERY
           value: "astroapp_job_size_mb"
         - name: QUEUELEN_QUERY
@@ -38,6 +39,10 @@ spec:
           value: "10"
         - name: AVERAGING_WINDOW_SIZE
           value: "5"
+        - name: AVERAGING_WINDOW_MINUTES
+          value: "5"
+        - name: STALENESS_TIMEOUT_SECONDS
+          value: "300"
         - name: EXPORTER_PORT
           value: "9090"
         resources:
