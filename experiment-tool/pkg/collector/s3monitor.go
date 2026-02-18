@@ -82,15 +82,33 @@ func (s *S3Monitor) WaitForCompletionWithStatus(ctx context.Context, experiment 
 				continue
 			}
 
-			log.Printf("Dataset %s (%s): %d/%d files processed",
-				experiment.DatasetName,
-				experiment.ProcessorType,
-				outputCount,
-				experiment.ExpectedOutputCount)
+			failedCount := s.CountFailedFiles(experiment)
+			totalAccounted := outputCount + failedCount
 
-			if outputCount >= experiment.ExpectedOutputCount {
-				log.Printf("Dataset %s completed! (%d %s output files generated)",
-					experiment.DatasetName, outputCount, experiment.ProcessorType)
+			if failedCount > 0 {
+				log.Printf("Dataset %s (%s): %d/%d files processed (%d failed, %d total accounted)",
+					experiment.DatasetName,
+					experiment.ProcessorType,
+					outputCount,
+					experiment.ExpectedOutputCount,
+					failedCount,
+					totalAccounted)
+			} else {
+				log.Printf("Dataset %s (%s): %d/%d files processed",
+					experiment.DatasetName,
+					experiment.ProcessorType,
+					outputCount,
+					experiment.ExpectedOutputCount)
+			}
+
+			if totalAccounted >= experiment.ExpectedOutputCount {
+				if failedCount > 0 {
+					log.Printf("Dataset %s completed with %d failed files (%d output + %d failed = %d/%d)",
+						experiment.DatasetName, failedCount, outputCount, failedCount, totalAccounted, experiment.ExpectedOutputCount)
+				} else {
+					log.Printf("Dataset %s completed! (%d %s output files generated)",
+						experiment.DatasetName, outputCount, experiment.ProcessorType)
+				}
 				return nil
 			}
 		}
@@ -107,6 +125,27 @@ func (s *S3Monitor) CountOutputFiles(ctx context.Context, experiment *Experiment
 	default:
 		return 0, fmt.Errorf("unsupported processor type: %s", experiment.ProcessorType)
 	}
+}
+
+// CountFailedFiles reads the failed.txt from S3 and returns the number of failed filenames
+// The log is at <processorType>/output/<datasetName>/failed/failed.txt with one filename per line
+func (s *S3Monitor) CountFailedFiles(experiment *ExperimentRun) int {
+	s3Key := fmt.Sprintf("%s/output/%s/failed/failed.txt", experiment.ProcessorType, experiment.DatasetName)
+
+	content, err := s.s3Client.DownloadFile(s3Key)
+	if err != nil {
+		// No failed files log means no failures - this is the normal/happy path
+		return 0
+	}
+
+	count := 0
+	for _, line := range strings.Split(string(content), "\n") {
+		if strings.TrimSpace(line) != "" {
+			count++
+		}
+	}
+
+	return count
 }
 
 // countStarlightOutputs counts files directly in starlight/output/NGC7025/

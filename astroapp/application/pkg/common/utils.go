@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -37,6 +38,15 @@ func GetBatchInfoDir() string {
 	}
 
 	return baseDir
+}
+
+// GetFailedFilesPath returns the path to the failed files log
+func GetFailedFilesPath() string {
+	baseDir := os.Getenv("BATCH_INFO_DIR")
+	if baseDir == "" {
+		baseDir = "/processing_data/batch_info"
+	}
+	return filepath.Join(filepath.Dir(baseDir), "failed_files.log")
 }
 
 func (u *Utils) GenerateUUID() string {

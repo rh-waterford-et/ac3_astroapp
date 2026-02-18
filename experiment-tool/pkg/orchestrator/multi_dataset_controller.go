@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -144,13 +143,6 @@ func (mdc *MultiDatasetController) Run() error {
 	err = mdc.generateFinalReports()
 	if err != nil {
 		return fmt.Errorf("failed to generate final reports: %w", err)
-	}
-
-	// Step 6: Clean up shared volumes
-	err = mdc.cleanupSharedVolumes()
-	if err != nil {
-		log.Printf("[EXPERIMENT] Warning: failed to cleanup shared volumes: %v", err)
-		// Don't fail the experiment for cleanup issues
 	}
 
 	log.Printf("[EXPERIMENT] Completed! Data: %s", mdc.outputDir)
@@ -438,13 +430,6 @@ func (mdc *MultiDatasetController) runSingleDatasetCycle(datasetExec *collector.
 		// Don't fail the dataset for sorting issues
 	}
 
-	// Step 7: Clean up S3 output files
-	err = mdc.cleanupS3OutputFiles(ctx, experimentRun)
-	if err != nil {
-		log.Printf("[%s] Warning: failed to cleanup S3 output files: %v", datasetName, err)
-		// Don't fail the dataset for cleanup issues
-	}
-
 	return nil
 }
 
@@ -689,38 +674,6 @@ func (mdc *MultiDatasetController) appendToTrainingData(summaries map[string]*me
 		return fmt.Errorf("failed to write training data record: %w", err)
 	}
 
-	return nil
-}
-
-// cleanupS3OutputFiles removes S3 input, processed, and output files for a dataset
-func (mdc *MultiDatasetController) cleanupS3OutputFiles(ctx context.Context, experimentRun *collector.ExperimentRun) error {
-	log.Printf("[%s] Cleaning up S3 files (input, processed, output)...", experimentRun.DatasetName)
-
-	// Clean up input files for this specific dataset
-	inputPath := fmt.Sprintf("%s/input/%s/", experimentRun.ProcessorType, experimentRun.DatasetName)
-	log.Printf("[%s] Deleting S3 input directory: %s", experimentRun.DatasetName, inputPath)
-	err := mdc.s3Monitor.GetS3Client().DeleteDirectory(inputPath)
-	if err != nil {
-		log.Printf("[%s] Warning: failed to delete input directory %s: %v", experimentRun.DatasetName, inputPath, err)
-	}
-
-	// Clean up processed files for this specific dataset
-	processedPath := fmt.Sprintf("%s/processed/%s/", experimentRun.ProcessorType, experimentRun.DatasetName)
-	log.Printf("[%s] Deleting S3 processed directory: %s", experimentRun.DatasetName, processedPath)
-	err = mdc.s3Monitor.GetS3Client().DeleteDirectory(processedPath)
-	if err != nil {
-		log.Printf("[%s] Warning: failed to delete processed directory %s: %v", experimentRun.DatasetName, processedPath, err)
-	}
-
-	// Clean up output files for this specific dataset
-	outputPath := fmt.Sprintf("%s/output/%s/", experimentRun.ProcessorType, experimentRun.DatasetName)
-	log.Printf("[%s] Deleting S3 output directory: %s", experimentRun.DatasetName, outputPath)
-	err = mdc.s3Monitor.GetS3Client().DeleteDirectory(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to delete output directory %s: %w", outputPath, err)
-	}
-
-	log.Printf("[%s] Successfully deleted S3 files (input, processed, output)", experimentRun.DatasetName)
 	return nil
 }
 
@@ -1012,32 +965,6 @@ func (mdc *MultiDatasetController) mergeAllJobRecords() error {
 	}
 
 	log.Printf("[EXPERIMENT] Generated consolidated job records: %s (%d total records, sorted by queue_start_time)", consolidatedFile, len(allRecords))
-	return nil
-}
-
-// cleanupSharedVolumes runs the cleanup script to clear shared volumes after experiment completes
-func (mdc *MultiDatasetController) cleanupSharedVolumes() error {
-	log.Printf("[EXPERIMENT] Cleaning up shared volumes...")
-
-	scriptPath := "scripts/clear_shared_volumes.sh"
-
-	// Check if script exists
-	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		log.Printf("[EXPERIMENT] Warning: cleanup script not found at %s, skipping shared volume cleanup", scriptPath)
-		return nil
-	}
-
-	// Execute the cleanup script
-	cmd := exec.Command("/bin/bash", scriptPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to run cleanup script: %w", err)
-	}
-
-	log.Printf("[EXPERIMENT] Shared volumes cleaned successfully")
 	return nil
 }
 

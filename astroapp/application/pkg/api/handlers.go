@@ -2168,16 +2168,24 @@ func (h *FileUploadHandler) DownloadAllFiles(w http.ResponseWriter, r *http.Requ
 
 	log.Printf("Found %d files to zip for dataset %s", len(files), dataset)
 
-	// Create zip file in memory
-	zipBuffer := new(bytes.Buffer)
-	zipWriter := zip.NewWriter(zipBuffer)
+	// Set headers before streaming — no Content-Length since we stream on the fly
+	timestamp := time.Now().Format("20060102-150405")
+	zipFileName := fmt.Sprintf("%s-%s-%s-%s.zip", appType, dataset, fileType, timestamp)
 
-	// Download each file from S3 and add to zip
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", zipFileName))
+
+	// Stream zip directly to the response writer (no in-memory buffer)
+	zipWriter := zip.NewWriter(w)
+
+	// Download each file from S3 and stream into the zip
 	filesAdded := 0
 	for _, fileName := range files {
 		fullObjectKey := fmt.Sprintf("%s/%s", folderPath, fileName)
 
-		log.Printf("Downloading file %d/%d: %s", filesAdded+1, len(files), fileName)
+		if filesAdded%100 == 0 {
+			log.Printf("Zipping file %d/%d: %s", filesAdded+1, len(files), fileName)
+		}
 
 		content, err := h.S3Bucket.DownloadFile(fullObjectKey)
 		if err != nil {
@@ -2185,14 +2193,13 @@ func (h *FileUploadHandler) DownloadAllFiles(w http.ResponseWriter, r *http.Requ
 			continue // Skip failed files
 		}
 
-		// Create file in zip
+		// Create file in zip and write content — streams directly to client
 		fileWriter, err := zipWriter.Create(fileName)
 		if err != nil {
 			log.Printf("Warning: Could not create zip entry for %s: %v", fileName, err)
 			continue
 		}
 
-		// Write content to zip
 		_, err = fileWriter.Write(content)
 		if err != nil {
 			log.Printf("Warning: Could not write content for %s: %v", fileName, err)
@@ -2202,36 +2209,14 @@ func (h *FileUploadHandler) DownloadAllFiles(w http.ResponseWriter, r *http.Requ
 		filesAdded++
 	}
 
-	// Close zip writer
-	err = zipWriter.Close()
-	if err != nil {
+	// Finalize the zip archive
+	if err := zipWriter.Close(); err != nil {
 		log.Printf("Error closing zip writer: %v", err)
-		http.Error(w, "Failed to create zip file", http.StatusInternalServerError)
+		// Can't send HTTP error here — headers already sent
 		return
 	}
 
-	if filesAdded == 0 {
-		http.Error(w, "No files could be added to zip", http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("Successfully created zip with %d/%d files for dataset %s", filesAdded, len(files), dataset)
-
-	// Set headers for zip download
-	timestamp := time.Now().Format("20060102-150405")
-	zipFileName := fmt.Sprintf("%s-%s-%s-%s.zip", appType, dataset, fileType, timestamp)
-
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", zipFileName))
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", zipBuffer.Len()))
-
-	// Write zip to response
-	_, err = w.Write(zipBuffer.Bytes())
-	if err != nil {
-		log.Printf("Error writing zip content: %v", err)
-	}
-
-	log.Printf("Successfully sent zip file %s (%d bytes)", zipFileName, zipBuffer.Len())
+	log.Printf("Successfully streamed zip %s with %d/%d files for dataset %s", zipFileName, filesAdded, len(files), dataset)
 }
 
 type ProcessDatasetRequest struct {

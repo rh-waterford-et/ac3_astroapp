@@ -234,26 +234,24 @@ func (sb *S3Bucket) GetBatchDirectories(appName string) ([]string, error) {
 }
 
 func (sb *S3Bucket) GetS3Objects(appName string) ([]string, error) {
-	if appName != "" && !strings.HasSuffix(appName, "/") {
-		appName = appName + "/"
-	}
+	var allKeys []string
+	continuationToken := ""
 
-	resp, err := sb.S3Client.ListObjectsV2(&s3.ListObjectsV2Input{
-		Bucket: aws.String(sb.BucketName),
-		Prefix: aws.String(appName),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error listing objects: %v", err)
-	}
-
-	var keys []string
-	for _, item := range resp.Contents {
-		key := strings.TrimPrefix(*item.Key, appName)
-		if key != "" {
-			keys = append(keys, key)
+	for {
+		page, err := sb.GetS3ObjectsPaginated(appName, 1000, continuationToken)
+		if err != nil {
+			return nil, err
 		}
+
+		allKeys = append(allKeys, page.Objects...)
+
+		if !page.IsTruncated {
+			break
+		}
+		continuationToken = page.NextContinuationToken
 	}
-	return keys, nil
+
+	return allKeys, nil
 }
 
 func (sb *S3Bucket) GetS3ObjectsPaginated(appName string, maxKeys int64, continuationToken string) (*S3ObjectsPage, error) {

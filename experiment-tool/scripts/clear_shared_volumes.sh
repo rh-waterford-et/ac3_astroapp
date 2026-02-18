@@ -75,6 +75,11 @@ else
     echo "   ✅ Cleared all batch_info directories"
 fi
 
+# Clear failed_files.log (from previous runs)
+echo "🗑️  Clearing failed_files.log..."
+oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'rm -f /processing_data/failed_files.log 2>/dev/null' && \
+    echo "   ✅ Cleared failed_files.log" || echo "   ✅ No failed_files.log to clear"
+
 # Clear processlist files (from old pods)
 echo "🗑️  Clearing old processlist files..."
 processlist_count=$(oc exec $POD_NAME -n $NAMESPACE -c starlight -- sh -c 'find /processing_data -name "processlist*.txt" 2>/dev/null | wc -l')

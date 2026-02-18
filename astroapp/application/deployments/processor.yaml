@@ -43,7 +43,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
+      - image: quay.io/rh_et_wd/ac3/uc3-backend:watcher-fix
         name: receiver-processor
         workingDir: /processing_data/
         volumeMounts:
@@ -75,7 +75,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-ac3"
         - name: IN_FILE_OUTPUT_PATH
           value: "/processing_data/starlight/runtime/infiles"
         - name: PROCESS_LIST_STARLIGHT
@@ -130,7 +130,7 @@ spec:
           value: ""
         ports:
         - containerPort: 5672  
-      - image: quay.io/rh_et_wd/ac3/astroapp-backend:voronoi
+      - image: quay.io/rh_et_wd/ac3/uc3-backend:watcher-fix
         name: watcher-processor
         workingDir: /processing_data/
         command: ["/usr/bin/ucm"]
@@ -163,7 +163,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-ac3"
         - name: EXPLORED_STARLIGHT
           value: "/processing_data/starlight/data/output"
         - name: OUTPUT_STARLIGHT

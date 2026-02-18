@@ -36,7 +36,7 @@ spec:
         - name: S3_REGION
           value: "de"
         - name: S3_BUCKET_NAME
-          value: "test-consumer"
+          value: "test-ac3"
         # Redis configuration (same as UC3 backend)
         - name: REDIS_HOST
           value: "redis"

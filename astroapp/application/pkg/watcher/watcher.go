@@ -19,6 +19,9 @@ import (
 	"github.com/rh-waterford-et/ac3_astroapp/pkg/sender"
 )
 
+// Timeout for waiting for output files before skipping missing ones
+const batchFileTimeout = 5 * time.Minute
+
 type WatcherInterface interface {
 	Run(appName string, side string, utils common.UtilsInterface) error
 	RunProcessor(side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient)
@@ -506,18 +509,39 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 	var previousVoronoiList []string
 	voronoiProcessListPath := os.Getenv("PROCESS_LIST_VORONOI")
 
+	// Track previous PPXF processlist state to detect completions
+	var previousPPXFList []string
+	ppxfProcessListPath := os.Getenv("PROCESS_LIST_PPXF")
+
 	// Make pod-specific if POD_NAME is set
-	if podName := os.Getenv("POD_NAME"); podName != "" && voronoiProcessListPath != "" {
+	podName := os.Getenv("POD_NAME")
+	if podName != "" && voronoiProcessListPath != "" {
 		dir := filepath.Dir(voronoiProcessListPath)
 		voronoiProcessListPath = filepath.Join(dir, fmt.Sprintf("processlist-%s.txt", podName))
 		log.Printf("Monitoring pod-specific VORONOI processlist: %s", voronoiProcessListPath)
 	}
+	if podName != "" && ppxfProcessListPath != "" {
+		dir := filepath.Dir(ppxfProcessListPath)
+		ppxfProcessListPath = filepath.Join(dir, fmt.Sprintf("processlist-%s.txt", podName))
+		log.Printf("Monitoring pod-specific PPXF processlist: %s", ppxfProcessListPath)
+	}
+
+	// Ensure failed files log parent directory exists
+	failedFilesPath := common.GetFailedFilesPath()
+	if err := os.MkdirAll(filepath.Dir(failedFilesPath), 0755); err != nil {
+		log.Printf("Warning: could not create directory for failed files log: %v", err)
+	}
+	log.Printf("Failed files log path: %s", failedFilesPath)
 
 	log.Println("Checking for completed files...")
-	log.Println("Starting VORONOI processlist monitoring...")
+	log.Println("Starting VORONOI and PPXF processlist monitoring...")
 
 	for {
 		// Process Starlight batch_info files (existing system)
+		// Auto-create batch_info directory if it doesn't exist (handles cleanup/restart scenarios)
+		if err := os.MkdirAll(jobInfoDir, 0755); err != nil {
+			log.Printf("Error creating batch_info directory %s: %v", jobInfoDir, err)
+		}
 		files, err := os.ReadDir(jobInfoDir)
 		if err != nil {
 			fmt.Printf("Error reading directory: %v\n", err)
@@ -543,7 +567,7 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 			}
 		}
 
-		// NEW: Monitor VORONOI processlist for completed files
+		// Monitor VORONOI processlist for completed files
 		if voronoiProcessListPath != "" {
 			currentVoronoiList := w.readProcessList(voronoiProcessListPath)
 
@@ -567,6 +591,30 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 			previousVoronoiList = currentVoronoiList
 		}
 
+		// Monitor PPXF processlist for completed files (uses RabbitMQ binary messages)
+		if ppxfProcessListPath != "" {
+			currentPPXFList := w.readProcessList(ppxfProcessListPath)
+
+			// Only check for completions after first iteration (when we have previous state)
+			if previousPPXFList != nil {
+				completedFiles := findCompletedFiles(previousPPXFList, currentPPXFList)
+
+				for _, filename := range completedFiles {
+					log.Printf("✓ PPXF completed processing: %s", filename)
+
+					err := w.handleCompletedPPXFFile(filename, side, utils, queue, redisClient)
+					if err != nil {
+						log.Printf("✗ Error handling PPXF completion for %s: %v", filename, err)
+					} else {
+						log.Printf("✓ Successfully sent PPXF outputs for: %s", filename)
+					}
+				}
+			}
+
+			// Update previous state
+			previousPPXFList = currentPPXFList
+		}
+
 		// Sleep for 10 seconds before next iteration
 		time.Sleep(10 * time.Second)
 	}
@@ -574,6 +622,14 @@ func (w *Watcher) RunProcessor(side string, utils common.UtilsInterface, queue q
 
 func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient) error {
 	log.Printf("DEBUG: Processing job file: %s", filePath)
+
+	// Get file modification time to check age for timeout
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to stat file: %w", err)
+	}
+	fileModTime := fileInfo.ModTime()
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
@@ -608,6 +664,8 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 	}
 
 	job := make([]api.DataFile, 0, len(fileList))
+	var skippedFiles []string // Track files that timed out
+
 	for len(fileList) > 0 {
 		remaining := []string{}
 
@@ -631,10 +689,35 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 				remaining = append(remaining, fileName)
 			}
 		}
+
+		// Check if we should timeout on remaining files
+		if len(remaining) > 0 {
+			fileAge := time.Since(fileModTime)
+
+			if fileAge > batchFileTimeout {
+				// Timeout reached - skip remaining files
+				log.Printf("TIMEOUT: batch_info file is %v old (threshold: %v), skipping %d missing files: %v",
+					fileAge.Round(time.Second), batchFileTimeout, len(remaining), remaining)
+				skippedFiles = append(skippedFiles, remaining...)
+				break // Exit the wait loop
+			}
+
+			// Not yet timed out - log and wait before retrying
+			log.Printf("Waiting for %d files (batch_info age: %v/%v): %v",
+				len(remaining), fileAge.Round(time.Second), batchFileTimeout, remaining)
+			time.Sleep(10 * time.Second)
+		}
+
 		fileList = remaining
 	}
 
-	if len(fileList) == 0 {
+	// Log skipped files to tracking file for user visibility
+	if len(skippedFiles) > 0 {
+		w.logFailedFiles(batchID, jobID, appName, skippedFiles)
+	}
+
+	// Send batch with whatever files we collected (even if partial)
+	if len(job) > 0 {
 		batch := api.Batch{
 			ID:    batchID,
 			JobID: jobID,
@@ -643,10 +726,88 @@ func (w *Watcher) processJobFile(filePath, side string, utils common.UtilsInterf
 		// Initialize sender
 		sender := sender.NewRabbitMQSender(queue, utils, redisClient)
 		sender.SendBatch(batch, appName, side, queue)
-
+		log.Printf("Sent batch %s with %d files (%d skipped due to timeout)", batchID, len(job), len(skippedFiles))
+	} else if len(skippedFiles) > 0 {
+		// All files were skipped - log but don't error so we can move past this batch
+		log.Printf("WARNING: All %d files in batch %s were skipped (missing/timed out)", len(skippedFiles), batchID)
 	}
-	//log.Printf("DEBUG: Successfully processed job file: %s", filePath)
+
 	return nil
+}
+
+// logFailedFiles appends failed file information to a local tracking log and uploads
+// a cumulative list of missed filenames to S3 at starlight/failed/<batchID>/failed_files.log
+func (w *Watcher) logFailedFiles(batchID, jobID, appName string, files []string) {
+	failedFilesPath := common.GetFailedFilesPath()
+
+	// 1. Append detailed entries to local log (for debugging)
+	f, err := os.OpenFile(failedFilesPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("ERROR: Could not open failed files log: %v", err)
+		return
+	}
+
+	timestamp := time.Now().Format(time.RFC3339)
+
+	for _, fileName := range files {
+		entry := fmt.Sprintf("%s | batch=%s | job=%s | app=%s | file=%s\n",
+			timestamp, batchID, jobID, appName, fileName)
+		if _, err := f.WriteString(entry); err != nil {
+			log.Printf("ERROR: Could not write to failed files log: %v", err)
+		}
+	}
+	f.Close()
+
+	log.Printf("WARNING: Logged %d failed/missing files to %s", len(files), failedFilesPath)
+
+	// 2. Read local log back and extract all filenames for this batchID
+	failedFileNames := w.extractFailedFilenames(failedFilesPath, batchID)
+	if len(failedFileNames) == 0 {
+		return
+	}
+
+	// 3. Upload cumulative filename list to S3 (inside output dir so it's included in GUI downloads)
+	s3Content := strings.Join(failedFileNames, "\n") + "\n"
+	s3Folder := fmt.Sprintf("starlight/output/%s/failed", batchID)
+	bucket := s3bucket.NewS3Bucket()
+
+	if err := bucket.UploadFileToBucket(s3Folder, "failed.txt", []byte(s3Content)); err != nil {
+		log.Printf("ERROR: Failed to upload failed.txt to S3 at %s/failed.txt: %v", s3Folder, err)
+		return
+	}
+
+	log.Printf("Uploaded %d failed filenames to s3://%s/%s/failed.txt", len(failedFileNames), bucket.GetBucketName(), s3Folder)
+}
+
+// extractFailedFilenames reads the local failed files log and returns all filenames for a given batchID
+func (w *Watcher) extractFailedFilenames(logPath, batchID string) []string {
+	f, err := os.Open(logPath)
+	if err != nil {
+		log.Printf("ERROR: Could not read failed files log for S3 upload: %v", err)
+		return nil
+	}
+	defer f.Close()
+
+	var filenames []string
+	scanner := bufio.NewScanner(f)
+	batchMarker := fmt.Sprintf("batch=%s", batchID)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.Contains(line, batchMarker) {
+			continue
+		}
+		// Extract filename from "... | file=<filename>"
+		parts := strings.Split(line, "| file=")
+		if len(parts) == 2 {
+			filename := strings.TrimSpace(parts[1])
+			if filename != "" {
+				filenames = append(filenames, filename)
+			}
+		}
+	}
+
+	return filenames
 }
 
 func (w *Watcher) ProcessJob(appName string, side string, utils common.UtilsInterface, queue queue.QueueInterface, redisClient *metrics.RedisClient, fileSource producer.FileSource, batchID string) {

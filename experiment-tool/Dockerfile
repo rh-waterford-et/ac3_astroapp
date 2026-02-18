@@ -44,7 +44,8 @@ COPY --from=builder /app/configs ./configs
 # Copy cleanup scripts
 COPY --from=builder /app/scripts ./scripts
 
-# Copy dataset files from host system (from build context root)
+# Copy dataset files from host system (excludes large datasets via .dockerignore)
+# See .dockerignore to control which datasets are included
 COPY datasets /app/datasets/
 
 # Create directories for data and results

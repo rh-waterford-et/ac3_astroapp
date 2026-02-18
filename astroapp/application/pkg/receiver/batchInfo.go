@@ -77,7 +77,13 @@ func (r *Receiver) clearProcessList(processListPath string) {
 }
 func (r *Receiver) createBatchInfoFile(appName, batchID, jobID, filenamesHeader string) error {
 
-	filePath := filepath.Join(common.GetBatchInfoDir(), jobID+".txt")
+	batchInfoDir := common.GetBatchInfoDir()
+	// Auto-create batch_info directory if it doesn't exist (handles cleanup/restart scenarios)
+	if err := os.MkdirAll(batchInfoDir, 0755); err != nil {
+		return fmt.Errorf("failed to create batch info directory %s: %v", batchInfoDir, err)
+	}
+
+	filePath := filepath.Join(batchInfoDir, jobID+".txt")
 
 	filenames := strings.Split(filenamesHeader, ",")
 	var cleanFilenames []string

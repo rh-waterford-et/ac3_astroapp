@@ -45,6 +45,8 @@ metadata:
   namespace: uc3-applications
   labels:
     app: uc3-frontend
+  annotations:
+    haproxy.router.openshift.io/timeout: 28800s
 spec:
   to:
     kind: Service
@@ -52,4 +54,4 @@ spec:
   port:
     targetPort: 8080
   tls:
-    termination: edge 
+    termination: edge
