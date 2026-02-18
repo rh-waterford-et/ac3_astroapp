@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+*.DS_Store
+
+# Build artifacts
+build/
+*.exe
+*.out
+
+# Python
+__pycache__/
+*.pyc
+venv/
+*.egg-info/
+
+# Logs and data
+*.log
+experiment-data*/
+
+# IDE
+.idea/
+.vscode/
