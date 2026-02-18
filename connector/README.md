@@ -1,146 +1,103 @@
-# Introduction to UCM Starlight
+# EDC Connector for IONOS S3
 
-![ucm arch](https://github.com/raycarroll/ucm/assets/3717348/2f0870d1-b90d-4a3d-b2d2-6fd8440d0959)
+Eclipse Dataspace Connector (EDC) implementation for bidirectional file transfer between IONOS S3 buckets.
 
-This diagram illustrates a data processing architecture utilising RabbitMQ to enable event-driven communication. This setup helps to parallelise and distribute the processing of large datasets across multiple nodes efficiently.
+## Overview
 
-1. Event Producer Pod: This component reads spectrum data files from the mounted
-Spectral Volume. It creates events (chunks of data) and publishes these events to RabbitMQ.
+Provides federated data sharing between provider and consumer endpoints using the EDC protocol. Monitors S3 buckets and triggers transfers for new files automatically.
 
-2. RabbitMQ: Acts as the message broker, managing the distribution of data events to various Processor Pods.
-
-3. Processor Pods: Each of these pods subscribes to the RabbitMQ queue to receive data events. The Event Receiver container within each pod writes a data file in a format suitable for the Starlight application. The file is saved to a shared volume accessible to both containers within the pod.
-
-4. Starlight Application: This application, triggered by a bash script, processes the new data file and saves the results back to a shared volume on the Event Producer Pod.
-
-## Setup guide
-
-### Prerequisites:
-
-- kubernetes (https://kubernetes.io/docs/setup/)
-- kind (https://kind.sigs.k8s.io/)
-- Kubernetes cluster and it's admin credentials for further actions 
-
-## Locally
-
-For local setup - additional requirement is Docker (https://www.docker.com/) and RabbitMQ instance (https://www.rabbitmq.com/docs/download)
-
-1. Set up RabbitMQ and make sure that the credentials in producer.go and receive.go are used correctly according to local environment.
-
-2. Build images of the processor, receiver and starlight from the given Dockerfiles. 
+## Directory Structure
 
 ```
-docker build -t username/image_name .
+connector/
+└── edc-ionos-s3-4.0.0/
+    ├── extensions/           # EDC extension modules (Java)
+    │   ├── core-ionos-s3/    # Core S3 integration
+    │   ├── data-plane-ionos-s3/  # Data plane for transfers
+    │   └── provision-ionos-s3/   # S3 provisioning
+    ├── launchers/            # Application launchers
+    │   ├── dev/              # Development configs
+    │   └── prod/             # Production configs
+    ├── deployment/           # Deployment configurations
+    │   ├── k8s/              # Kubernetes manifests
+    │   ├── helm/             # Helm charts
+    │   └── terraform/        # Infrastructure as code
+    ├── transfer/             # Transfer automation scripts
+    └── jsons/                # EDC API request templates
 ```
 
-3. Run the images to get the functional result:
+## Components
 
-```
-docker run username/image_name
-```
+### Transfer Script
 
-From the producer should be seen the following result:
+`transfer/trigger.py` - Python script that:
+- Monitors provider and consumer S3 buckets
+- Detects new files
+- Triggers EDC transfer workflow
+- Handles bidirectional synchronisation
 
-```
-------------SENDING-------------
-user  user
-pass  pass
-url  amqp://user:pass@host:5672/
-2024/07/05 00:29:23 Num Files = 8
-2024/07/05 00:29:23 File = spectrum_0461.txt
-2024/07/05 00:29:23  [x] Sent lambda flu
-2024/07/05 00:29:23  Moving file to /processed dir
-2024/07/05 00:29:23  Moved file to /docker/starlight/shared_directory/config_files_starlight/spectrum//processed/spectrum_0461.txt
-2024/07/05 00:29:23 File = spectrum_xpos_00_ypos_00_NGC6027_LR-V.txt
-```
+### EDC Extensions
 
-From the receiver:
-
-```
-2024/07/05 00:32:26  ------------------ reveive() --------------------- 
-user  user
-pass  pass
-url  amqp://user:pass@host:5672/
-2024/07/05 00:32:26  [*] Waiting for messages. To exit press CTRL+C
-2024/07/05 00:32:26  -------------------------- Iterating messages  -------------------------------
-2024/07/05 00:32:26 Read Flag =  false
-2024/07/05 00:32:26 Read Flag =  false
-2024/07/05 00:32:26  -------------------------- Received a message: spectrum_0461.txt -------------------------------
-Writing message to data file
-```
-
-## Deploy on a cluster (kind)
-
-Useful UI tool - https://k8slens.dev/
+Java modules extending base EDC functionality for IONOS S3:
+- Asset creation and management
+- Contract negotiation
+- Data plane transfers
 
 
-The required files are located in: 
-```
-ucm/deployment/.
-``` 
-### Useful oc commands
+## Deployment
 
-1. To check the status of your pods
+### Kubernetes
 
-```
-kubectl get pods -n _namespace_
-``` 
-2. To delete a deployment
-```
-kubectl delete deployment deployment_name -n your_namespace
-```
-3. To verify if RabbitMQ service is healthy and running
-```
-kubectl get svc -n your_namespace
-```
-4. To get the logs of a given pod
-```
-kubectl logs _podname_ -n _namespace_
-```
-5. To execute command in a pod:
-```
-kubectl exec -it _podname_ -- /bin/ bash
+```bash
+cd deployment/k8s
+oc apply -f vault.yaml
+oc apply -f provider.yaml
+oc apply -f consumer.yaml
+oc apply -f transfer.yaml
 ```
 
-### Step to apply the deployment configurations:
+### Helm
 
-First, we need to configure the volume, volumeclaim and rabbitmq:
-
-```
-kubectl apply -f ./volume.yaml -n _namespace_
-```
-
-```
-kubectl apply -f ./volumeclaim.yaml -n _namespace_
-```
-```
-kubectl apply -f ./deployment_rabbitmq.yaml -n _namespace_
-```
-### Then, we can start deployment of: deployment.yaml and deployment_starlight.yaml
-
-```
-kubectl apply -f _filename_ -n _namespace_
+```bash
+cd deployment/helm
+helm install edc-ionos-s3 ./edc-ionos-s3
 ```
 
-You should be able to see the following output (example):
+## Configuration
 
-```
-deployment.apps/ucm-producer-deployment created 
-```
+### S3 Credentials
 
-## Once all pods are up, you can run the following command to copy the data in the input folder:
+Set in `transfer/trigger.py` or via environment variables:
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `S3_ENDPOINT` (default: `https://s3.eu-central-1.ionoscloud.com`)
 
-```
-kubectl cp /some/path/to/inputfile . _podname_:/starlight/data/input/ -n _namespace_ 
-```
+### Bucket Names
 
-## The Output data can be viewed in the /starlight/data/output directory. You can either exec into the pod to view or copy down to local directory:
+- `PROVIDER_BUCKET_NAME` - Source bucket
+- `CONSUMER_BUCKET_NAME` - Destination bucket
 
-```
-kubectl exec --stdin --tty _podname_ -n _namespace_ -- /bin/bash
-cd /starlight/data/output
-```
-OR
-```
-kubectl cp _podname_:/starlight/data/output/ /some/local/dir/ -n _namespace_ 
-```
+## EDC API Usage
+
+Request templates in `jsons/`:
+
+| File | Purpose |
+|------|---------|
+| `asset.json` | Create data asset |
+| `create-policy.json` | Define access policy |
+| `create-contract.json` | Create contract definition |
+| `fetch-catalog.json` | Query provider catalog |
+| `contract-negotiation.json` | Initiate negotiation |
+| `transfer.json` | Start data transfer |
+
+## Transfer Workflow
+
+1. Provider creates asset pointing to S3 object
+2. Consumer fetches catalog from provider
+3. Contract negotiation establishes agreement
+4. Transfer request moves data between buckets
+5. `trigger.py` automates this for new files
+
+## Vault Integration
+
+HashiCorp Vault stores secrets. See `hashicorp/` for setup.

@@ -1,175 +1,111 @@
-# AC³ Astronomy Maps
+# GUI
 
-A modern web application for exploring astronomical data using interactive sky maps and FITS image visualization. Built with React and Aladin Lite v3 for professional astronomical research and education.
+React web interface for the astronomical data processing system.
 
 ## Features
 
-### 🌌 Interactive Sky Navigation
-- **Aladin Lite v3 Integration**: Professional-grade astronomical sky viewer
-- **Multiple Survey Support**: DSS2 Color, 2MASS, AllWISE, SDSS9, GLIMPSE
-- **Galaxy Search**: Intelligent search with name resolution for common galaxies
-- **Coordinate Grid & Overlays**: Customizable display options including HEALPix grids
+- Dataset management (create, delete, upload files)
+- Processing pipeline monitoring
+- Aladin Lite sky viewer integration
+- Result visualisation gallery
+- File browser with pagination
 
-### 🗺️ Map Visualization System
-- **Dynamic Image Loading**: Automatically loads astronomical maps based on object selection
-- **Proximity-Based Display**: Images only show when viewing the searched object (within 3 arcminutes)
-- **Multiple Map Types**:
-  - **Kinematics**: Stellar velocity, Velocity dispersion, Stellar/Velocity errors, h3, h4
-  - **Stellar Populations**: Age (luminosity weighted), Age (mass weighted), Metallicity
+## Tech Stack
 
-### 🖼️ Gallery & Image Viewer
-- **Interactive Gallery**: Click-to-view image gallery with modal viewer
-- **Zoom & Pan**: Full image interaction with mouse and touch support
-- **Smart Selection**: Only displays maps for selected sidebar options
-- **Modal Viewer**: Full-screen image viewing with zoom controls
+- React 19
+- Vite 7
+- CSS (no UI framework)
 
-### ⌨️ Keyboard Controls
-- **Navigation**: +/- for zoom, R for reset, G for goto
-- **Quick Access**: F for format toggle, S for survey cycling
-- **Help System**: H key for keyboard shortcuts
+## Development
 
-## Architecture
+### Prerequisites
 
-The application follows a modular component architecture:
+- Node.js 18+
+- npm
+
+### Install Dependencies
+
+```bash
+npm install
+```
+
+### Run Development Server
+
+```bash
+npm run dev
+```
+
+Access at `http://localhost:5173`
+
+### Build for Production
+
+```bash
+npm run build
+```
+
+Output in `dist/`.
+
+## Deployment
+
+### Build and Deploy Container
+
+```bash
+make rebuild   # Build, push, deploy
+```
+
+Image: `quay.io/bcapper30/ac3-gui:latest`
+
+### Manual Steps
+
+```bash
+podman build --platform linux/amd64 -t quay.io/bcapper30/ac3-gui:latest .
+podman push quay.io/bcapper30/ac3-gui:latest
+oc rollout restart deployment/gui -n uc3-applications
+```
+
+## Structure
 
 ```
 src/
 ├── components/
-│   ├── App.jsx              # Main application & Aladin initialization
-│   ├── Sidebar.jsx          # Map selection & display controls
-│   ├── Gallery.jsx          # Image gallery & modal viewer
-│   ├── Controls.jsx         # Format, survey & search controls
-│   ├── StatusBar.jsx        # Status information display
-│   └── AladinInteractions.jsx # Mouse/keyboard interaction handling
-├── assets/                  # Static images and logos
-└── styles/                  # CSS styling
+│   ├── aladin/       # Sky viewer components
+│   ├── pipeline/     # Processing pipeline UI
+│   ├── ui/           # Shared UI components
+│   └── upload/       # File upload components
+├── contexts/         # React contexts
+├── hooks/            # Custom React hooks
+│   ├── data/         # Data fetching hooks
+│   ├── gallery/      # Gallery state hooks
+│   └── ui/           # UI interaction hooks
+├── services/
+│   └── api.js        # Backend API client
+├── styles/           # CSS modules
+└── utils/            # Utility functions
 ```
 
-### Key Design Principles
-- **Single Responsibility**: Each component handles one specific aspect
-- **Modular Architecture**: Easy to maintain and extend
-- **Coordinate-Based Logic**: Images tied to specific celestial coordinates
-- **Dynamic Loading**: Images loaded based on naming conventions
+## API Integration
 
-## Installation & Setup
+The frontend communicates with the backend at `/api/`. Key endpoints:
 
-### Prerequisites
-- Node.js (v16 or higher)
-- npm or yarn package manager
-
-### Installation
-```bash
-# Clone the repository
-git clone [repository-url]
-cd gui
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
-### Production Build
-```bash
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-```
-
-## Usage
-
-### Basic Navigation
-1. **Search for Objects**: Use the Galaxy Search to find celestial objects
-2. **Select Map Types**: Choose from Kinematics or Stellar Populations options
-3. **View Images**: Gallery automatically populates with available maps
-4. **Explore**: Use mouse/keyboard to navigate the sky
-
-### Image Naming Convention
-The application expects images in the assets folder with the format:
-```
-OBJECTNAME_maptype.extension
-```
-
-Examples:
-- `NGC7025_stellar_velocity.jpg`
-- `NGC7025_metallicity.png`
-- `M31_age_mass_weighted.fits`
-
-### Supported Map Types
-- `stellar_velocity` - Stellar Velocity
-- `velocity_dispersion` - Velocity Dispersion  
-- `stellar_velocity_error` - Stellar Velocity Error
-- `velocity_dispersion_error` - Velocity Dispersion Error
-- `h3` - H3 moment
-- `h4` - H4 moment
-- `age` - Age (Luminosity Weighted)
-- `age_mass_weighted` - Age (Mass Weighted)
-- `metallicity` - Metallicity
+| Endpoint | Purpose |
+|----------|---------|
+| `/api/datasets` | List/create datasets |
+| `/api/datasets/files` | List files with pagination |
+| `/api/datasets/upload` | Upload files |
+| `/api/queue/trigger` | Start processing |
 
 ## Configuration
 
-### Display Options
-- **Coordinate Grid**: Toggle coordinate overlay
-- **Center Reticle**: Show/hide center crosshair
-- **Object Labels**: Display catalog object labels
-- **HEALPix Grid**: Show HEALPix tessellation
+API base URL is configured in `src/services/api.js`. In production, nginx proxies `/api/` to the backend service.
 
-### Survey Options
-- **DSS2 Color**: Optical survey data
-- **2MASS**: Near-infrared survey
-- **AllWISE**: Mid-infrared all-sky survey
-- **SDSS9**: Sloan Digital Sky Survey
-- **GLIMPSE**: Galactic Legacy Infrared survey
+### Nginx Config
 
-## Technical Details
+See `nginx.conf` for production routing.
 
-### Dependencies
-- **React 18**: Modern React with hooks
-- **Vite**: Fast build tool and dev server
-- **Aladin Lite v3**: Astronomical visualization library
-- **jQuery**: Required for Aladin Lite
+## Environment Variables
 
-### Browser Compatibility
-- Requires WebGL2-compatible browser
-- Modern browsers (Chrome 60+, Firefox 60+, Safari 12+)
-- Mobile browser support for touch interactions
+Set at build time in Dockerfile or runtime via nginx:
 
-### Performance
-- Dynamic script loading for optimal initial load
-- Debounced coordinate checking (500ms)
-- Efficient image existence checking
-- Lazy loading of astronomical catalogs
-
-## Development
-
-### Component Structure
-Each component is self-contained with its own setup functions and event handlers. The global window object is used for cross-component communication where necessary.
-
-### Adding New Map Types
-1. Add checkbox to `Sidebar.jsx`
-2. Add configuration to `mapControls` object
-3. Add map type definition to `Gallery.jsx` `mapTypes` array
-4. Follow naming convention for image files
-
-### Debugging
-The application includes comprehensive console logging:
-- `📍` Coordinate checking
-- `🔄` Image loading
-- `🖼️` Gallery operations
-- `⌨️` Keyboard interactions
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## Acknowledgments
-
-- **Aladin Lite**: Centre de Données astronomiques de Strasbourg (CDS)
-- **Astronomical Data**: Various sky surveys and catalogs
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_URL` | Backend API URL (development) |
