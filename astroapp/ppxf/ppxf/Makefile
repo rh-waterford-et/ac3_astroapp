@@ -1,5 +1,5 @@
 # UC3 pPXF Build and Deploy Makefile
-IMAGE_NAME = quay.io/bcapper30/uc3-ppxf:latest
+IMAGE_NAME = quay.io/rh_et_wd/uc3-ppxf:latest
 DOCKERFILE = Dockerfile
 PROCESSOR_DEPLOYMENT = ucm-processor-deployment
 NAMESPACE = uc3-applications

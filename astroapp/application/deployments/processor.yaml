@@ -215,7 +215,7 @@ spec:
           name: ucm-pv-storage
         securityContext:
           privileged: true
-      - image: quay.io/bcapper30/uc3-ppxf:latest
+      - image: quay.io/rh_et_wd/uc3-ppxf:latest
         name: ppxf
         workingDir: /processing_data/
         command: ["/home/ppxf/ppxf_script.sh"]

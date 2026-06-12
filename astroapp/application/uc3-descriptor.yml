@@ -502,7 +502,7 @@ Microservices_configuration:
       - Name: "uc3-pv-storage"
         MountPath: "/processing_data/"
 ## PPXF Processing Application
-    Image: "quay.io/bcapper30/uc3-ppxf:latest"
+    Image: "quay.io/rh_et_wd/uc3-ppxf:latest"
     ID: "ppxf"
     ClusterAffinity: "processor"
     Dependencies: []
